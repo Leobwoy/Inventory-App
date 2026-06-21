@@ -1,126 +1,143 @@
 {% extends 'base.html' %}
-{% block title %}Dashboard{% endblock %}
+
+{% block title %}Dashboard | InventoryApp{% endblock %}
+
 {% block content %}
-<div class="dashboard-wrapper py-4">
-  <div class="container-fluid" style="max-width: 1100px;">
-    <h1 class="text-center mb-4">Sales & Purchase Management Dashboard</h1>
-    {% if low_stock %}
-    <div class="alert alert-danger">
-      <strong>Low Stock Alert:</strong>
-      {% for product in low_stock %}
-        <span class="badge bg-danger">{{ product.name }} ({{ product.quantity_in_stock }})</span>
-      {% endfor %}
-    </div>
-    {% endif %}
-    <div class="row g-4 mb-4 justify-content-center">
-      <div class="col-12 col-md-6 col-lg-6">
-        <div class="card shadow h-100">
-          <div class="card-body text-center">
-            <div class="mb-3"><i class="bi bi-box-seam" style="font-size:2rem;"></i></div>
-            <h5 class="card-title">Products</h5>
-            <p class="card-text">Manage your product catalog, stock, and bulk upload.</p>
-            <a href="{{ url_for('products.list_products') }}" class="btn btn-primary">Go to Products</a>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-6 col-lg-6">
-        <div class="card shadow h-100">
-          <div class="card-body text-center">
-            <div class="mb-3"><i class="bi bi-cash-coin" style="font-size:2rem;"></i></div>
-            <h5 class="card-title">Sales</h5>
-            <p class="card-text">Record and view sales transactions.</p>
-            <a href="{{ url_for('sales.list_sales') }}" class="btn btn-success">Go to Sales</a>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-6 col-lg-6">
-        <div class="card shadow h-100">
-          <div class="card-body text-center">
-            <div class="mb-3"><i class="bi bi-cart-plus" style="font-size:2rem;"></i></div>
-            <h5 class="card-title">Purchases</h5>
-            <p class="card-text">Record and view purchase transactions.</p>
-            <a href="{{ url_for('purchases.list_purchases') }}" class="btn btn-warning">Go to Purchases</a>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-6 col-lg-6">
-        <div class="card shadow h-100">
-          <div class="card-body text-center">
-            <div class="mb-3"><i class="bi bi-bar-chart-line" style="font-size:2rem;"></i></div>
-            <h5 class="card-title">Reports</h5>
-            <p class="card-text">View and export sales, purchases, and stock reports.</p>
-            <a href="{{ url_for('reports.sales_report') }}" class="btn btn-info mb-1">Sales Report</a>
-            <a href="{{ url_for('reports.purchases_report') }}" class="btn btn-info mb-1">Purchases Report</a>
-            <a href="{{ url_for('reports.stock_report') }}" class="btn btn-info">Stock Report</a>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="row g-4">
-      <div class="col-12 col-md-6">
-        <div class="card">
-          <div class="card-header">Sales Trend (Last 7 Days)</div>
-          <div class="card-body">
-            <canvas id="salesTrendChart"></canvas>
-          </div>
-        </div>
-      </div>
-      <div class="col-12 col-md-6">
-        <div class="card">
-          <div class="card-header">Top 5 Products by Stock</div>
-          <div class="card-body">
-            <canvas id="topProductsChart"></canvas>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Dashboard Overview</h2>
+    <div class="text-muted">{{ year }}</div>
 </div>
-<footer class="footer mt-5 py-3 bg-light border-top">
-  <div class="container text-center">
-    <span class="text-muted">&copy; {{ year }} Sales & Purchase Management. Crafted with <i class="bi bi-heart-fill text-danger"></i> for your business.</span>
-  </div>
-</footer>
+
+<div class="row g-4 mb-4">
+    <!-- Stat Cards -->
+    <div class="col-md-4">
+        <a href="{{ url_for('reports.sales_report') }}" class="text-decoration-none d-block h-100">
+            <div class="glass-card h-100">
+                <div class="stat-icon stat-primary">
+                    <i class="bi bi-currency-dollar"></i>
+                </div>
+                <h5 class="text-muted mb-1">Total Sales (7 Days)</h5>
+                <h3 class="mb-0 text-white">${{ sales_data.values() | sum | round(2) }}</h3>
+            </div>
+        </a>
+    </div>
+    
+    <div class="col-md-4">
+        <a href="{{ url_for('reports.stock_report') }}" class="text-decoration-none d-block h-100">
+            <div class="glass-card h-100">
+                <div class="stat-icon stat-warning">
+                    <i class="bi bi-exclamation-triangle"></i>
+                </div>
+                <h5 class="text-muted mb-1">Low Stock Items</h5>
+                <h3 class="mb-0 text-white">{{ low_stock|length }} <span class="fs-6 text-muted fw-normal">products</span></h3>
+            </div>
+        </a>
+    </div>
+
+    <div class="col-md-4">
+        <a href="{{ url_for('products.list_products') }}" class="text-decoration-none d-block h-100">
+            <div class="glass-card h-100">
+                <div class="stat-icon stat-success">
+                    <i class="bi bi-box-seam"></i>
+                </div>
+                <h5 class="text-muted mb-1">Total Products</h5>
+                <h3 class="mb-0 text-white">{{ top_products|length }} <span class="fs-6 text-muted fw-normal">tracked</span></h3>
+            </div>
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Chart Section -->
+    <div class="col-lg-8">
+        <div class="glass-card h-100">
+            <h5 class="mb-4">Sales Trend (Last 7 Days)</h5>
+            <canvas id="salesChart" height="100"></canvas>
+        </div>
+    </div>
+    
+    <!-- Low Stock Section -->
+    <div class="col-lg-4">
+        <div class="glass-card h-100">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="mb-0">Low Stock Alerts</h5>
+                <a href="/products/" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            
+            {% if low_stock %}
+                <ul class="list-group list-group-flush bg-transparent">
+                {% for item in low_stock %}
+                    <li class="list-group-item bg-transparent text-white px-0 border-secondary d-flex justify-content-between align-items-center">
+                        <div>
+                            <div class="fw-bold">{{ item.name }}</div>
+                            <small class="text-muted">SKU: {{ item.sku }}</small>
+                        </div>
+                        <span class="badge bg-danger rounded-pill">{{ item.quantity_in_stock }} left</span>
+                    </li>
+                {% endfor %}
+                </ul>
+            {% else %}
+                <div class="text-center py-4 text-muted">
+                    <i class="bi bi-check-circle fs-1 text-success mb-2"></i>
+                    <p>All stock levels are healthy!</p>
+                </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
-const salesTrendCtx = document.getElementById('salesTrendChart').getContext('2d');
-const salesTrendChart = new Chart(salesTrendCtx, {
-  type: 'line',
-  data: {
-    labels: {{ sales_data.keys()|list|map('string')|list|tojson }},
-    datasets: [{
-      label: 'Sales (₵)',
-      data: {{ sales_data.values()|list|tojson }},
-      borderColor: 'rgba(54, 162, 235, 1)',
-      backgroundColor: 'rgba(54, 162, 235, 0.2)',
-      fill: true,
-      tension: 0.3
-    }]
-  },
-  options: {
-    scales: {
-      y: { beginAtZero: true }
-    }
-  }
-});
-const topProductsCtx = document.getElementById('topProductsChart').getContext('2d');
-const topProductsChart = new Chart(topProductsCtx, {
-  type: 'bar',
-  data: {
-    labels: {{ top_products|map(attribute='name')|list|tojson }},
-    datasets: [{
-      label: 'Stock',
-      data: {{ top_products|map(attribute='quantity_in_stock')|list|tojson }},
-      backgroundColor: 'rgba(255, 193, 7, 0.7)',
-      borderColor: 'rgba(255, 193, 7, 1)',
-      borderWidth: 1
-    }]
-  },
-  options: {
-    scales: {
-      y: { beginAtZero: true }
-    }
-  }
-});
+    const ctx = document.getElementById('salesChart').getContext('2d');
+    
+    // Prepare data from Jinja
+    const labels = [{% for date in sales_data.keys() %}'{{ date.strftime("%b %d") }}',{% endfor %}];
+    const data = [{% for total in sales_data.values() %}{{ total }},{% endfor %}];
+    
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Revenue ($)',
+                data: data,
+                borderColor: '#3b82f6',
+                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                borderWidth: 3,
+                tension: 0.4,
+                fill: true,
+                pointBackgroundColor: '#0f172a',
+                pointBorderColor: '#3b82f6',
+                pointBorderWidth: 2,
+                pointRadius: 4,
+                pointHoverRadius: 6
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.05)',
+                        drawBorder: false
+                    },
+                    ticks: { color: '#94a3b8' }
+                },
+                x: {
+                    grid: {
+                        color: 'rgba(255, 255, 255, 0.05)',
+                        drawBorder: false
+                    },
+                    ticks: { color: '#94a3b8' }
+                }
+            }
+        }
+    });
 </script>
-{% endblock %} 
+{% endblock %}

@@ -12,8 +12,9 @@ from .models import SaleItem
 
 @sales_bp.route('/')
 def list_sales():
-    sales = Sale.query.order_by(Sale.sale_date.desc()).all()
-    return render_template('sales/list.html', sales=sales)
+    page = request.args.get('page', 1, type=int)
+    pagination = Sale.query.order_by(Sale.sale_date.desc()).paginate(page=page, per_page=15, error_out=False)
+    return render_template('sales/list.html', sales=pagination.items, pagination=pagination)
 
 @sales_bp.route('/add', methods=['GET', 'POST'])
 def add_sale():
@@ -26,26 +27,32 @@ def add_sale():
     if form.validate_on_submit():
         customer_id = int(form.customer_id.data) if form.customer_id.data and form.customer_id.data != '0' else None
         customer_name = form.customer_name.data.strip() if form.customer_name.data else None
-        sale = Sale()
-        sale.sale_date = form.sale_date.data or date.today()
-        sale.customer_id = customer_id
-        db.session.add(sale)
-        # Save all sale items
-        for item_form in form.items:
-            product = Product.query.get(int(item_form.product_id.data))
-            if product and product.quantity_in_stock >= item_form.quantity.data:
-                sale_item = SaleItem()
-                sale_item.product_id = product.id
-                sale_item.quantity = item_form.quantity.data
-                sale_item.price_at_sale = item_form.price_at_sale.data
-                sale.items.append(sale_item)
-                product.quantity_in_stock -= item_form.quantity.data
-            else:
-                flash(f'Not enough stock for {product.name if product else "Unknown Product"}.', 'danger')
-                return render_template('sales/add.html', form=form)
-        db.session.commit()
-        flash('Sale recorded!', 'success')
-        return redirect(url_for('sales.sale_invoice', sale_id=sale.id, customer_name=customer_name))
+        try:
+            sale = Sale()
+            sale.sale_date = form.sale_date.data or date.today()
+            sale.customer_id = customer_id
+            db.session.add(sale)
+            # Save all sale items
+            for item_form in form.items:
+                product = Product.query.get(int(item_form.product_id.data))
+                if product and product.quantity_in_stock >= item_form.quantity.data:
+                    sale_item = SaleItem()
+                    sale_item.product_id = product.id
+                    sale_item.quantity = item_form.quantity.data
+                    sale_item.price_at_sale = item_form.price_at_sale.data
+                    sale.items.append(sale_item)
+                    product.quantity_in_stock -= item_form.quantity.data
+                else:
+                    db.session.rollback()
+                    flash(f'Not enough stock for {product.name if product else "Unknown Product"}.', 'danger')
+                    return render_template('sales/add.html', form=form, product_prices=product_prices)
+            db.session.commit()
+            flash('Sale recorded!', 'success')
+            return redirect(url_for('sales.sale_invoice', sale_id=sale.id, customer_name=customer_name))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An error occurred: {str(e)}', 'danger')
+            return render_template('sales/add.html', form=form, product_prices=product_prices)
     return render_template('sales/add.html', form=form, product_prices=product_prices)
 
 # Customer management
@@ -97,10 +104,17 @@ def bulk_action():
         return redirect(url_for('sales.list_sales'))
     sales = Sale.query.filter(Sale.id.in_(ids)).all()
     if action == 'delete':
-        for sale in sales:
-            db.session.delete(sale)
-        db.session.commit()
-        flash(f'{len(sales)} sales deleted.', 'success')
+        try:
+            for sale in sales:
+                for item in sale.items:
+                    if item.product:
+                        item.product.quantity_in_stock += item.quantity
+                db.session.delete(sale)
+            db.session.commit()
+            flash(f'{len(sales)} sales deleted and stock restored.', 'success')
+        except Exception as e:
+            db.session.rollback()
+            flash(f'An error occurred during deletion: {str(e)}', 'danger')
         return redirect(url_for('sales.list_sales'))
     elif action == 'export_csv':
         headers = ['Date', 'Product', 'Quantity', 'Unit Price', 'Total']

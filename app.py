@@ -13,7 +13,12 @@ csrf = CSRFProtect()
 def create_app():
     app = Flask(__name__)
     app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'devkey')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'postgresql://postgres:mynewpassword@localhost:5432/purchasesalesdb')
+    
+    db_url = os.environ.get('DATABASE_URL', 'postgresql://postgres:postgres123@localhost:5432/purchasesalesdb')
+    if db_url.startswith("postgres://"):
+        db_url = db_url.replace("postgres://", "postgresql://", 1)
+    app.config['SQLALCHEMY_DATABASE_URI'] = db_url
+    
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
     bootstrap.init_app(app)
@@ -60,13 +65,17 @@ def create_app():
                 # Backup: use pg_dump
                 backup_file = 'db_backup.sql'
                 db_url = app.config['SQLALCHEMY_DATABASE_URI']
-                # Parse db_url for credentials
-                import re
-                m = re.match(r'postgresql://(.*?):(.*?)@(.*?):(\d+)/(.*)', db_url)
-                if not m:
+                # Parse db_url for credentials using urllib.parse
+                from urllib.parse import urlparse
+                parsed = urlparse(db_url)
+                user = parsed.username
+                password = parsed.password
+                host = parsed.hostname
+                port = str(parsed.port or 5432)
+                dbname = parsed.path.lstrip('/')
+                if not (user and password and host and dbname):
                     flash('Database URL parsing failed. Check your configuration.', 'danger')
                     return redirect(url_for('backup_restore'))
-                user, password, host, port, dbname = m.groups()
                 env = os.environ.copy()
                 env['PGPASSWORD'] = password
                 cmd = [
@@ -91,12 +100,17 @@ def create_app():
                 restore_path = 'restore_upload.sql'
                 file.save(restore_path)
                 db_url = app.config['SQLALCHEMY_DATABASE_URI']
-                import re
-                m = re.match(r'postgresql://(.*?):(.*?)@(.*?):(\d+)/(.*)', db_url)
-                if not m:
+                # Parse db_url for credentials using urllib.parse
+                from urllib.parse import urlparse
+                parsed = urlparse(db_url)
+                user = parsed.username
+                password = parsed.password
+                host = parsed.hostname
+                port = str(parsed.port or 5432)
+                dbname = parsed.path.lstrip('/')
+                if not (user and password and host and dbname):
                     flash('Database URL parsing failed. Check your configuration.', 'danger')
                     return redirect(url_for('backup_restore'))
-                user, password, host, port, dbname = m.groups()
                 env = os.environ.copy()
                 env['PGPASSWORD'] = password
                 # Drop and recreate the database

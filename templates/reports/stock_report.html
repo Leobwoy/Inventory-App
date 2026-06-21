@@ -1,41 +1,46 @@
 {% extends 'base.html' %}
-{% block title %}Stock Report{% endblock %}
+{% block title %}Stock Report | InventoryApp{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <div class="btn-group">
-    <a href="/" class="btn btn-outline-secondary"><i class="bi bi-house"></i> Dashboard</a>
-    <a href="/products/" class="btn btn-outline-primary"><i class="bi bi-box-seam"></i> Products</a>
-    <a href="/sales/" class="btn btn-outline-success"><i class="bi bi-cash-coin"></i> Sales</a>
-    <a href="/purchases/" class="btn btn-outline-warning"><i class="bi bi-cart-plus"></i> Purchases</a>
-    <a href="/reports/sales" class="btn btn-outline-info"><i class="bi bi-bar-chart-line"></i> Sales Report</a>
-  </div>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Stock Level Report</h2>
+    <div class="btn-group">
+        <a href="?export=pdf" class="btn btn-sm btn-outline-danger"><i class="bi bi-file-pdf"></i> PDF</a>
+        <a href="?export=excel" class="btn btn-sm btn-outline-success"><i class="bi bi-file-excel"></i> Excel</a>
+        <a href="?export=csv" class="btn btn-sm btn-outline-info"><i class="bi bi-filetype-csv"></i> CSV</a>
+    </div>
 </div>
-<h2>Stock Report</h2>
-<div class="mb-3">
-  <a href="?export=pdf" class="btn btn-secondary mb-1">Export PDF</a>
-  <a href="?export=excel" class="btn btn-success mb-1">Export Excel</a>
-  <a href="?export=csv" class="btn btn-info mb-1">Export CSV</a>
+
+<div class="glass-card">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Product Name</th>
+                    <th>SKU</th>
+                    <th>Description</th>
+                    <th>Unit Price (₵)</th>
+                    <th class="text-end">Quantity in Stock</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for product in products %}
+                <tr>
+                    <td class="fw-bold">{{ product.name }}</td>
+                    <td class="font-monospace text-muted">{{ product.sku }}</td>
+                    <td class="text-muted small">{{ product.description }}</td>
+                    <td class="fw-medium">₵{{ product.unit_price }}</td>
+                    <td class="text-end">
+                        {% if product.quantity_in_stock <= product.min_stock_alert %}
+                            <span class="badge bg-danger fs-6"><i class="bi bi-exclamation-triangle me-1"></i> {{ product.quantity_in_stock }}</span>
+                        {% else %}
+                            <span class="badge bg-success fs-6">{{ product.quantity_in_stock }}</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
 </div>
-<table class="table table-bordered table-striped">
-    <thead>
-        <tr>
-            <th>Name</th>
-            <th>SKU</th>
-            <th>Description</th>
-            <th>Unit Price</th>
-            <th>Quantity in Stock</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for product in products %}
-        <tr>
-            <td>{{ product.name }}</td>
-            <td>{{ product.sku }}</td>
-            <td>{{ product.description }}</td>
-            <td>₵{{ product.unit_price }}</td>
-            <td>{{ product.quantity_in_stock }}</td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% endblock %} 
+{% endblock %}

@@ -1,35 +1,42 @@
 {% extends 'base.html' %}
-{% block title %}Customers{% endblock %}
+{% block title %}Customers | InventoryApp{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <h2>Customers</h2>
-  <a href="{{ url_for('sales.add_customer') }}" class="btn btn-primary">Add Customer</a>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Customers</h2>
+    <a href="{{ url_for('sales.add_customer') }}" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i> Add Customer</a>
 </div>
-<table class="table table-bordered table-striped">
-  <thead>
-    <tr>
-      <th>Name</th>
-      <th>Phone</th>
-      <th>Email</th>
-      <th>Address</th>
-      <th>Actions</th>
-    </tr>
-  </thead>
-  <tbody>
-    {% for customer in customers %}
-    <tr>
-      <td>{{ customer.name }}</td>
-      <td>{{ customer.phone }}</td>
-      <td>{{ customer.email }}</td>
-      <td>{{ customer.address }}</td>
-      <td>
-        <a href="{{ url_for('sales.edit_customer', customer_id=customer.id) }}" class="btn btn-sm btn-warning">Edit</a>
-        <form action="{{ url_for('sales.delete_customer', customer_id=customer.id) }}" method="post" style="display:inline;">
-          <button type="submit" class="btn btn-sm btn-danger" onclick="return confirm('Delete this customer?');">Delete</button>
-        </form>
-      </td>
-    </tr>
-    {% endfor %}
-  </tbody>
-</table>
-{% endblock %} 
+
+<div class="glass-card">
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Contact Info</th>
+                    <th>Address</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for customer in customers %}
+                <tr>
+                    <td class="fw-medium">{{ customer.name }}</td>
+                    <td>
+                        <div><i class="bi bi-telephone text-muted me-1"></i> {{ customer.phone }}</div>
+                        <div><i class="bi bi-envelope text-muted me-1"></i> {{ customer.email }}</div>
+                    </td>
+                    <td class="text-muted">{{ customer.address }}</td>
+                    <td class="text-end">
+                        <a href="{{ url_for('sales.edit_customer', customer_id=customer.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                        <form action="{{ url_for('sales.delete_customer', customer_id=customer.id) }}" method="post" style="display:inline;">
+                            <button type="submit" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('Delete this customer?');"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

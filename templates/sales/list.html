@@ -1,79 +1,87 @@
 {% extends 'base.html' %}
-{% block title %}Sales{% endblock %}
+{% from '_macros.html' import render_pagination %}
+{% block title %}Sales | InventoryApp{% endblock %}
+
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-  <div class="btn-group">
-    <a href="/" class="btn btn-outline-secondary"><i class="bi bi-house"></i> Dashboard</a>
-    <a href="/products/" class="btn btn-outline-primary"><i class="bi bi-box-seam"></i> Products</a>
-    <a href="/purchases/" class="btn btn-outline-warning"><i class="bi bi-cart-plus"></i> Purchases</a>
-    <a href="/sales/customers" class="btn btn-outline-info"><i class="bi bi-person"></i> Customers</a>
-    <a href="/reports/sales" class="btn btn-outline-info"><i class="bi bi-bar-chart-line"></i> Reports</a>
-  </div>
-  <a href="{{ url_for('sales.add_sale') }}" class="btn btn-primary">Record Sale</a>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2 class="mb-0">Sales Records</h2>
+    <a href="{{ url_for('sales.add_sale') }}" class="btn btn-primary"><i class="bi bi-cart-plus me-1"></i> Record Sale</a>
 </div>
-<form id="bulk-action-form" method="post" action="{{ url_for('sales.bulk_action') }}">
-  <div class="mb-2">
-    <select name="action" class="form-select d-inline w-auto">
-      <option value="">Bulk Action</option>
-      <option value="delete">Delete Selected</option>
-      <option value="export_csv">Export Selected (CSV)</option>
-      <option value="export_excel">Export Selected (Excel)</option>
-      <option value="print_invoices">Print Invoices</option>
-    </select>
-    <button type="submit" class="btn btn-sm btn-outline-primary ms-2">Apply</button>
-  </div>
-  <div class="table-responsive">
-    <table class="table table-bordered table-striped">
-      <thead>
-        <tr>
-          <th><input type="checkbox" id="select-all"></th>
-          <th>Date</th>
-          <th>Customer</th>
-          <th>Product</th>
-          <th>Quantity</th>
-          <th>Unit Price</th>
-          <th>Total</th>
-          <th>Invoice</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for sale in sales %}
-        <tr>
-          <td><input type="checkbox" name="sale_ids" value="{{ sale.id }}"></td>
-          <td>{{ sale.sale_date }}</td>
-          <td>{{ sale.customer.name if sale.customer else 'Walk-in' }}</td>
-          <td>
-            {% for item in sale.items %}
-            {{ item.product.name }}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          </td>
-          <td>
-            {% for item in sale.items %}
-            ₵{{ item.price_at_sale }}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          </td>
-          <td>
-            {% for item in sale.items %}
-            {{ item.quantity }}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          </td>
-          <td>
-            {% for item in sale.items %}
-            ₵{{ item.price_at_sale * item.quantity }}{% if not loop.last %}, {% endif %}
-            {% endfor %}
-          </td>
-          <td><a href="{{ url_for('sales.sale_invoice', sale_id=sale.id) }}" class="btn btn-sm btn-outline-dark"
-              target="_blank"><i class="bi bi-printer"></i> Print Invoice</a></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</form>
+
+<div class="glass-card">
+    <form id="bulk-action-form" method="post" action="{{ url_for('sales.bulk_action') }}">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <div class="d-flex gap-2">
+                <select name="action" class="form-select form-select-sm w-auto">
+                    <option value="">Bulk Action</option>
+                    <option value="delete">Delete Selected</option>
+                    <option value="export_csv">Export (CSV)</option>
+                    <option value="export_excel">Export (Excel)</option>
+                    <option value="print_invoices">Print Invoices</option>
+                </select>
+                <button type="submit" class="btn btn-sm btn-outline-primary">Apply</button>
+            </div>
+            
+            <div class="text-muted small">
+                Showing {{ sales|length }} records
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;"><input class="form-check-input" type="checkbox" id="select-all"></th>
+                        <th>Date</th>
+                        <th>Customer</th>
+                        <th>Products (Qty)</th>
+                        <th>Total Amount</th>
+                        <th class="text-end">Invoice</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for sale in sales %}
+                    <tr>
+                        <td>
+                            <input class="form-check-input" type="checkbox" name="sale_ids" value="{{ sale.id }}">
+                        </td>
+                        <td class="text-muted">{{ sale.sale_date.strftime('%Y-%m-%d') if sale.sale_date else '' }}</td>
+                        <td class="fw-medium">{{ sale.customer.name if sale.customer else 'Walk-in Customer' }}</td>
+                        <td>
+                            <ul class="list-unstyled mb-0 small">
+                            {% for item in sale.items %}
+                                <li>{{ item.product.name }} <span class="text-muted">(x{{ item.quantity }})</span></li>
+                            {% endfor %}
+                            </ul>
+                        </td>
+                        <td class="fw-bold text-success">
+                            {% set ns = namespace(total=0) %}
+                            {% for item in sale.items %}
+                                {% set ns.total = ns.total + (item.price_at_sale * item.quantity) %}
+                            {% endfor %}
+                            ₵{{ ns.total | round(2) }}
+                        </td>
+                        <td class="text-end">
+                            <a href="{{ url_for('sales.sale_invoice', sale_id=sale.id) }}" class="btn btn-sm btn-outline-primary" target="_blank" title="Print Invoice">
+                                <i class="bi bi-printer"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </form>
+    
+    {{ render_pagination(pagination, 'sales.list_sales') }}
+</div>
+{% endblock %}
+
+{% block scripts %}
 <script>
-  document.getElementById('select-all').addEventListener('change', function () {
+document.getElementById('select-all').addEventListener('change', function() {
     const checkboxes = document.querySelectorAll('input[name="sale_ids"]');
     for (const cb of checkboxes) { cb.checked = this.checked; }
-  });
+});
 </script>
 {% endblock %}

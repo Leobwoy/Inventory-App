@@ -12,8 +12,18 @@ import io
 
 @products_bp.route('/')
 def list_products():
-    products = Product.query.all()
-    return render_template('products/list.html', products=products)
+    page = request.args.get('page', 1, type=int)
+    search_query = request.args.get('q', '').strip()
+    
+    query = Product.query
+    if search_query:
+        query = query.filter(db.or_(
+            Product.name.ilike(f'%{search_query}%'),
+            Product.sku.ilike(f'%{search_query}%')
+        ))
+        
+    pagination = query.order_by(Product.name).paginate(page=page, per_page=15, error_out=False)
+    return render_template('products/list.html', products=pagination.items, pagination=pagination, search_query=search_query)
 
 @products_bp.route('/add', methods=['GET', 'POST'])
 def add_product():

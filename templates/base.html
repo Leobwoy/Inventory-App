@@ -3,58 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}Sales & Purchase Management{% endblock %}</title>
+    <title>{% block title %}Inventory & Sales App{% endblock %}</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
-    <style>
-      .navbar .nav-link, .btn, .form-control, .form-select { font-size: 1rem; }
-      .table-responsive { margin-bottom: 1rem; }
-      @media (max-width: 576px) {
-        .navbar-brand { font-size: 1.1rem; }
-        .btn, .form-control, .form-select { font-size: 0.95rem; }
-        h1, h2, h3, h4 { font-size: 1.2rem; }
-      }
-    </style>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+    {% block head %}{% endblock %}
 </head>
 <body>
-<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
-  <div class="container-fluid">
-    <a class="navbar-brand" href="/">Sales & Purchase</a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-      <span class="navbar-toggler-icon"></span>
-    </button>
-    <div class="collapse navbar-collapse" id="navbarNav">
-      <ul class="navbar-nav">
-        <li class="nav-item"><a class="nav-link" href="/">Dashboard</a></li>
-        <li class="nav-item"><a class="nav-link" href="/products/">Products</a></li>
-        <li class="nav-item"><a class="nav-link" href="/sales/">Sales</a></li>
-        <li class="nav-item"><a class="nav-link" href="/purchases/">Purchases</a></li>
-        <li class="nav-item"><a class="nav-link" href="/backup_restore"><i class="bi bi-hdd"></i> Backup/Restore</a></li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" id="reportsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="bi bi-bar-chart-line"></i> Reports</a>
-          <ul class="dropdown-menu" aria-labelledby="reportsDropdown">
-            <li><a class="dropdown-item" href="/reports/sales">Sales Report</a></li>
-            <li><a class="dropdown-item" href="/reports/purchases">Purchases Report</a></li>
-            <li><a class="dropdown-item" href="/reports/stock">Stock Report</a></li>
-          </ul>
-        </li>
-      </ul>
-    </div>
-  </div>
-</nav>
-<div class="container">
-    {% with messages = get_flashed_messages(with_categories=true) %}
-      {% if messages %}
-        {% for category, message in messages %}
-          <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
-            {{ message }}
-            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-          </div>
-        {% endfor %}
-      {% endif %}
-    {% endwith %}
-    {% block content %}{% endblock %}
+
+<!-- Dummy RBAC Variable (For UI Demonstration) -->
+{% set current_role = 'Admin' %}
+
+<div class="wrapper">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-header">
+            <a href="/" class="sidebar-brand d-flex align-items-center gap-2">
+                <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="height: 32px; width: 32px; object-fit: contain; border-radius: 4px;">
+                <span>InventoryApp</span>
+            </a>
+        </div>
+        <nav class="sidebar-nav">
+            <a class="nav-link" href="/" id="nav-dashboard"><i class="bi bi-grid-1x2"></i> Dashboard</a>
+            
+            {% if current_role in ['Admin', 'Sales Rep', 'Inventory Clerk'] %}
+            <a class="nav-link" href="/products/" id="nav-products"><i class="bi bi-box-seam"></i> Products</a>
+            {% endif %}
+            
+            {% if current_role in ['Admin', 'Sales Rep'] %}
+            <a class="nav-link" href="/sales/" id="nav-sales"><i class="bi bi-cart3"></i> Sales</a>
+            <a class="nav-link" href="/sales/customers" id="nav-customers"><i class="bi bi-people"></i> Customers</a>
+            {% endif %}
+            
+            {% if current_role in ['Admin', 'Inventory Clerk'] %}
+            <a class="nav-link" href="/purchases/" id="nav-purchases"><i class="bi bi-truck"></i> Purchases</a>
+            <a class="nav-link" href="/products/suppliers" id="nav-suppliers"><i class="bi bi-buildings"></i> Suppliers</a>
+            {% endif %}
+
+            {% if current_role == 'Admin' %}
+            <a class="nav-link" href="/reports/sales" id="nav-reports"><i class="bi bi-bar-chart"></i> Reports</a>
+            <a class="nav-link" href="/backup_restore" id="nav-backup"><i class="bi bi-hdd-network"></i> Backup/Restore</a>
+            {% endif %}
+        </nav>
+        
+        <div class="mt-auto pt-3 border-top" style="border-color: var(--border-color) !important;">
+            <div class="text-muted small mb-2"><i class="bi bi-person-badge"></i> Role View:</div>
+            <select class="form-select form-select-sm" onchange="alert('In a real RBAC, this requires login/logout.')">
+                <option selected>Admin</option>
+                <option>Sales Rep</option>
+                <option>Inventory Clerk</option>
+            </select>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Flashed Messages -->
+        <div class="container-fluid mb-4">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %}
+                {% for category, message in messages %}
+                  <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
+                    <i class="bi bi-info-circle me-2"></i> {{ message }}
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+                  </div>
+                {% endfor %}
+              {% endif %}
+            {% endwith %}
+        </div>
+        
+        <div class="container-fluid">
+            {% block content %}{% endblock %}
+        </div>
+    </main>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // Highlight active nav link
+    document.addEventListener("DOMContentLoaded", function() {
+        let path = window.location.pathname;
+        let links = document.querySelectorAll('.sidebar-nav .nav-link');
+        links.forEach(link => {
+            if(link.getAttribute('href') === path || (path.startsWith(link.getAttribute('href')) && link.getAttribute('href') !== '/')) {
+                link.classList.add('active');
+            }
+        });
+    });
+</script>
+{% block scripts %}{% endblock %}
 </body>
-</html> 
+</html>
