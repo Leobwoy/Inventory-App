@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}Record Purchase{% endblock %}
+{% block content %}
+<div class="btn-group mb-3">
+  <a href="/" class="btn btn-outline-secondary"><i class="bi bi-house"></i> Dashboard</a>
+  <a href="/products/" class="btn btn-outline-primary"><i class="bi bi-box-seam"></i> Products</a>
+  <a href="/sales/" class="btn btn-outline-success"><i class="bi bi-cash-coin"></i> Sales</a>
+  <a href="/purchases/" class="btn btn-outline-warning"><i class="bi bi-cart-plus"></i> Purchases</a>
+  <a href="/products/suppliers" class="btn btn-outline-warning"><i class="bi bi-truck"></i> Suppliers</a>
+  <a href="/reports/sales" class="btn btn-outline-info"><i class="bi bi-bar-chart-line"></i> Reports</a>
+</div>
+<h2>Record Purchase</h2>
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">{{ form.product_id.label }}{{ form.product_id(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.quantity.label }}{{ form.quantity(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.purchase_price.label }}{{ form.purchase_price(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.supplier_id.label }}{{ form.supplier_id(class_='form-control') }} <a href="/products/suppliers" class="ms-2">Manage Suppliers</a></div>
+    <div class="mb-3">{{ form.purchase_date.label }}{{ form.purchase_date(class_='form-control') }}</div>
+    <button type="submit" class="btn btn-success">Record Purchase</button>
+    <a href="{{ url_for('purchases.list_purchases') }}" class="btn btn-secondary">Cancel</a>
+</form>
+{% endblock %} 

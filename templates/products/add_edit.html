@@ -1,0 +1,23 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Product{% endblock %}
+{% block content %}
+<div class="btn-group mb-3">
+  <a href="/" class="btn btn-outline-secondary"><i class="bi bi-house"></i> Dashboard</a>
+  <a href="/products/" class="btn btn-outline-primary"><i class="bi bi-box-seam"></i> Products</a>
+  <a href="/sales/" class="btn btn-outline-success"><i class="bi bi-cash-coin"></i> Sales</a>
+  <a href="/purchases/" class="btn btn-outline-warning"><i class="bi bi-cart-plus"></i> Purchases</a>
+  <a href="/reports/sales" class="btn btn-outline-info"><i class="bi bi-bar-chart-line"></i> Reports</a>
+</div>
+<h2>{{ action }} Product</h2>
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">{{ form.name.label }}{{ form.name(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.sku.label }}{{ form.sku(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.description.label }}{{ form.description(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.unit_price.label }}{{ form.unit_price(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.quantity_in_stock.label }}{{ form.quantity_in_stock(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.min_stock_alert.label }}{{ form.min_stock_alert(class_='form-control') }}</div>
+    <button type="submit" class="btn btn-success">{{ action }}</button>
+    <a href="{{ url_for('products.list_products') }}" class="btn btn-secondary">Cancel</a>
+</form>
+{% endblock %} 

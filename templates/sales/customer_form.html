@@ -1,0 +1,14 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Customer{% endblock %}
+{% block content %}
+<h2>{{ action }} Customer</h2>
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">{{ form.name.label }}{{ form.name(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.phone.label }}{{ form.phone(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.email.label }}{{ form.email(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.address.label }}{{ form.address(class_='form-control') }}</div>
+    <button type="submit" class="btn btn-success">{{ action }}</button>
+    <a href="{{ url_for('sales.list_customers') }}" class="btn btn-secondary">Cancel</a>
+</form>
+{% endblock %} 

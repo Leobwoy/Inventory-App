@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block title %}Sales Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="btn-group">
+    <a href="/" class="btn btn-outline-secondary"><i class="bi bi-house"></i> Dashboard</a>
+    <a href="/products/" class="btn btn-outline-primary"><i class="bi bi-box-seam"></i> Products</a>
+    <a href="/sales/" class="btn btn-outline-success"><i class="bi bi-cash-coin"></i> Sales</a>
+    <a href="/purchases/" class="btn btn-outline-warning"><i class="bi bi-cart-plus"></i> Purchases</a>
+    <a href="/reports/stock" class="btn btn-outline-info"><i class="bi bi-bar-chart-line"></i> Stock Report</a>
+  </div>
+</div>
+<h2>Sales Report</h2>
+<form method="get" class="row g-3 mb-3">
+  <div class="col-auto"><input type="date" name="start_date" class="form-control" value="{{ filters.start_date }}"
+      placeholder="Start Date"></div>
+  <div class="col-auto"><input type="date" name="end_date" class="form-control" value="{{ filters.end_date }}"
+      placeholder="End Date"></div>
+  <div class="col-auto">
+    <select name="product_id" class="form-control">
+      <option value="">All Products</option>
+      {% for product in products %}
+      <option value="{{ product.id }}" {% if filters.get('product_id')|int==product.id %}selected{% endif %}>{{
+        product.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div class="col-auto"><button type="submit" class="btn btn-primary">Filter</button></div>
+  <div class="col-auto">
+    <a href="?{{ request.query_string.decode('utf-8') }}&export=pdf" class="btn btn-secondary">Export PDF</a>
+    <a href="?{{ request.query_string.decode('utf-8') }}&export=excel" class="btn btn-success">Export Excel</a>
+    <a href="?{{ request.query_string.decode('utf-8') }}&export=csv" class="btn btn-info">Export CSV</a>
+  </div>
+</form>
+<table class="table table-bordered table-striped">
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Product</th>
+      <th>Quantity</th>
+      <th>Unit Price</th>
+      <th>Total</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for sale in sales %}
+    <tr>
+      <td>{{ sale.sale_date }}</td>
+      <td>
+        {% for item in sale.items %}
+        {{ item.product.name }}{% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </td>
+      <td>
+        {% for item in sale.items %}
+        {{ item.quantity }}{% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </td>
+      <td>
+        {% for item in sale.items %}
+        ₵{{ item.price_at_sale }}{% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </td>
+      <td>
+        {% set row_total = 0 %}
+        {% for item in sale.items %}
+        ₵{{ item.price_at_sale * item.quantity }}{% set row_total = row_total + (item.price_at_sale * item.quantity)
+        %}{% if not loop.last %}, {% endif %}
+        {% endfor %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% set ns = namespace(grand_total=0) %}
+{% for sale in sales %}
+{% for item in sale.items %}
+{% set ns.grand_total = ns.grand_total + (item.price_at_sale * item.quantity) %}
+{% endfor %}
+{% endfor %}
+<div class="mt-3"><strong>Summary Total: ₵{{ ns.grand_total }}</strong></div>
+{% endblock %}

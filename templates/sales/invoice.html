@@ -1,0 +1,96 @@
+{% extends 'base.html' %}
+{% block title %}Invoice #{{ sale.id }}{% endblock %}
+{% block content %}
+<div class="container my-4" id="invoice-area">
+  <div class="row justify-content-center">
+    <div class="col-lg-8 col-md-10 col-12">
+      <div class="card shadow">
+        <div class="card-body p-4">
+          <div class="d-flex justify-content-between align-items-center mb-4">
+            <div>
+              <h2 class="mb-0">Sales & Purchase Management</h2>
+              <div class="text-muted">INVOICE</div>
+            </div>
+            <div>
+              <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="height:100px;">
+            </div>
+          </div>
+          <div class="row mb-3">
+            <div class="col-6">
+              <strong>Invoice #:</strong> {{ sale.id }}<br>
+              <strong>Date:</strong> {{ sale.sale_date }}<br>
+
+            </div>
+            <div class="col-6 text-end">
+              <strong>Customer:</strong> {% if customer_name %}{{ customer_name }}{% elif sale.customer %}{{
+              sale.customer.name }}{% else %}N/A{% endif %}<br>
+              {% if sale.customer and not customer_name %}
+              <span class="text-muted">{{ sale.customer.phone }}<br>{{ sale.customer.email }}<br>{{
+                sale.customer.address }}</span>
+              {% endif %}
+            </div>
+          </div>
+          <table class="table table-bordered mb-4">
+            <thead class="table-light">
+              <tr>
+                <th>Item</th>
+                <th>Unit Price</th>
+                <th>Quantity</th>
+                <th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% set ns = namespace(grand_total=0) %}
+              {% for item in sale.items %}
+              <tr>
+                <td>{{ item.product.name }}</td>
+                <td>₵{{ item.price_at_sale }}</td>
+                <td>{{ item.quantity }}</td>
+                <td>₵{{ item.price_at_sale * item.quantity }}</td>
+              </tr>
+              {% set ns.grand_total = ns.grand_total + (item.price_at_sale * item.quantity) %}
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="d-flex justify-content-end">
+            <div class="text-end">
+              <h4 class="mb-0">Grand Total: <span class="text-success">₵{{ ns.grand_total }}</span></h4>
+            </div>
+          </div>
+          <hr>
+          <div class="text-center text-muted small">Thank you for your business!</div>
+        </div>
+      </div>
+      <div class="text-center mt-3">
+        <button class="btn btn-outline-dark" onclick="window.print()"><i class="bi bi-printer"></i> Print</button>
+      </div>
+    </div>
+  </div>
+</div>
+<style>
+  @media print {
+    body * {
+      visibility: hidden;
+    }
+
+    #invoice-area,
+    #invoice-area * {
+      visibility: visible;
+    }
+
+    #invoice-area {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100vw;
+    }
+
+    .btn,
+    nav,
+    .navbar,
+    .alert {
+      display: none !important;
+    }
+  }
+</style>
+{% endblock %}

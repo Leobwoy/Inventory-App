@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Backup & Restore{% endblock %}
+{% block content %}
+<h2>Database Backup & Restore</h2>
+<div class="alert alert-warning">
+  <strong>Warning:</strong> Restoring a backup will <b>overwrite all current data</b> in the database.<br>
+  Only use this if you are sure!
+</div>
+<form method="post">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <button type="submit" name="backup" class="btn btn-success mb-3">Download Backup</button>
+</form>
+<form method="post" enctype="multipart/form-data">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="mb-2">
+    <input type="file" name="restore_file" class="form-control" required>
+  </div>
+  <button type="submit" name="restore" class="btn btn-danger">Restore from Backup</button>
+</form>
+{% endblock %} 

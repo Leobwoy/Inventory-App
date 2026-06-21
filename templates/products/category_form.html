@@ -1,0 +1,12 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Category{% endblock %}
+{% block content %}
+<h2>{{ action }} Category</h2>
+<form method="post">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">{{ form.name.label }}{{ form.name(class_='form-control') }}</div>
+    <div class="mb-3">{{ form.description.label }}{{ form.description(class_='form-control') }}</div>
+    <button type="submit" class="btn btn-success">{{ action }}</button>
+    <a href="{{ url_for('products.list_categories') }}" class="btn btn-secondary">Cancel</a>
+</form>
+{% endblock %} 

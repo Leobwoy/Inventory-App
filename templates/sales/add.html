@@ -1,0 +1,204 @@
+{% extends 'base.html' %}
+{% block title %}Record Sale{% endblock %}
+{% block content %}
+<div class="btn-group mb-3">
+  <a href="/" class="btn btn-outline-secondary"><i class="bi bi-house"></i> Dashboard</a>
+  <a href="/products/" class="btn btn-outline-primary"><i class="bi bi-box-seam"></i> Products</a>
+  <a href="/sales/" class="btn btn-outline-success"><i class="bi bi-cash-coin"></i> Sales</a>
+  <a href="/purchases/" class="btn btn-outline-warning"><i class="bi bi-cart-plus"></i> Purchases</a>
+  <a href="/reports/sales" class="btn btn-outline-info"><i class="bi bi-bar-chart-line"></i> Reports</a>
+</div>
+<h2>Record Sale</h2>
+<form method="post">
+  {{ form.hidden_tag() }}
+  <div class="mb-3">
+    {{ form.sale_date.label }}{{ form.sale_date(class_='form-control' + (' is-invalid' if form.sale_date.errors else
+    '')) }}
+    {% for error in form.sale_date.errors %}
+    <div class="invalid-feedback">{{ error }}</div>
+    {% endfor %}
+  </div>
+  <div class="mb-3">
+    {{ form.customer_id.label }}{{ form.customer_id(class_='form-control' + (' is-invalid' if form.customer_id.errors
+    else ''), id='customer_id') }}
+    {% for error in form.customer_id.errors %}
+    <div class="invalid-feedback">{{ error }}</div>
+    {% endfor %}
+  </div>
+  <div class="mb-3">
+    {{ form.customer_name.label }}{{ form.customer_name(class_='form-control' + (' is-invalid' if
+    form.customer_name.errors else '')) }}
+    {% for error in form.customer_name.errors %}
+    <div class="invalid-feedback">{{ error }}</div>
+    {% endfor %}
+  </div>
+  <h5>Sale Items</h5>
+  <div class="table-responsive mb-3">
+    <table class="table table-bordered align-middle" id="items-table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Quantity</th>
+          <th>Unit Price</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for subform in form.items %}
+        <tr>
+          <td>
+            {{ subform.product_id(class_='form-control product-select' + (' is-invalid' if subform.product_id.errors
+            else '')) }}
+            {% for error in subform.product_id.errors %}
+            <div class="invalid-feedback">{{ error }}</div>
+            {% endfor %}
+          </td>
+          <td>
+            {{ subform.quantity(class_='form-control' + (' is-invalid' if subform.quantity.errors else '')) }}
+            {% for error in subform.quantity.errors %}
+            <div class="invalid-feedback">{{ error }}</div>
+            {% endfor %}
+          </td>
+          <td>{{ subform.price_at_sale(class_='form-control price-input', readonly=True) }}</td>
+          <td><button type="button" class="btn btn-danger btn-sm remove-item">&times;</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <button type="button" class="btn btn-outline-primary btn-sm" id="add-item">Add Item</button>
+  </div>
+  <div class="mb-3 text-end">
+    <strong>Total: ₵<span id="sale-total">0.00</span></strong>
+  </div>
+  <button type="submit" class="btn btn-success">Record Sale</button>
+  <a href="{{ url_for('sales.list_sales') }}" class="btn btn-secondary">Cancel</a>
+</form>
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script type="application/json" id="product-prices-data">
+  {{ product_prices|tojson }}
+</script>
+<script>
+  const productPrices = JSON.parse(document.getElementById('product-prices-data').textContent);
+  function initSelect2() {
+    $('.product-select').select2({
+      width: '100%',
+      placeholder: 'Select a product',
+      allowClear: true
+    });
+  }
+  function updatePrice(row) {
+    var productId = row.find('.product-select').val();
+    var price = productPrices[productId] || '';
+    row.find('.price-input').val(price);
+  }
+  function updateTotal() {
+    let total = 0;
+    $('#items-table tbody tr').each(function () {
+      var qty = parseFloat($(this).find('input[name$="quantity"]').val()) || 0;
+      var price = parseFloat($(this).find('input[name$="price_at_sale"]').val()) || 0;
+      total += qty * price;
+    });
+    $('#sale-total').text(total.toFixed(2));
+  }
+  $(document).ready(function () {
+    initSelect2();
+    $('#items-table').on('change', '.product-select', function () {
+      var row = $(this).closest('tr');
+      updatePrice(row);
+    });
+    $('#add-item').click(function () {
+      var $lastRow = $('#items-table tbody tr:last');
+      var idx = $('#items-table tbody tr').length;
+      var $newRow = $lastRow.clone();
+
+      // Update name and id attributes to use the new index
+      $newRow.find('input, select').each(function () {
+        var name = $(this).attr('name');
+        var id = $(this).attr('id');
+        if (name) {
+          name = name.replace(/items-\d+-/, 'items-' + idx + '-');
+          $(this).attr('name', name);
+        }
+        if (id) {
+          id = id.replace(/items-\d+-/, 'items-' + idx + '-');
+          $(this).attr('id', id);
+        }
+        $(this).val('');
+        // Clear errors
+        $(this).removeClass('is-invalid');
+        $(this).next('.invalid-feedback').remove();
+      });
+
+      $newRow.find('.price-input').prop('readonly', true);
+
+      // Remove select2 container clone
+      $newRow.find('.select2-container').remove();
+      $newRow.find('.product-select').removeClass('select2-hidden-accessible').removeAttr('data-select2-id');
+
+      $newRow.appendTo('#items-table tbody');
+      initSelect2();
+    });
+    $('#items-table').on('click', '.remove-item', function () {
+      if ($('#items-table tbody tr').length > 1) {
+        $(this).closest('tr').remove();
+      }
+    });
+    // Initialize price fields for existing rows
+    $('#items-table tbody tr').each(function () {
+      updatePrice($(this));
+    });
+    // Enter key navigation for sale items
+    let enterPressedOnce = false;
+    $('#items-table').on('keydown', 'input, select', function (e) {
+      if (e.key === 'Enter') {
+        // For select2 dropdowns
+        if ($(this).hasClass('product-select')) {
+          if ($('.select2-container--open').length) {
+            // If dropdown is open, let select2 handle Enter
+            enterPressedOnce = true;
+            return;
+          } else if (enterPressedOnce) {
+            enterPressedOnce = false;
+          } else {
+            // If dropdown is closed, move to next field
+            e.preventDefault();
+          }
+        } else if ($(this).attr('type') === 'date') {
+          // For date inputs, let the first Enter open/close the picker, second Enter moves on
+          if (!enterPressedOnce) {
+            enterPressedOnce = true;
+            return;
+          } else {
+            enterPressedOnce = false;
+            e.preventDefault();
+          }
+        } else {
+          e.preventDefault();
+        }
+        var $inputs = $(this).closest('tr').find('input, select');
+        var idx = $inputs.index(this);
+        if (idx < $inputs.length - 1) {
+          $inputs.eq(idx + 1).focus();
+        } else {
+          // If last field in row, move to first field of next row or add a new row
+          var $nextRow = $(this).closest('tr').next('tr');
+          if ($nextRow.length) {
+            $nextRow.find('input, select').first().focus();
+          } else {
+            $('#add-item').click();
+            $('#items-table tbody tr:last').find('input, select').first().focus();
+          }
+        }
+      } else {
+        enterPressedOnce = false;
+      }
+    });
+    $('#items-table').on('input change', 'input, select', function () {
+      updateTotal();
+    });
+    updateTotal();
+  });
+</script>
+{% endblock %}

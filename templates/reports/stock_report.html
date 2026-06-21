@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+{% block title %}Stock Report{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <div class="btn-group">
+    <a href="/" class="btn btn-outline-secondary"><i class="bi bi-house"></i> Dashboard</a>
+    <a href="/products/" class="btn btn-outline-primary"><i class="bi bi-box-seam"></i> Products</a>
+    <a href="/sales/" class="btn btn-outline-success"><i class="bi bi-cash-coin"></i> Sales</a>
+    <a href="/purchases/" class="btn btn-outline-warning"><i class="bi bi-cart-plus"></i> Purchases</a>
+    <a href="/reports/sales" class="btn btn-outline-info"><i class="bi bi-bar-chart-line"></i> Sales Report</a>
+  </div>
+</div>
+<h2>Stock Report</h2>
+<div class="mb-3">
+  <a href="?export=pdf" class="btn btn-secondary mb-1">Export PDF</a>
+  <a href="?export=excel" class="btn btn-success mb-1">Export Excel</a>
+  <a href="?export=csv" class="btn btn-info mb-1">Export CSV</a>
+</div>
+<table class="table table-bordered table-striped">
+    <thead>
+        <tr>
+            <th>Name</th>
+            <th>SKU</th>
+            <th>Description</th>
+            <th>Unit Price</th>
+            <th>Quantity in Stock</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for product in products %}
+        <tr>
+            <td>{{ product.name }}</td>
+            <td>{{ product.sku }}</td>
+            <td>{{ product.description }}</td>
+            <td>₵{{ product.unit_price }}</td>
+            <td>{{ product.quantity_in_stock }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %} 
