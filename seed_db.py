@@ -33,10 +33,10 @@ def seed():
 
         # 2. Seed Suppliers
         suppliers_data = [
-            {"name": "Global Tech Solutions Inc.", "contact": "Alice Smith", "phone": "555-0199", "email": "info@globaltech.com", "address": "100 Innovation Way, Silicon Valley, CA"},
-            {"name": "EcoAppliance Logistics Ltd.", "contact": "Robert Chen", "phone": "555-0248", "email": "supply@ecoappliance.com", "address": "45 Green Way, Portland, OR"},
-            {"name": "Apex Office Wholesalers", "contact": "Sarah Johnson", "phone": "555-0371", "email": "orders@apexoffice.com", "address": "12 Commercial Blvd, Chicago, IL"},
-            {"name": "Vigor Sports Supplies Ltd.", "contact": "Marcus Aurelius", "phone": "555-0482", "email": "bulk@vigorsports.com", "address": "78 Active St, Denver, CO"}
+            {"name": "Global Tech Solutions Inc.", "contact": "Alice Smith", "phone": "0244-112233", "email": "info@globaltech.com", "address": "Ring Road Central, near Kwame Nkrumah Circle, Accra"},
+            {"name": "EcoAppliance Logistics Ltd.", "contact": "Robert Chen", "phone": "0208-223344", "email": "supply@ecoappliance.com", "address": "Liberation Road, Airport Residential Area, Accra"},
+            {"name": "Apex Office Wholesalers", "contact": "Sarah Johnson", "phone": "0553-334455", "email": "orders@apexoffice.com", "address": "Commercial Street, near Harbor Area, Takoradi"},
+            {"name": "Vigor Sports Supplies Ltd.", "contact": "Kofi Mensah", "phone": "0243-445566", "email": "bulk@vigorsports.com", "address": "Cape Coast - Takoradi Road, near Takoradi Mall, Takoradi"}
         ]
 
         suppliers = {}
@@ -106,12 +106,12 @@ def seed():
 
         # 4. Seed Customers (Wholesale Retailers)
         customers_data = [
-            {"name": "Metro Retail Outlets", "phone": "555-1100", "email": "procurement@metroretail.com", "address": "500 Commerce Rd, New York, NY"},
-            {"name": "TechSavvy Distributors", "phone": "555-1200", "email": "purchasing@techsavvy.com", "address": "77 Digital Ave, Austin, TX"},
-            {"name": "National Office Supplies Co.", "phone": "555-1300", "email": "office@nationalcorp.com", "address": "1000 Corporate Pkwy, Chicago, IL"},
-            {"name": "Active Life Gyms & Fitness", "phone": "555-1400", "email": "facilities@activelifegym.com", "address": "33 Wellness Blvd, Miami, FL"},
-            {"name": "General Goods Emporium", "phone": "555-1500", "email": "stock@generalgoods.com", "address": "10 Main St, Seattle, WA"},
-            {"name": "Elite Business Supplies", "phone": "555-1600", "email": "admin@elitesupplies.com", "address": "19 Enterprise Way, Boston, MA"}
+            {"name": "Metro Retail Outlets", "phone": "0244-556677", "email": "procurement@metroretail.com", "address": "Oxford Street, Osu, Accra"},
+            {"name": "TechSavvy Distributors", "phone": "0208-667788", "email": "purchasing@techsavvy.com", "address": "Graphic Road, South Industrial Area, Accra"},
+            {"name": "National Office Supplies Co.", "phone": "0553-778899", "email": "office@nationalcorp.com", "address": "Axim Road, near Market Circle, Takoradi"},
+            {"name": "Active Life Gyms & Fitness", "phone": "0243-889900", "email": "facilities@activelifegym.com", "address": "Boundary Road, East Legon, Accra"},
+            {"name": "General Goods Emporium", "phone": "0208-990011", "email": "stock@generalgoods.com", "address": "Spintex Road, near Flower Pot, Accra"},
+            {"name": "Elite Business Supplies", "phone": "0553-112244", "email": "admin@elitesupplies.com", "address": "Collins Avenue, near Chapel Hill, Takoradi"}
         ]
 
         customers = []
