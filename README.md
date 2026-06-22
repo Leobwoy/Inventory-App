@@ -1,4 +1,4 @@
-# Inventory, Sales & Purchase Management System
+# TrackTrack - Wholesale Inventory, Sales & Purchase System
 
 A premium, production-ready Flask web application for tracking products, managing suppliers, recording multi-item sales transactions, coordinating purchases, and visualizing real-time metrics. The frontend features a state-of-the-art **glassmorphic dark UI** with dynamic charts and responsive design, while the backend leverages **PostgreSQL** with strict transactional controls.
 
@@ -53,6 +53,7 @@ A premium, production-ready Flask web application for tracking products, managin
 ├── extensions.py      # Flask extension instances
 ├── init_db.py         # Safe database table initializer
 ├── reset_db.py        # Database wipe-and-rebuild script
+├── seed_db.py         # Database seeder (wholesale business datasets)
 ├── build.sh           # Deployment build script
 ├── render.yaml        # Render Infrastructure Blueprint
 └── requirements.txt   # Python package dependencies
@@ -100,12 +101,17 @@ A premium, production-ready Flask web application for tracking products, managin
    export DATABASE_URL="postgresql://username:password@localhost:5432/databasename"
    ```
 
-5. **Initialize Database Tables**:
-   Create the tables without modifying existing data:
+5. **Initialize & Seed Database Tables**:
+   To initialize empty tables:
    ```bash
    python init_db.py
    ```
-   *(Optionally, run `python reset_db.py` to wipe and recreate all tables.)*
+   
+   To clear existing tables and **seed the database with rich wholesale business transactions** (categories, suppliers, products, bulk sales, and bulk purchases over the past 30 days):
+   ```bash
+   python seed_db.py
+   ```
+   *(Optionally, run `python reset_db.py` to wipe and recreate empty tables.)*
 
 6. **Run the Development Server**:
    ```bash

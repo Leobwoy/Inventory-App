@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: inventory-sales-app
+    name: tracktrack-app
     env: python
     plan: free
     buildCommand: "./build.sh"
