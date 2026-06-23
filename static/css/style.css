@@ -197,9 +197,27 @@ h1, h2, h3, h4, h5, h6 {
   margin-bottom: 0;
   width: 100%;
   --bs-table-bg: transparent;
+  --bs-table-color: var(--text-primary);
   --bs-table-striped-bg: rgba(255, 255, 255, 0.02);
+  --bs-table-striped-color: var(--text-primary);
   --bs-table-hover-bg: rgba(255, 255, 255, 0.04);
+  --bs-table-hover-color: var(--text-primary);
   --bs-table-border-color: var(--border-color);
+}
+
+/* Ensure ALL text inside tables stays light */
+.table td,
+.table th,
+.table td *,
+.table th * {
+  color: inherit;
+}
+.table td .fw-bold,
+.table td .fw-medium,
+.table td div,
+.table td span:not(.badge):not(.text-muted),
+.table td li {
+  color: var(--text-primary);
 }
 .table>thead {
   background: rgba(0, 0, 0, 0.25);
