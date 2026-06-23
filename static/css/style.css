@@ -27,12 +27,14 @@ body {
   margin: 0;
   display: flex;
   min-height: 100vh;
+  overflow-x: hidden;
 }
 
 /* Sidebar Layout */
 .wrapper {
   display: flex;
   width: 100%;
+  overflow-x: hidden;
 }
 
 .sidebar {
@@ -46,7 +48,7 @@ body {
   flex-direction: column;
   position: fixed;
   height: 100vh;
-  z-index: 1000;
+  z-index: 1050;
   transition: all 0.3s ease;
 }
 
@@ -118,6 +120,7 @@ body {
   padding: 1.5rem;
   box-shadow: var(--glass-shadow);
   transition: transform 0.2s ease, background 0.2s ease;
+  overflow-x: auto;
 }
 
 .glass-card:hover {
