@@ -4,22 +4,22 @@
 <div class="container my-4" id="bulk-invoice-area">
   {% for sale in sales %}
   <div class="card shadow mb-5">
-    <div class="card-body p-4">
-      <div class="d-flex justify-content-between align-items-center mb-4">
+    <div class="card-body p-4 p-md-4 p-2">
+      <div class="invoice-header d-flex justify-content-between align-items-center mb-4">
         <div>
-          <h2 class="mb-0">Sales & Purchase Management</h2>
+          <h2 class="mb-0 fs-4 fs-md-2">TrackTrack</h2>
           <div class="text-muted">INVOICE</div>
         </div>
         <div>
-          <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" style="height:100px;">
+          <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="invoice-logo">
         </div>
       </div>
       <div class="row mb-3">
-        <div class="col-6">
+        <div class="col-sm-6 mb-2 mb-sm-0">
           <strong>Invoice #:</strong> {{ sale.id }}<br>
           <strong>Date:</strong> {{ sale.sale_date }}<br>
         </div>
-        <div class="col-6 text-end">
+        <div class="col-sm-6 text-sm-end">
           <strong>Customer:</strong> {{ sale.customer.name if sale.customer else 'N/A' }}<br>
           {% if sale.customer %}
           <span class="text-muted">{{ sale.customer.phone }}<br>{{ sale.customer.email }}<br>{{ sale.customer.address
@@ -27,28 +27,30 @@
           {% endif %}
         </div>
       </div>
-      <table class="table table-bordered mb-4">
-        <thead class="table-light">
-          <tr>
-            <th>Item</th>
-            <th>Unit Price</th>
-            <th>Quantity</th>
-            <th>Total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% set ns = namespace(grand_total=0) %}
-          {% for item in sale.items %}
-          <tr>
-            <td>{{ item.product.name }}</td>
-            <td>₵{{ item.price_at_sale }}</td>
-            <td>{{ item.quantity }}</td>
-            <td>₵{{ item.price_at_sale * item.quantity }}</td>
-          </tr>
-          {% set ns.grand_total = ns.grand_total + (item.price_at_sale * item.quantity) %}
-          {% endfor %}
-        </tbody>
-      </table>
+      <div class="table-responsive">
+        <table class="table table-bordered mb-4 table-cards">
+          <thead class="table-light">
+            <tr>
+              <th>Item</th>
+              <th>Unit Price</th>
+              <th>Quantity</th>
+              <th>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% set ns = namespace(grand_total=0) %}
+            {% for item in sale.items %}
+            <tr>
+              <td data-label="Item">{{ item.product.name }}</td>
+              <td data-label="Unit Price">₵{{ item.price_at_sale }}</td>
+              <td data-label="Quantity">{{ item.quantity }}</td>
+              <td data-label="Total">₵{{ item.price_at_sale * item.quantity }}</td>
+            </tr>
+            {% set ns.grand_total = ns.grand_total + (item.price_at_sale * item.quantity) %}
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
       <div class="d-flex justify-content-end">
         <div class="text-end">
           <h4 class="mb-0">Grand Total: <span class="text-success">₵{{ ns.grand_total }}</span></h4>
@@ -64,6 +66,23 @@
   </div>
 </div>
 <style>
+  .invoice-logo {
+    height: 80px;
+    max-width: 100px;
+    object-fit: contain;
+  }
+
+  @media (max-width: 767px) {
+    .invoice-header {
+      flex-direction: column;
+      text-align: center;
+      gap: 0.75rem;
+    }
+    .invoice-logo {
+      height: 50px;
+    }
+  }
+
   @media print {
     body * {
       visibility: hidden;

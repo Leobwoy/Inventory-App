@@ -2,8 +2,8 @@
 {% block title %}Purchases Report | TrackTrack{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0">Purchases Report</h2>
+<div class="page-header">
+    <h2>Purchases Report</h2>
 </div>
 
 <div class="glass-card mb-4">
@@ -32,9 +32,9 @@
 </div>
 
 <div class="glass-card">
-    <div class="d-flex justify-content-between align-items-center mb-3 border-bottom border-secondary pb-3">
+    <div class="card-toolbar">
         <h5 class="mb-0">Report Results</h5>
-        <div class="btn-group">
+        <div class="card-toolbar-actions">
             <a href="?{{ request.query_string.decode('utf-8') }}&export=pdf" class="btn btn-sm btn-outline-danger"><i class="bi bi-file-pdf"></i> PDF</a>
             <a href="?{{ request.query_string.decode('utf-8') }}&export=excel" class="btn btn-sm btn-outline-success"><i class="bi bi-file-excel"></i> Excel</a>
             <a href="?{{ request.query_string.decode('utf-8') }}&export=csv" class="btn btn-sm btn-outline-info"><i class="bi bi-filetype-csv"></i> CSV</a>
@@ -42,7 +42,7 @@
     </div>
 
     <div class="table-responsive">
-        <table class="table table-hover">
+        <table class="table table-hover table-cards">
             <thead>
                 <tr>
                     <th>Date</th>
@@ -56,12 +56,12 @@
             <tbody>
                 {% for purchase in purchases %}
                 <tr>
-                    <td class="text-muted">{{ purchase.purchase_date.strftime('%Y-%m-%d') if purchase.purchase_date else '' }}</td>
-                    <td class="fw-medium">{{ purchase.product.name }}</td>
-                    <td><span class="badge bg-secondary">{{ purchase.quantity }}</span></td>
-                    <td class="text-muted">₵{{ purchase.purchase_price }}</td>
-                    <td class="text-muted">{{ purchase.supplier.name if purchase.supplier else 'N/A' }}</td>
-                    <td class="text-end fw-medium text-warning">₵{{ purchase.purchase_price * purchase.quantity }}</td>
+                    <td data-label="Date" class="text-muted">{{ purchase.purchase_date.strftime('%Y-%m-%d') if purchase.purchase_date else '' }}</td>
+                    <td data-label="Product" class="fw-medium">{{ purchase.product.name }}</td>
+                    <td data-label="Qty"><span class="badge bg-secondary">{{ purchase.quantity }}</span></td>
+                    <td data-label="Price" class="text-muted">₵{{ purchase.purchase_price }}</td>
+                    <td data-label="Supplier" class="text-muted">{{ purchase.supplier.name if purchase.supplier else 'N/A' }}</td>
+                    <td data-label="Total" class="text-end fw-medium text-warning">₵{{ purchase.purchase_price * purchase.quantity }}</td>
                 </tr>
                 {% endfor %}
             </tbody>

@@ -2,9 +2,11 @@
 {% block title %}{{ action }} Customer | TrackTrack{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0">{{ action }} Customer</h2>
-    <a href="{{ url_for('sales.list_customers') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back to Customers</a>
+<div class="page-header">
+    <h2>{{ action }} Customer</h2>
+    <div class="page-header-actions">
+        <a href="{{ url_for('sales.list_customers') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back to Customers</a>
+    </div>
 </div>
 
 <div class="glass-card" style="max-width: 600px;">

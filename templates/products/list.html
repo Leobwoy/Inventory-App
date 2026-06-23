@@ -3,9 +3,9 @@
 {% block title %}Products | TrackTrack{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0">Products Inventory</h2>
-    <div class="d-flex gap-2">
+<div class="page-header">
+    <h2>Products Inventory</h2>
+    <div class="page-header-actions">
         <form method="get" class="d-flex">
             <div class="input-group">
                 <input type="text" name="q" class="form-control" placeholder="Search name or SKU..." value="{{ search_query }}">
@@ -19,8 +19,8 @@
 
 <div class="glass-card">
     <form id="bulk-action-form" method="post" action="{{ url_for('products.bulk_action') }}">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div class="d-flex gap-2">
+        <div class="card-toolbar">
+            <div class="card-toolbar-actions">
                 <select name="action" class="form-select form-select-sm w-auto">
                     <option value="">Bulk Action</option>
                     <option value="delete">Delete Selected</option>
@@ -36,7 +36,7 @@
         </div>
 
         <div class="table-responsive">
-            <table class="table table-hover">
+            <table class="table table-hover table-cards">
                 <thead>
                     <tr>
                         <th style="width: 40px;"><input class="form-check-input" type="checkbox" id="select-all"></th>
@@ -50,16 +50,18 @@
                 <tbody>
                     {% for product in products %}
                     <tr>
-                        <td>
+                        <td class="cell-checkbox">
                             <input class="form-check-input" type="checkbox" name="product_ids" value="{{ product.id }}">
                         </td>
-                        <td>
-                            <div class="fw-bold">{{ product.name }}</div>
-                            <small class="text-muted text-truncate" style="max-width: 200px; display: inline-block;">{{ product.description }}</small>
+                        <td data-label="Product">
+                            <div>
+                                <div class="fw-bold">{{ product.name }}</div>
+                                <small class="text-muted text-truncate" style="max-width: 200px; display: inline-block;">{{ product.description }}</small>
+                            </div>
                         </td>
-                        <td class="font-monospace text-muted">{{ product.sku }}</td>
-                        <td class="fw-medium">${{ product.unit_price }}</td>
-                        <td>
+                        <td data-label="SKU" class="font-monospace text-muted">{{ product.sku }}</td>
+                        <td data-label="Price" class="fw-medium">₵{{ product.unit_price }}</td>
+                        <td data-label="Stock">
                             {% if product.quantity_in_stock <= product.min_stock_alert %}
                                 <span class="badge bg-danger">
                                     <i class="bi bi-exclamation-circle me-1"></i> {{ product.quantity_in_stock }} left (Low)
@@ -70,7 +72,7 @@
                                 </span>
                             {% endif %}
                         </td>
-                        <td class="text-end">
+                        <td data-label="" class="cell-actions text-end">
                             <a href="{{ url_for('products.edit_product', product_id=product.id) }}" class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-pencil"></i>
                             </a>

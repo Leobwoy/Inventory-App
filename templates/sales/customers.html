@@ -2,14 +2,16 @@
 {% block title %}Customers | TrackTrack{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0">Customers</h2>
-    <a href="{{ url_for('sales.add_customer') }}" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i> Add Customer</a>
+<div class="page-header">
+    <h2>Customers</h2>
+    <div class="page-header-actions">
+        <a href="{{ url_for('sales.add_customer') }}" class="btn btn-primary"><i class="bi bi-person-plus me-1"></i> Add Customer</a>
+    </div>
 </div>
 
 <div class="glass-card">
     <div class="table-responsive">
-        <table class="table table-hover">
+        <table class="table table-hover table-cards">
             <thead>
                 <tr>
                     <th>Name</th>
@@ -21,13 +23,13 @@
             <tbody>
                 {% for customer in customers %}
                 <tr>
-                    <td class="fw-medium">{{ customer.name }}</td>
-                    <td>
+                    <td data-label="Name" class="fw-medium">{{ customer.name }}</td>
+                    <td data-label="Contact">
                         <div><i class="bi bi-telephone text-muted me-1"></i> {{ customer.phone }}</div>
                         <div><i class="bi bi-envelope text-muted me-1"></i> {{ customer.email }}</div>
                     </td>
-                    <td class="text-muted">{{ customer.address }}</td>
-                    <td class="text-end">
+                    <td data-label="Address" class="text-muted">{{ customer.address }}</td>
+                    <td data-label="" class="cell-actions text-end">
                         <a href="{{ url_for('sales.edit_customer', customer_id=customer.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
                         <form action="{{ url_for('sales.delete_customer', customer_id=customer.id) }}" method="post" style="display:inline;">
                             <button type="submit" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('Delete this customer?');"><i class="bi bi-trash"></i></button>

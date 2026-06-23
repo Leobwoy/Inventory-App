@@ -3,15 +3,17 @@
 {% block title %}Sales | TrackTrack{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0">Sales Records</h2>
-    <a href="{{ url_for('sales.add_sale') }}" class="btn btn-primary"><i class="bi bi-cart-plus me-1"></i> Record Sale</a>
+<div class="page-header">
+    <h2>Sales Records</h2>
+    <div class="page-header-actions">
+        <a href="{{ url_for('sales.add_sale') }}" class="btn btn-primary"><i class="bi bi-cart-plus me-1"></i> Record Sale</a>
+    </div>
 </div>
 
 <div class="glass-card">
     <form id="bulk-action-form" method="post" action="{{ url_for('sales.bulk_action') }}">
-        <div class="d-flex justify-content-between align-items-center mb-4">
-            <div class="d-flex gap-2">
+        <div class="card-toolbar">
+            <div class="card-toolbar-actions">
                 <select name="action" class="form-select form-select-sm w-auto">
                     <option value="">Bulk Action</option>
                     <option value="delete">Delete Selected</option>
@@ -28,7 +30,7 @@
         </div>
 
         <div class="table-responsive">
-            <table class="table table-hover">
+            <table class="table table-hover table-cards">
                 <thead>
                     <tr>
                         <th style="width: 40px;"><input class="form-check-input" type="checkbox" id="select-all"></th>
@@ -42,26 +44,26 @@
                 <tbody>
                     {% for sale in sales %}
                     <tr>
-                        <td>
+                        <td class="cell-checkbox">
                             <input class="form-check-input" type="checkbox" name="sale_ids" value="{{ sale.id }}">
                         </td>
-                        <td class="text-muted">{{ sale.sale_date.strftime('%Y-%m-%d') if sale.sale_date else '' }}</td>
-                        <td class="fw-medium">{{ sale.customer.name if sale.customer else 'Walk-in Customer' }}</td>
-                        <td>
+                        <td data-label="Date" class="text-muted">{{ sale.sale_date.strftime('%Y-%m-%d') if sale.sale_date else '' }}</td>
+                        <td data-label="Customer" class="fw-medium">{{ sale.customer.name if sale.customer else 'Walk-in Customer' }}</td>
+                        <td data-label="Products">
                             <ul class="list-unstyled mb-0 small">
                             {% for item in sale.items %}
                                 <li>{{ item.product.name }} <span class="text-muted">(x{{ item.quantity }})</span></li>
                             {% endfor %}
                             </ul>
                         </td>
-                        <td class="fw-bold text-success">
+                        <td data-label="Total" class="fw-bold text-success">
                             {% set ns = namespace(total=0) %}
                             {% for item in sale.items %}
                                 {% set ns.total = ns.total + (item.price_at_sale * item.quantity) %}
                             {% endfor %}
                             ₵{{ ns.total | round(2) }}
                         </td>
-                        <td class="text-end">
+                        <td data-label="" class="cell-actions text-end">
                             <a href="{{ url_for('sales.sale_invoice', sale_id=sale.id) }}" class="btn btn-sm btn-outline-primary" target="_blank" title="Print Invoice">
                                 <i class="bi bi-printer"></i>
                             </a>

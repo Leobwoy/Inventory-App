@@ -20,6 +20,10 @@
   --glass-backdrop: blur(10px);
 }
 
+* {
+  box-sizing: border-box;
+}
+
 body {
   font-family: 'Inter', sans-serif;
   background-color: var(--bg-dark);
@@ -28,17 +32,19 @@ body {
   display: flex;
   min-height: 100vh;
   overflow-x: hidden;
+  -webkit-text-size-adjust: 100%;
 }
 
 /* Sidebar Layout */
 .wrapper {
   display: flex;
   width: 100%;
-  overflow-x: hidden;
+  min-width: 0;
 }
 
 .sidebar {
   width: 260px;
+  min-width: 260px;
   background: var(--bg-sidebar);
   backdrop-filter: var(--glass-backdrop);
   -webkit-backdrop-filter: var(--glass-backdrop);
@@ -50,6 +56,7 @@ body {
   height: 100vh;
   z-index: 1050;
   transition: all 0.3s ease;
+  overflow-y: auto;
 }
 
 .sidebar-header {
@@ -106,6 +113,8 @@ body {
   margin-left: 260px;
   padding: 2rem;
   min-height: 100vh;
+  min-width: 0;
+  max-width: 100%;
   background: radial-gradient(circle at top right, rgba(59,130,246,0.05), transparent 400px),
               radial-gradient(circle at bottom left, rgba(139,92,246,0.05), transparent 400px);
 }
@@ -120,7 +129,6 @@ body {
   padding: 1.5rem;
   box-shadow: var(--glass-shadow);
   transition: transform 0.2s ease, background 0.2s ease;
-  overflow-x: auto;
 }
 
 .glass-card:hover {
@@ -132,6 +140,7 @@ body {
 h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
   font-weight: 600;
+  word-break: break-word;
 }
 
 .text-muted {
@@ -159,6 +168,7 @@ h1, h2, h3, h4, h5, h6 {
   border-radius: 0.5rem;
   padding: 0.5rem 1rem;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .btn-primary {
@@ -180,11 +190,12 @@ h1, h2, h3, h4, h5, h6 {
   color: white;
 }
 
-/* Tables */
+/* Tables – Desktop */
 .table {
   color: var(--text-primary);
   border-color: var(--border-color);
   margin-bottom: 0;
+  width: 100%;
 }
 .table>thead {
   background: rgba(0,0,0,0.2);
@@ -247,7 +258,9 @@ h1, h2, h3, h4, h5, h6 {
 .alert-warning { border-left: 4px solid var(--accent-warning); }
 .alert-info { border-left: 4px solid var(--accent-primary); }
 
-/* Mobile Top Header (Hidden on Desktop) */
+/* =============================================
+   MOBILE: Top Header (Hidden on Desktop)
+   ============================================= */
 .mobile-header {
   display: none;
   position: fixed;
@@ -300,13 +313,55 @@ h1, h2, h3, h4, h5, h6 {
   width: 100vw;
   height: 100vh;
   background: rgba(15, 23, 42, 0.6);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  z-index: 1010;
+  z-index: 1040;
 }
 
-/* Responsive Media Queries */
+/* =============================================
+   PAGE HEADER HELPER – wraps title + buttons
+   ============================================= */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.page-header h2 {
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.page-header-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* Toolbar inside glass-card (bulk actions row) */
+.card-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.card-toolbar-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* =============================================
+   RESPONSIVE: Tablets & Mobile (< 992px)
+   ============================================= */
 @media (max-width: 991px) {
+  /* --- Sidebar --- */
   .sidebar {
     left: -260px;
     transition: left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -318,8 +373,8 @@ h1, h2, h3, h4, h5, h6 {
   
   .main-content {
     margin-left: 0 !important;
-    padding: 1.5rem 1rem !important;
-    padding-top: 5.5rem !important; /* Create space for fixed mobile header */
+    padding: 1rem 0.75rem !important;
+    padding-top: 5rem !important;
   }
   
   .mobile-header {
@@ -328,5 +383,264 @@ h1, h2, h3, h4, h5, h6 {
   
   .sidebar-overlay.show {
     display: block;
+  }
+  
+  /* --- Page headers stack vertically --- */
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .page-header h2 {
+    font-size: 1.35rem;
+  }
+
+  .page-header-actions {
+    width: 100%;
+  }
+
+  .page-header-actions .d-flex {
+    flex-wrap: wrap;
+    width: 100%;
+  }
+
+  .page-header-actions .input-group {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* --- Glass card reduced padding --- */
+  .glass-card {
+    padding: 1rem;
+    border-radius: 0.75rem;
+  }
+
+  /* --- Card toolbar stacks --- */
+  .card-toolbar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  /* --- Button groups wrap --- */
+  .btn-group {
+    flex-wrap: wrap;
+  }
+
+  /* --- Report filter forms: cols go full-width on mobile --- */
+  .glass-card .row.g-3 .col-md-3 {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+  
+  /* --- Export button groups stack horizontally but wrap --- */
+  .glass-card .d-flex.justify-content-between {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  /* --- Chart canvas height fix --- */
+  canvas {
+    max-height: 250px;
+    width: 100% !important;
+  }
+}
+
+/* =============================================
+   RESPONSIVE: Mobile-only (< 768px)
+   Card-based table layout
+   ============================================= */
+@media (max-width: 767px) {
+  /* --- Hide table headers on mobile --- */
+  .table-cards thead {
+    display: none;
+  }
+
+  /* --- Each row becomes a stacked card --- */
+  .table-cards tbody tr {
+    display: block;
+    background: rgba(0, 0, 0, 0.15);
+    border: 1px solid var(--border-color);
+    border-radius: 0.75rem;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .table-cards tbody tr:last-child {
+    margin-bottom: 0;
+  }
+
+  /* --- Each cell becomes a row with label:value --- */
+  .table-cards tbody td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 0.4rem 0 !important;
+    border: none !important;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+    gap: 0.75rem;
+    text-align: right;
+    word-break: break-word;
+  }
+
+  .table-cards tbody td:last-child {
+    border-bottom: none !important;
+    padding-bottom: 0 !important;
+  }
+
+  /* --- Label from data-label attribute --- */
+  .table-cards tbody td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-align: left;
+    flex-shrink: 0;
+    min-width: 100px;
+    padding-top: 2px;
+  }
+
+  /* --- Checkbox cells --- */
+  .table-cards tbody td.cell-checkbox {
+    justify-content: flex-start;
+    padding-top: 0 !important;
+  }
+
+  .table-cards tbody td.cell-checkbox::before {
+    display: none;
+  }
+
+  /* --- Action cells --- */
+  .table-cards tbody td.cell-actions {
+    justify-content: flex-end;
+    padding-top: 0.5rem !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-bottom: none !important;
+    margin-top: 0.25rem;
+  }
+
+  .table-cards tbody td.cell-actions::before {
+    display: none;
+  }
+
+  /* --- text-end override for mobile card layout --- */
+  .table-cards tbody td.text-end {
+    text-align: right;
+  }
+
+  /* --- Table footer (Grand Total) --- */
+  .table-cards tfoot tr {
+    display: block;
+    padding: 0.75rem 1rem;
+    border-radius: 0.75rem;
+    margin-top: 0.75rem;
+  }
+
+  .table-cards tfoot td {
+    display: block;
+    text-align: right !important;
+    border: none !important;
+    padding: 0.25rem 0 !important;
+  }
+
+  .table-cards tfoot td[colspan] {
+    font-size: 0.85rem;
+  }
+
+  /* --- Dashboard stat cards --- */
+  .row.g-4 > .col-md-4,
+  .row.g-4 > .col-lg-8,
+  .row.g-4 > .col-lg-4 {
+    flex: 0 0 100%;
+    max-width: 100%;
+  }
+
+  /* --- Sale form items table (add sale) --- */
+  .table-cards.table-sale-items tbody td {
+    display: block;
+    text-align: left;
+    padding: 0.35rem 0 !important;
+  }
+
+  .table-cards.table-sale-items tbody td::before {
+    display: block;
+    margin-bottom: 0.25rem;
+  }
+
+  /* --- Invoice responsive --- */
+  .card-body .d-flex.justify-content-between {
+    flex-direction: column;
+    gap: 1rem;
+    text-align: center;
+  }
+  
+  .card-body .d-flex.justify-content-between img {
+    max-height: 60px;
+  }
+
+  .card-body .row .col-6 {
+    flex: 0 0 100%;
+    max-width: 100%;
+    text-align: left !important;
+    margin-bottom: 0.5rem;
+  }
+
+  /* --- Forms max-width override --- */
+  .glass-card[style*="max-width"] {
+    max-width: 100% !important;
+  }
+  
+  /* --- Pagination compact on mobile --- */
+  .pagination {
+    flex-wrap: wrap;
+    gap: 0.25rem;
+  }
+
+  .pagination .page-link {
+    padding: 0.35rem 0.65rem;
+    font-size: 0.85rem;
+  }
+
+  /* --- Bulk action total bar --- */
+  .bg-dark.p-3 {
+    flex-direction: column;
+    text-align: center;
+    gap: 0.5rem;
+  }
+
+  /* --- Ensure container-fluid doesn't overflow --- */
+  .container-fluid {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+/* =============================================
+   RESPONSIVE: Very small devices (< 400px)
+   ============================================= */
+@media (max-width: 400px) {
+  .main-content {
+    padding: 0.75rem 0.5rem !important;
+    padding-top: 4.5rem !important;
+  }
+  
+  .glass-card {
+    padding: 0.75rem;
+  }
+
+  .page-header h2 {
+    font-size: 1.15rem;
+  }
+  
+  .btn {
+    font-size: 0.85rem;
+    padding: 0.4rem 0.75rem;
+  }
+
+  .btn-sm {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.5rem;
   }
 }

@@ -2,14 +2,16 @@
 {% block title %}Suppliers | TrackTrack{% endblock %}
 
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h2 class="mb-0">Suppliers</h2>
-    <a href="{{ url_for('products.add_supplier') }}" class="btn btn-primary"><i class="bi bi-building-add me-1"></i> Add Supplier</a>
+<div class="page-header">
+    <h2>Suppliers</h2>
+    <div class="page-header-actions">
+        <a href="{{ url_for('products.add_supplier') }}" class="btn btn-primary"><i class="bi bi-building-add me-1"></i> Add Supplier</a>
+    </div>
 </div>
 
 <div class="glass-card">
     <div class="table-responsive">
-        <table class="table table-hover">
+        <table class="table table-hover table-cards">
             <thead>
                 <tr>
                     <th>Company Name</th>
@@ -22,14 +24,14 @@
             <tbody>
                 {% for supplier in suppliers %}
                 <tr>
-                    <td class="fw-medium">{{ supplier.name }}</td>
-                    <td>{{ supplier.contact }}</td>
-                    <td>
+                    <td data-label="Company" class="fw-medium">{{ supplier.name }}</td>
+                    <td data-label="Contact">{{ supplier.contact }}</td>
+                    <td data-label="Phone/Email">
                         <div><i class="bi bi-telephone text-muted me-1"></i> {{ supplier.phone }}</div>
                         <div><i class="bi bi-envelope text-muted me-1"></i> {{ supplier.email }}</div>
                     </td>
-                    <td class="text-muted">{{ supplier.address }}</td>
-                    <td class="text-end">
+                    <td data-label="Address" class="text-muted">{{ supplier.address }}</td>
+                    <td data-label="" class="cell-actions text-end">
                         <a href="{{ url_for('products.edit_supplier', supplier_id=supplier.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
                         <form action="{{ url_for('products.delete_supplier', supplier_id=supplier.id) }}" method="post" style="display:inline;">
                             <button type="submit" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('Delete this supplier?');"><i class="bi bi-trash"></i></button>
