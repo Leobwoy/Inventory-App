@@ -190,30 +190,76 @@ h1, h2, h3, h4, h5, h6 {
   color: white;
 }
 
-/* Tables – Desktop */
+/* Tables – Dark Theme Overrides */
 .table {
   color: var(--text-primary);
   border-color: var(--border-color);
   margin-bottom: 0;
   width: 100%;
+  --bs-table-bg: transparent;
+  --bs-table-striped-bg: rgba(255, 255, 255, 0.02);
+  --bs-table-hover-bg: rgba(255, 255, 255, 0.04);
+  --bs-table-border-color: var(--border-color);
 }
 .table>thead {
-  background: rgba(0,0,0,0.2);
+  background: rgba(0, 0, 0, 0.25);
 }
 .table>thead>tr>th {
   color: var(--text-secondary);
   font-weight: 600;
   border-bottom: 1px solid var(--border-color);
   padding: 1rem;
+  background: transparent;
+}
+.table>tbody>tr {
+  background: transparent;
 }
 .table>tbody>tr>td {
   padding: 1rem;
   border-bottom: 1px solid var(--border-color);
   vertical-align: middle;
+  background: transparent;
 }
 .table-hover>tbody>tr:hover>* {
   color: var(--text-primary);
-  background-color: rgba(255,255,255,0.03);
+  background-color: rgba(59, 130, 246, 0.06) !important;
+}
+
+/* Override Bootstrap .table-bordered */
+.table-bordered {
+  border-color: var(--border-color);
+}
+.table-bordered>:not(caption)>*>* {
+  border-color: var(--border-color);
+}
+
+/* Override Bootstrap .table-light (used in invoice thead) */
+.table-light,
+.table-light>th,
+.table-light>td,
+thead.table-light>tr>th {
+  background-color: rgba(0, 0, 0, 0.25) !important;
+  color: var(--text-secondary) !important;
+  --bs-table-bg: rgba(0, 0, 0, 0.25);
+}
+
+/* Override Bootstrap .table-striped */
+.table-striped>tbody>tr:nth-of-type(odd)>* {
+  background-color: rgba(255, 255, 255, 0.015);
+  --bs-table-bg-type: rgba(255, 255, 255, 0.015);
+}
+
+/* Cards (Bootstrap .card used in invoices) – dark override */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+}
+.card-body {
+  background: transparent;
+}
+.card.shadow {
+  box-shadow: var(--glass-shadow) !important;
 }
 
 /* Forms */
