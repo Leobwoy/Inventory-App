@@ -3,17 +3,14 @@ from flask_bootstrap import Bootstrap
 from flask_wtf.csrf import CSRFProtect
 import os
 from extensions import db
-import subprocess
 from flask import send_file, request, redirect, url_for, flash
 from flask_migrate import Migrate
-from flask_httpauth import HTTPBasicAuth
 from flask_login import LoginManager
 
 # Initialize extensions
 bootstrap = Bootstrap()
 csrf = CSRFProtect()
 migrate = Migrate()
-auth = HTTPBasicAuth()
 login_manager = LoginManager()
 
 def create_app():
@@ -39,13 +36,6 @@ def create_app():
         from auth.models import User
         return User.query.get(int(user_id))
 
-    @auth.verify_password
-    def verify_password(username, password):
-        expected_password = os.environ.get('BACKUP_PASSWORD', 'admin123')
-        if username == 'admin' and password == expected_password:
-            return username
-        return None
-
     # Register blueprints
     from products.routes import products_bp
     from sales.routes import sales_bp
@@ -68,6 +58,7 @@ def create_app():
     app.cli.add_command(create_owner_command)
 
     from flask_login import login_required, current_user
+    from auth.decorators import permission_required
 
     @app.route('/')
     @login_required
@@ -119,79 +110,54 @@ def create_app():
         )
 
     @app.route('/backup_restore', methods=['GET', 'POST'])
-    @auth.login_required
+    @login_required
+    @permission_required('backup.run')
     def backup_restore():
+        """Export or restore THIS business's data only.
+
+        Scoped per tenant: the export contains just the caller's rows, and the
+        import writes only into the caller's business_id, remapping primary keys.
+        """
+        from services import backup as backup_service
+
         if request.method == 'POST':
             if 'backup' in request.form:
-                # Backup: use pg_dump
-                backup_file = 'db_backup.sql'
-                db_url = app.config['SQLALCHEMY_DATABASE_URI']
-                # Parse db_url for credentials using urllib.parse
-                from urllib.parse import urlparse
-                parsed = urlparse(db_url)
-                user = parsed.username
-                password = parsed.password
-                host = parsed.hostname
-                port = str(parsed.port or 5432)
-                dbname = parsed.path.lstrip('/')
-                if not (user and password and host and dbname):
-                    flash('Database URL parsing failed. Check your configuration.', 'danger')
+                try:
+                    archive, filename = backup_service.export_business(current_user.business_id)
+                except Exception as e:
+                    flash(f'Export failed: {e}', 'danger')
                     return redirect(url_for('backup_restore'))
-                env = os.environ.copy()
-                env['PGPASSWORD'] = password
-                cmd = [
-                    'pg_dump',
-                    '-h', host,
-                    '-p', port,
-                    '-U', user,
-                    '-F', 'c',
-                    '-b',
-                    '-v',
-                    '-f', backup_file,
-                    dbname
-                ]
-                subprocess.run(cmd, env=env, check=True)
-                return send_file(backup_file, as_attachment=True)
-            elif 'restore' in request.form:
-                # Restore: use psql
-                file = request.files['restore_file']
-                if not file:
-                    flash('No file selected for restore.', 'danger')
+                return send_file(
+                    archive,
+                    mimetype='application/zip',
+                    as_attachment=True,
+                    download_name=filename,
+                )
+
+            if 'restore' in request.form:
+                upload = request.files.get('restore_file')
+                if not upload or not upload.filename:
+                    flash('Choose a backup file to restore.', 'danger')
                     return redirect(url_for('backup_restore'))
-                restore_path = 'restore_upload.sql'
-                file.save(restore_path)
-                db_url = app.config['SQLALCHEMY_DATABASE_URI']
-                # Parse db_url for credentials using urllib.parse
-                from urllib.parse import urlparse
-                parsed = urlparse(db_url)
-                user = parsed.username
-                password = parsed.password
-                host = parsed.hostname
-                port = str(parsed.port or 5432)
-                dbname = parsed.path.lstrip('/')
-                if not (user and password and host and dbname):
-                    flash('Database URL parsing failed. Check your configuration.', 'danger')
+                if request.form.get('confirm_restore') != 'REPLACE':
+                    flash('Type REPLACE to confirm - restoring overwrites your current data.', 'warning')
                     return redirect(url_for('backup_restore'))
-                env = os.environ.copy()
-                env['PGPASSWORD'] = password
-                # Drop and recreate the database
-                drop_cmd = ['psql', '-h', host, '-p', port, '-U', user, '-c', f'DROP DATABASE IF EXISTS {dbname};']
-                create_cmd = ['psql', '-h', host, '-p', port, '-U', user, '-c', f'CREATE DATABASE {dbname};']
-                subprocess.run(drop_cmd, env=env, check=True)
-                subprocess.run(create_cmd, env=env, check=True)
-                # Restore
-                restore_cmd = [
-                    'pg_restore',
-                    '-h', host,
-                    '-p', port,
-                    '-U', user,
-                    '-d', dbname,
-                    '-v',
-                    restore_path
-                ]
-                subprocess.run(restore_cmd, env=env, check=True)
-                flash('Database restored successfully.', 'success')
+                try:
+                    written = backup_service.import_business(current_user.business_id, upload)
+                    db.session.commit()
+                except ValueError as e:
+                    db.session.rollback()
+                    flash(str(e), 'danger')
+                    return redirect(url_for('backup_restore'))
+                except Exception as e:
+                    db.session.rollback()
+                    flash(f'Restore failed, no changes were made: {e}', 'danger')
+                    return redirect(url_for('backup_restore'))
+
+                total = sum(written.values())
+                flash(f'Restored {total} record(s) into {current_user.business.name}.', 'success')
                 return redirect(url_for('backup_restore'))
+
         return render_template('backup_restore.html')
 
     return app
