@@ -21,8 +21,9 @@ A premium, production-ready Flask web application for tracking products, managin
 - **Atomicity & Consistency:** If any transaction step fails (e.g., product stock becomes insufficient halfway through check-out), the database session automatically rolls back (`db.session.rollback()`) to ensure no partial or corrupted records are created.
 - **Inventory Autosync:** Stock levels automatically decrement upon sales and increment upon purchases, with smart handling during bulk deletes.
 
-### 🗄️ Database Backups & Portability
-- **Backup & Restore Interface:** Built-in web utility to export a raw PostgreSQL binary dump or restore database tables via the UI.
+### 🗄️ Per-Tenant Backup & Portability
+- **Owner-only export:** Downloads a ZIP of CSVs containing only *your* business's records — catalogue, suppliers, customers, purchase orders, stock batches and sales.
+- **Scoped restore:** Imports back into your own business, remapping primary keys so an archive can never touch another business's data.
 
 ---
 
@@ -39,7 +40,8 @@ A premium, production-ready Flask web application for tracking products, managin
 ## Directory Structure
 
 ```text
-├── products/          # Products blueprint, models, and routes
+├── auth/              # Business, User, Role, Permission, AuditLog + login/registration
+├── products/          # Products, categories, brands, item groups, suppliers
 ├── sales/             # Sales transactions, customers, and routes
 ├── purchases/         # Purchases from suppliers and routes
 ├── reports/           # Business metrics, charts, and exports
@@ -51,11 +53,12 @@ A premium, production-ready Flask web application for tracking products, managin
 │   └── _macros.html   # Reusable pagination controls
 ├── app.py             # Main application entry point & factory
 ├── extensions.py      # Flask extension instances
-├── init_db.py         # Safe database table initializer
+├── services/          # Service layer (backup/export, stock rules)
 ├── reset_db.py        # Database wipe-and-rebuild script
 ├── seed_db.py         # Database seeder (wholesale business datasets)
-├── build.sh           # Deployment build script
-├── render.yaml        # Render Infrastructure Blueprint
+├── build.sh           # Build script (runs flask db upgrade)
+├── Dockerfile         # Container image for Koyeb
+├── migrations/        # Alembic migration chain (the only way to build schema)
 └── requirements.txt   # Python package dependencies
 ```
 
@@ -101,38 +104,60 @@ A premium, production-ready Flask web application for tracking products, managin
    export DATABASE_URL="postgresql://username:password@localhost:5432/databasename"
    ```
 
-5. **Initialize & Seed Database Tables**:
-   To initialize empty tables:
+5. **Build the Database**:
+   Tables, roles and permissions all come from migrations. Do not use
+   `db.create_all()` — it produces tables with no seed data, and registration
+   then fails with "Owner role not found".
    ```bash
-   python init_db.py
+   flask db upgrade
    ```
-   
-   To clear existing tables and **seed the database with rich wholesale business transactions** (categories, suppliers, products, bulk sales, and bulk purchases over the past 30 days):
+   To wipe and rebuild a local database from scratch:
+   ```bash
+   python reset_db.py
+   ```
+   To load a realistic demo dataset (Ghanaian beverage wholesaler — brands,
+   variants, suppliers, purchase orders, goods receipts and sales):
    ```bash
    python seed_db.py
    ```
-   *(Optionally, run `python reset_db.py` to wipe and recreate empty tables.)*
 
 6. **Run the Development Server**:
    ```bash
    python app.py
    ```
-   The app will run locally at `http://127.0.0.1:5000/`.
+   The app runs at `http://127.0.0.1:5000/`. Register a business to begin — the
+   first account becomes the Owner.
 
 ---
 
-## Deploying to Production (Render)
+## Deploying to Production (Koyeb + Neon)
 
-This application includes a native `render.yaml` configuration, allowing one-click deployment using Render Blueprints.
+Both tiers are free with no expiry clock. **Do not use Render's free
+PostgreSQL**: it is deleted 30 days after creation (plus a 14-day grace period)
+and supports no backups. AWS is not a viable free option either — its
+always-free tier includes no PostgreSQL and no persistent server, and new
+accounts close automatically after six months.
 
-### Features Configured for Production:
-1. **Automated Dialect Patching:** Render PostgreSQL connection URLs use `postgres://`, but SQLAlchemy 1.4+ requires `postgresql://`. The app automatically patches this on boot.
-2. **Safe DB Building:** On every code push, `build.sh` runs `init_db.py` to dynamically add any new tables without affecting existing production data.
-3. **Robust Connection Parameters:** Backup/Restore queries handle SSL and other connection flags (`?sslmode=require`) without regex failures.
+### 1. Database — Neon
+1. Create a project at [neon.tech](https://neon.tech), region **Frankfurt**
+   (better latency to Ghana than US regions; West African cables route north to
+   Europe).
+2. Copy the connection string. It already uses the `postgresql://` prefix.
 
-### Steps to Deploy:
-1. Push this repository to **GitHub**.
-2. Go to your [Render Dashboard](https://render.com).
-3. Click **New** -> **Blueprint**.
-4. Link your GitHub repository.
-5. Render will detect the `render.yaml` config and prompt you to create the database and the web service. Click **Apply**.
+### 2. App — Koyeb
+1. Create a service at [koyeb.com](https://koyeb.com) from this GitHub repo,
+   region **Frankfurt**. It builds from the included `Dockerfile`.
+2. Set these as **secrets**:
+   - `DATABASE_URL` — the Neon connection string
+   - `SECRET_KEY` — a long random value (`python -c "import secrets; print(secrets.token_hex(32))"`)
+3. Deploy. The container runs `flask db upgrade` on start, so the schema, roles
+   and permissions are built automatically.
+
+### Notes
+- The free Koyeb instance scales to zero after 1 hour idle; the next request
+  incurs a cold start of a few seconds. This cannot be disabled on the free tier.
+- Render URLs use the `postgres://` prefix, which SQLAlchemy rejects; `app.py`
+  still patches this on boot, so a Render database would also work if needed.
+- When a pilot needs no cold starts at all, graduate to an **Oracle Cloud Always
+  Free** ARM VM (4 cores / 24 GB / 200 GB, never sleeps) running Postgres
+  locally with `pg_dump` backups to free Object Storage.
