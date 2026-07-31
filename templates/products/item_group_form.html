@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Item Group | TrackTrack{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>{{ action }} Item Group</h2>
+  <div class="page-header-actions">
+    <a href="{{ url_for('products.list_item_groups') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back to Item Groups</a>
+  </div>
+</div>
+
+<div class="glass-card" style="max-width: 600px;">
+  <form method="post">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+      <label class="form-label">{{ form.name.label.text }}</label>
+      {{ form.name(class_='form-control' + (' is-invalid' if form.name.errors else ''), placeholder='e.g. Bottled Water') }}
+      {% for error in form.name.errors %}
+      <div class="invalid-feedback">{{ error }}</div>
+      {% endfor %}
+    </div>
+    <div class="mb-3">
+      <label class="form-label">{{ form.category_id.label.text }}</label>
+      {{ form.category_id(class_='form-select' + (' is-invalid' if form.category_id.errors else '')) }}
+      {% for error in form.category_id.errors %}
+      <div class="invalid-feedback">{{ error }}</div>
+      {% endfor %}
+      <div class="form-text text-muted">Optional. Categories are the broad shelf grouping; item groups sit beneath them.</div>
+    </div>
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary px-4">{{ action }} Item Group</button>
+      <a href="{{ url_for('products.list_item_groups') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+{% block title %}Brands | TrackTrack{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Brands</h2>
+  <div class="page-header-actions">
+    <a href="{{ url_for('products.add_brand') }}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> Add Brand</a>
+  </div>
+</div>
+
+<div class="glass-card">
+  {% if brands %}
+  <div class="table-responsive">
+    <table class="table table-hover table-cards">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Products</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for brand in brands %}
+        <tr>
+          <td data-label="Name" class="fw-bold">{{ brand.name }}</td>
+          <td data-label="Products" class="text-muted">{{ brand.products|length }}</td>
+          <td data-label="" class="cell-actions text-end">
+            <a href="{{ url_for('products.edit_brand', brand_id=brand.id) }}" class="btn btn-sm btn-outline-primary">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <form action="{{ url_for('products.delete_brand', brand_id=brand.id) }}" method="post" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('Delete this brand?');">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center py-5">
+    <i class="bi bi-tags fs-1 text-muted d-block mb-3"></i>
+    <h5>No brands yet</h5>
+    <p class="text-muted">Brands are the manufacturers you stock &mdash; BelAqua, Verna, Voltic, Coca-Cola.</p>
+    <a href="{{ url_for('products.add_brand') }}" class="btn btn-primary mt-2">Add your first brand</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

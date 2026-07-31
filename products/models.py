@@ -27,12 +27,21 @@ class Brand(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
+    products = db.relationship('Product', backref='brand', lazy=True)
+
+    def __repr__(self):
+        return f'<Brand {self.name}>'
 
 class ItemGroup(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
+    category = db.relationship('Category', backref='item_groups', lazy=True)
+    products = db.relationship('Product', backref='item_group', lazy=True)
+
+    def __repr__(self):
+        return f'<ItemGroup {self.name}>'
 
 class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)

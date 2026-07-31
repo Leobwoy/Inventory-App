@@ -4,6 +4,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from auth.models import User, Business, Role
 from auth.forms import RegistrationForm, ChangePasswordForm, UserForm
 from auth.decorators import permission_required
+from products.models import Brand, ItemGroup
 from extensions import db
 
 auth_bp = Blueprint('auth', __name__)
@@ -68,7 +69,7 @@ def register():
         )
         db.session.add(new_business)
         db.session.flush() # get new_business.id
-        
+
         # 4. Create User (must_change_password=False for self-registered Admin)
         new_user = User(
             business_id=new_business.id,
@@ -79,6 +80,12 @@ def register():
             must_change_password=False
         )
         db.session.add(new_user)
+
+        # 5. Seed catalogue fallbacks. Product.brand_id and item_group_id are NOT NULL,
+        # so without these the business cannot save a single product.
+        db.session.add(Brand(business_id=new_business.id, name='Generic'))
+        db.session.add(ItemGroup(business_id=new_business.id, name='Uncategorized'))
+
         db.session.commit()
         
         # 5. Log them in

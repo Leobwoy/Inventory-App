@@ -6,6 +6,7 @@ from extensions import db
 from werkzeug.utils import secure_filename
 import openpyxl
 import os
+import re
 import pandas as pd
 from flask import send_file
 import io
@@ -29,6 +30,43 @@ def list_products():
     pagination = query.order_by(Product.name).paginate(page=page, per_page=15, error_out=False)
     return render_template('products/list.html', products=pagination.items, pagination=pagination, search_query=search_query)
 
+def _sku_token(text, length=4):
+    """Uppercase alphanumeric fragment of `text`, for building a readable SKU."""
+    return re.sub(r'[^A-Z0-9]', '', (text or '').upper())[:length]
+
+
+def generate_sku(brand, item_group, variant_label=None):
+    """Build a {brand}-{itemgroup}-{variant} SKU, suffixed until it is unique.
+
+    Uniqueness is checked globally because Product.sku still carries a global
+    UNIQUE constraint; this becomes per-business once that migrates (F-17).
+    """
+    parts = [_sku_token(brand.name if brand else ''), _sku_token(item_group.name if item_group else '')]
+    if variant_label:
+        parts.append(_sku_token(variant_label, 6))
+    base = '-'.join(p for p in parts if p) or 'SKU'
+    candidate, n = base, 1
+    while Product.query.filter_by(sku=candidate).first():
+        n += 1
+        candidate = f'{base}-{n}'
+    return candidate[:50]
+
+
+def _scoped_catalogue(form):
+    """Resolve brand/item group/category from the form, scoped to the caller's business.
+
+    Returns (brand, item_group, category). Brand and item group are None when the
+    submitted id does not belong to this business - never trust a posted foreign key.
+    """
+    biz = current_user.business_id
+    brand = Brand.query.filter_by(id=form.brand_id.data, business_id=biz).first()
+    item_group = ItemGroup.query.filter_by(id=form.item_group_id.data, business_id=biz).first()
+    category = None
+    if form.category_id.data:
+        category = Category.query.filter_by(id=form.category_id.data, business_id=biz).first()
+    return brand, item_group, category
+
+
 @products_bp.route('/add', methods=['GET', 'POST'])
 @login_required
 def add_product():
@@ -36,36 +74,41 @@ def add_product():
     form.category_id.choices = [(0, 'No Category')] + [(c.id, c.name) for c in Category.query.filter_by(business_id=current_user.business_id).order_by(Category.name)]
     form.brand_id.choices = [(b.id, b.name) for b in Brand.query.filter_by(business_id=current_user.business_id).order_by(Brand.name)]
     form.item_group_id.choices = [(i.id, i.name) for i in ItemGroup.query.filter_by(business_id=current_user.business_id).order_by(ItemGroup.name)]
-    
+
     # Do not allow modifying quantity during creation; handled via PO/StockBatch
     if request.method == 'GET':
         form.quantity_in_stock.data = 0
 
     if form.validate_on_submit():
-        category = Category.query.filter_by(id=form.category_id.data, business_id=current_user.business_id).first() if form.category_id.data else None
+        brand, item_group, category = _scoped_catalogue(form)
+        if not brand or not item_group:
+            flash('Select a valid brand and item group.', 'danger')
+            return render_template('products/add_edit.html', form=form, action='Add')
+
+        base_uom = (form.base_uom.data or 'pcs').strip()
         product = Product(
             business_id=current_user.business_id,
             name=form.name.data,
-            sku=form.sku.data,
+            sku=(form.sku.data or '').strip() or generate_sku(brand, item_group, form.variant_label.data),
             barcode=form.barcode.data,
             description=form.description.data,
             cost_price=form.cost_price.data,
             unit_price=form.unit_price.data,
             quantity_in_stock=0, # Initialized to 0, managed via StockBatch
-            min_stock_alert=form.min_stock_alert.data,
+            min_stock_alert=form.min_stock_alert.data or 0,
             category=category,
-            brand_id=form.brand_id.data,
-            item_group_id=form.item_group_id.data,
+            brand_id=brand.id,
+            item_group_id=item_group.id,
             variant_label=form.variant_label.data,
             size_value=form.size_value.data,
             size_unit=form.size_unit.data,
-            base_uom=form.base_uom.data,
-            purchase_uom=form.purchase_uom.data,
-            units_per_purchase_uom=form.units_per_purchase_uom.data
+            base_uom=base_uom,
+            purchase_uom=(form.purchase_uom.data or '').strip() or base_uom,
+            units_per_purchase_uom=form.units_per_purchase_uom.data or 1
         )
         db.session.add(product)
         db.session.commit()
-        flash('Product added successfully! Stock level must be updated via Purchase Orders.', 'success')
+        flash(f'Product added as {product.sku}. Stock is added by receiving a Purchase Order.', 'success')
         return redirect(url_for('products.list_products'))
     return render_template('products/add_edit.html', form=form, action='Add')
 
@@ -82,12 +125,28 @@ def edit_product(product_id):
         form.quantity_in_stock.data = product.quantity_in_stock
 
     if form.validate_on_submit():
+        brand, item_group, category = _scoped_catalogue(form)
+        if not brand or not item_group:
+            flash('Select a valid brand and item group.', 'danger')
+            return render_template('products/add_edit.html', form=form, action='Edit')
+
+        existing_sku, existing_qty = product.sku, product.quantity_in_stock
         form.populate_obj(product)
-        product.category = Category.query.filter_by(id=form.category_id.data, business_id=current_user.business_id).first() if form.category_id.data else None
-        
-        # Ensure quantity is not modified from the form
-        product.quantity_in_stock = request.form.get('quantity_in_stock', type=int) or product.quantity_in_stock
-        
+
+        product.category = category
+        product.brand_id = brand.id
+        product.item_group_id = item_group.id
+
+        # Blank optional fields must fall back rather than violate NOT NULL
+        product.sku = (form.sku.data or '').strip() or existing_sku
+        product.base_uom = (form.base_uom.data or '').strip() or 'pcs'
+        product.purchase_uom = (form.purchase_uom.data or '').strip() or product.base_uom
+        product.units_per_purchase_uom = form.units_per_purchase_uom.data or 1
+        product.min_stock_alert = form.min_stock_alert.data or 0
+
+        # Stock is owned by StockBatch/goods receipt, never by this form
+        product.quantity_in_stock = existing_qty
+
         db.session.commit()
         flash('Product updated successfully!', 'success')
         return redirect(url_for('products.list_products'))

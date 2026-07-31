@@ -37,24 +37,33 @@
                 <span>TrackTrack</span>
             </a>
         </div>
+        {# role may be NULL on a user created without one - never dereference it directly #}
+        {% set role_name = current_user.role.name if current_user.role else '' %}
         <nav class="sidebar-nav">
             <a class="nav-link" href="/" id="nav-dashboard"><i class="bi bi-grid-1x2"></i> Dashboard</a>
-            
-            {% if current_user.role.name in ['Admin', 'Sales Rep', 'Inventory Clerk'] %}
+
+            {% if role_name in ['Admin', 'Sales Rep', 'Inventory Clerk'] %}
             <a class="nav-link" href="/products/" id="nav-products"><i class="bi bi-box-seam"></i> Products</a>
             {% endif %}
-            
-            {% if current_user.role.name in ['Admin', 'Sales Rep'] %}
+
+            {% if role_name in ['Admin', 'Inventory Clerk'] %}
+            <div class="nav-section-label">Catalogue</div>
+            <a class="nav-link" href="/products/categories" id="nav-categories"><i class="bi bi-diagram-3"></i> Categories</a>
+            <a class="nav-link" href="/products/item_groups" id="nav-item-groups"><i class="bi bi-collection"></i> Item Groups</a>
+            <a class="nav-link" href="/products/brands" id="nav-brands"><i class="bi bi-tags"></i> Brands</a>
+            {% endif %}
+
+            {% if role_name in ['Admin', 'Sales Rep'] %}
             <a class="nav-link" href="/sales/" id="nav-sales"><i class="bi bi-cart3"></i> Sales</a>
             <a class="nav-link" href="/sales/customers" id="nav-customers"><i class="bi bi-people"></i> Customers</a>
             {% endif %}
             
-            {% if current_user.role.name in ['Admin', 'Inventory Clerk'] %}
+            {% if role_name in ['Admin', 'Inventory Clerk'] %}
             <a class="nav-link" href="/purchases/" id="nav-purchases"><i class="bi bi-truck"></i> Purchases</a>
             <a class="nav-link" href="/products/suppliers" id="nav-suppliers"><i class="bi bi-buildings"></i> Suppliers</a>
             {% endif %}
 
-            {% if current_user.role.name == 'Admin' %}
+            {% if role_name == 'Admin' %}
             <a class="nav-link" href="/reports/sales" id="nav-reports"><i class="bi bi-bar-chart"></i> Reports</a>
             <a class="nav-link" href="/auth/users" id="nav-users"><i class="bi bi-people-fill"></i> User Management</a>
             <a class="nav-link" href="/backup_restore" id="nav-backup"><i class="bi bi-hdd-network"></i> Backup/Restore</a>
