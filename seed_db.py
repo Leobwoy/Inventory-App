@@ -1,212 +1,299 @@
-import os
-import random
+"""Seed a realistic Ghanaian beverage/FMCG wholesaler for local development.
+
+The previous seeder was written against the pre-Milestone-3 schema: it built
+Product rows with no business_id, brand_id, item_group_id, cost_price or
+base_uom (all now NOT NULL) and wrote legacy Purchase rows, so it could not run
+at all - while the README told new developers to run it as a setup step (F-10).
+
+This version goes through the real schema: a Business with an Owner and staff,
+a brand/item-group catalogue, purchase orders that are actually received into
+StockBatch rows, and sales that draw stock down FEFO.
+
+Destructive: rebuilds the database from migrations first.
+
+    python seed_db.py            # prompts before wiping
+    python seed_db.py --yes      # no prompt
+"""
 import datetime
+import random
+import sys
 from decimal import Decimal
+
+from flask_migrate import upgrade
+from werkzeug.security import generate_password_hash
+
 from app import create_app
 from extensions import db
-from products.models import Category, Supplier, Product
+from auth.models import Business, Role, User
+from products.models import Brand, Category, ItemGroup, Product, Supplier
+from purchases.models import PurchaseOrder, PurchaseOrderItem, StockBatch
 from sales.models import Customer, Sale, SaleItem
-from purchases.models import Purchase
 
-def seed():
+random.seed(20260731)  # reproducible datasets
+
+BUSINESS_NAME = 'Accra Beverage Distributors'
+OWNER_EMAIL = 'owner@accrabev.com'
+DEMO_PASSWORD = 'TrackTrack!23'
+
+CATEGORIES = [
+    ('Beverages', 'Water, soft drinks, juices and malt'),
+    ('Provisions', 'Shelf-stable household goods'),
+]
+
+# item group -> the brands competing within it
+ITEM_GROUPS = {
+    'Bottled Water': ['BelAqua', 'Verna', 'Voltic'],
+    'Soft Drinks': ['Coca-Cola', 'Pepsi'],
+    'Malt Drinks': ['Malta Guinness', 'Vitamalt'],
+    'Soya Drinks': ['U-Fresh'],
+}
+
+# variant label -> (size_value, size_unit, cost, price, units per carton, shelf life in days)
+VARIANTS = {
+    'Bottled Water': [('500ml', 500, 'ml', '1.20', '2.00', 24, None),
+                      ('750ml', 750, 'ml', '1.80', '3.00', 24, None),
+                      ('1.5L', 1500, 'ml', '2.60', '4.50', 12, None)],
+    'Soft Drinks':   [('350ml', 350, 'ml', '3.20', '5.00', 24, 120),
+                      ('1.5L', 1500, 'ml', '7.50', '11.00', 12, 120)],
+    'Malt Drinks':   [('330ml', 330, 'ml', '4.80', '7.50', 24, 180)],
+    # Short shelf life, so recent receipts land inside the 30-day expiry window
+    # and the alert has something real to show.
+    'Soya Drinks':   [('500ml', 500, 'ml', '3.50', '5.50', 12, 30)],
+}
+
+SUPPLIERS = [
+    ('Voltic Ghana Ltd', 'Kwame Asare', '0244112233', 'sales@voltic.com.gh', 'Spintex Road, Accra'),
+    ('Accra Bulk Beverages', 'Ama Owusu', '0201445566', 'orders@accrabulk.com', 'Kaneshie Market, Accra'),
+    ('Takoradi Drinks Depot', 'Yaw Boateng', '0553778899', 'depot@takoradidrinks.com', 'Market Circle, Takoradi'),
+]
+
+CUSTOMERS = [
+    ('Madina Provisions', '0244556677', 'madina@shops.gh', 'Madina Market, Accra'),
+    ('Kaneshie Superstore', '0208899001', 'kaneshie@shops.gh', 'Kaneshie, Accra'),
+    ('Tema Community 1 Store', '0277334455', 'tema@shops.gh', 'Community 1, Tema'),
+    ('Kasoa Wholesale Corner', '0501122334', 'kasoa@shops.gh', 'Kasoa New Market'),
+    ('Osu Mini Mart', '0243009988', 'osu@shops.gh', 'Oxford Street, Osu'),
+]
+
+STAFF = [
+    ('Ama Darko', 'ama@accrabev.com', 'Manager'),
+    ('Kwesi Appiah', 'kwesi@accrabev.com', 'Inventory Staff'),
+    ('Efua Mensah', 'efua@accrabev.com', 'Sales Staff'),
+]
+
+
+def seed(auto_yes=False):
     app = create_app()
     with app.app_context():
-        print("Wiping existing database tables...")
+        uri = app.config['SQLALCHEMY_DATABASE_URI']
+        shown = uri.split('@')[-1] if '@' in uri else uri
+        print(f'This DROPS EVERY TABLE in: {shown}')
+        if not auto_yes and input('Continue? [y/N] ').strip().lower() not in ('y', 'yes'):
+            print('Aborted.')
+            return
+
+        print('Rebuilding schema from migrations...')
         db.drop_all()
-        db.create_all()
-        print("Database schema recreated successfully.")
+        db.session.execute(db.text('DROP TABLE IF EXISTS alembic_version'))
+        db.session.commit()
+        upgrade()  # creates tables AND seeds roles/permissions
 
-        # 1. Seed Categories
-        categories_data = [
-            {"name": "Electronics", "description": "Laptops, phones, accessories, and displays"},
-            {"name": "Home & Kitchen", "description": "Appliances, blenders, and air purifiers"},
-            {"name": "Office & Furniture", "description": "Ergonomic chairs, standing desks, and paper supplies"},
-            {"name": "Fitness & Outdoors", "description": "Yoga mats, water bottles, and workout equipment"}
-        ]
-        
-        categories = {}
-        for cat_info in categories_data:
-            cat = Category(name=cat_info["name"], description=cat_info["description"])
-            db.session.add(cat)
-            categories[cat_info["name"]] = cat
-        db.session.flush() # Populate IDs
-
-        # 2. Seed Suppliers
-        suppliers_data = [
-            {"name": "Global Tech Solutions Inc.", "contact": "Alice Smith", "phone": "0244-112233", "email": "info@globaltech.com", "address": "Ring Road Central, near Kwame Nkrumah Circle, Accra"},
-            {"name": "EcoAppliance Logistics Ltd.", "contact": "Robert Chen", "phone": "0208-223344", "email": "supply@ecoappliance.com", "address": "Liberation Road, Airport Residential Area, Accra"},
-            {"name": "Apex Office Wholesalers", "contact": "Sarah Johnson", "phone": "0553-334455", "email": "orders@apexoffice.com", "address": "Commercial Street, near Harbor Area, Takoradi"},
-            {"name": "Vigor Sports Supplies Ltd.", "contact": "Kofi Mensah", "phone": "0243-445566", "email": "bulk@vigorsports.com", "address": "Cape Coast - Takoradi Road, near Takoradi Mall, Takoradi"}
-        ]
-
-        suppliers = {}
-        for sup_info in suppliers_data:
-            sup = Supplier(
-                name=sup_info["name"],
-                contact=sup_info["contact"],
-                phone=sup_info["phone"],
-                email=sup_info["email"],
-                address=sup_info["address"]
-            )
-            db.session.add(sup)
-            suppliers[sup_info["name"]] = sup
+        # --- business + users -------------------------------------------------
+        business = Business(name=BUSINESS_NAME, address='Spintex Road, Accra',
+                            contact_number='0302 555 000', expiry_alert_days=30)
+        db.session.add(business)
         db.session.flush()
 
-        # 3. Seed Products (Wholesale Goods)
-        products_setup = [
-            # Electronics
-            {"name": "ProBook Laptop 15-inch", "sku": "EL-LAP-15", "desc": "High-performance enterprise laptop with 16GB RAM, 512GB SSD.", "price": 850.00, "min_stock": 20, "cat": "Electronics", "sup": "Global Tech Solutions Inc."},
-            {"name": "SmartPhone X-200", "sku": "EL-PHN-X2", "desc": "6.5-inch OLED smartphone with dual-lens camera, 128GB storage.", "price": 650.00, "min_stock": 25, "cat": "Electronics", "sup": "Global Tech Solutions Inc."},
-            {"name": "TabCore 10-inch Tablet", "sku": "EL-TAB-10", "desc": "Android tablet optimized for productivity and business apps.", "price": 320.00, "min_stock": 15, "cat": "Electronics", "sup": "Global Tech Solutions Inc."},
-            {"name": "AeroBuds Wireless Earphones", "sku": "EL-EAR-AB", "desc": "Noise-cancelling Bluetooth earbuds with 24-hour battery life.", "price": 75.00, "min_stock": 30, "cat": "Electronics", "sup": "Global Tech Solutions Inc."},
-            {"name": "PowerGrid Fast Charger 45W", "sku": "EL-CHG-PG", "desc": "Dual-port USB-C wall charger with smart power delivery.", "price": 25.00, "min_stock": 50, "cat": "Electronics", "sup": "Global Tech Solutions Inc."},
-            {"name": "UltraWide Gaming Monitor 34-inch", "sku": "EL-MON-34", "desc": "Curved 34-inch QHD monitor with 144Hz refresh rate.", "price": 450.00, "min_stock": 10, "cat": "Electronics", "sup": "Global Tech Solutions Inc."},
-            {"name": "PulseFit SmartWatch V2", "sku": "EL-WTCH-PF", "desc": "Smart fitness tracker with optical heart rate sensor.", "price": 120.00, "min_stock": 20, "cat": "Electronics", "sup": "Global Tech Solutions Inc."},
-            
-            # Home & Kitchen
-            {"name": "ChefWave Digital Microwave", "sku": "HK-MIC-CW", "desc": "900W digital microwave with 10 power levels, preset functions.", "price": 180.00, "min_stock": 15, "cat": "Home & Kitchen", "sup": "EcoAppliance Logistics Ltd."},
-            {"name": "BrewMaster Espresso Machine", "sku": "HK-ESP-BM", "desc": "15-bar pump espresso maker with integrated milk frother.", "price": 299.00, "min_stock": 10, "cat": "Home & Kitchen", "sup": "EcoAppliance Logistics Ltd."},
-            {"name": "FrostGuard Smart Refrigerator", "sku": "HK-REF-FG", "desc": "Double-door refrigerator with smart cooling and energy saver.", "price": 1200.00, "min_stock": 5, "cat": "Home & Kitchen", "sup": "EcoAppliance Logistics Ltd."},
-            {"name": "NinjaPulse High-Speed Blender", "sku": "HK-BLD-NP", "desc": "1200W professional blender with auto-iQ programs.", "price": 89.00, "min_stock": 20, "cat": "Home & Kitchen", "sup": "EcoAppliance Logistics Ltd."},
-            {"name": "CrispToast 4-Slice Toaster", "sku": "HK-TST-CT", "desc": "Stainless steel toaster with wide slots and browning dial.", "price": 45.00, "min_stock": 20, "cat": "Home & Kitchen", "sup": "EcoAppliance Logistics Ltd."},
-            {"name": "PureAir Hepa Purifier", "sku": "HK-PUR-PA", "desc": "True HEPA air filter capturing 99.97% of airborne allergens.", "price": 150.00, "min_stock": 15, "cat": "Home & Kitchen", "sup": "EcoAppliance Logistics Ltd."},
+        roles = {r.name: r for r in Role.query.all()}
+        db.session.add(User(business_id=business.id, name='Kofi Mensah', email=OWNER_EMAIL,
+                            password_hash=generate_password_hash(DEMO_PASSWORD),
+                            role_id=roles['Owner'].id, must_change_password=False))
+        for name, email, role_name in STAFF:
+            db.session.add(User(business_id=business.id, name=name, email=email,
+                                password_hash=generate_password_hash(DEMO_PASSWORD),
+                                role_id=roles[role_name].id, must_change_password=False))
 
-            # Office & Furniture
-            {"name": "ErgoComfort Office Chair", "sku": "OF-CHR-EC", "desc": "Ergonomic mesh chair with adjustable lumber support and armrests.", "price": 220.00, "min_stock": 15, "cat": "Office & Furniture", "sup": "Apex Office Wholesalers"},
-            {"name": "RiseUp Motorized Standing Desk", "sku": "OF-DSK-RU", "desc": "Adjustable height standing desk with dual motor and memory keys.", "price": 450.00, "min_stock": 8, "cat": "Office & Furniture", "sup": "Apex Office Wholesalers"},
-            {"name": "MemoBound A5 Journal (Bulk Pack)", "sku": "OF-JRN-MB", "desc": "Pack of 10 ruled A5 notebooks, softcover leatherette.", "price": 15.00, "min_stock": 40, "cat": "Office & Furniture", "sup": "Apex Office Wholesalers"},
-            {"name": "UltraPrint A4 Paper Ream", "sku": "OF-PPR-A4", "desc": "High-quality 80gsm white printing paper (box of 5 reams).", "price": 8.00, "min_stock": 100, "cat": "Office & Furniture", "sup": "Apex Office Wholesalers"},
-            {"name": "Precision Gel Pens (Box of 24)", "sku": "OF-PEN-GEL", "desc": "Fine point black ink gel pens for daily office use.", "price": 18.00, "min_stock": 50, "cat": "Office & Furniture", "sup": "Apex Office Wholesalers"},
-            {"name": "HeavyDuty Metal Stapler", "sku": "OF-STP-HD", "desc": "Full strip desktop stapler, 25-sheet capacity, heavy-duty.", "price": 12.00, "min_stock": 30, "cat": "Office & Furniture", "sup": "Apex Office Wholesalers"},
+        # --- catalogue --------------------------------------------------------
+        categories = {}
+        for name, desc in CATEGORIES:
+            c = Category(business_id=business.id, name=name, description=desc)
+            db.session.add(c)
+            categories[name] = c
+        db.session.flush()
 
-            # Fitness & Outdoors
-            {"name": "FlexiMat TPE Yoga Mat", "sku": "FT-MAT-YM", "desc": "Non-slip eco-friendly TPE yoga mat with alignment lines.", "price": 29.00, "min_stock": 30, "cat": "Fitness & Outdoors", "sup": "Vigor Sports Supplies Ltd."},
-            {"name": "IronGrip Dumbbell Set (20kg)", "sku": "FT-DBL-IG", "desc": "Adjustable cast iron dumbbells with secure spinlock collars.", "price": 75.00, "min_stock": 15, "cat": "Fitness & Outdoors", "sup": "Vigor Sports Supplies Ltd."},
-            {"name": "HydroPeak Vacuum Water Bottle 1L", "sku": "FT-BTL-HP", "desc": "Double-wall insulated stainless steel flask with straw lid.", "price": 19.00, "min_stock": 45, "cat": "Fitness & Outdoors", "sup": "Vigor Sports Supplies Ltd."},
-            {"name": "ResistBand Loop Set (5 levels)", "sku": "FT-BND-RB", "desc": "Premium latex workout resistance bands with storage pouch.", "price": 14.00, "min_stock": 50, "cat": "Fitness & Outdoors", "sup": "Vigor Sports Supplies Ltd."},
-            {"name": "ApexTrail Men's Running Shoes", "sku": "FT-SHS-AT", "desc": "Breathable, lightweight trail running shoes with grip soles.", "price": 95.00, "min_stock": 20, "cat": "Fitness & Outdoors", "sup": "Vigor Sports Supplies Ltd."}
-        ]
+        brands, groups = {}, {}
+        for group_name, brand_names in ITEM_GROUPS.items():
+            g = ItemGroup(business_id=business.id, name=group_name,
+                          category_id=categories['Beverages'].id)
+            db.session.add(g)
+            groups[group_name] = g
+            for b in brand_names:
+                if b not in brands:
+                    brands[b] = Brand(business_id=business.id, name=b)
+                    db.session.add(brands[b])
+        db.session.flush()
 
         products = []
-        product_supplier_map = {}
-        for p_info in products_setup:
-            prod = Product(
-                name=p_info["name"],
-                sku=p_info["sku"],
-                description=p_info["desc"],
-                unit_price=Decimal(p_info["price"]),
-                quantity_in_stock=0, # Will compute and update at the end
-                category=categories[p_info["cat"]],
-                min_stock_alert=p_info["min_stock"]
-            )
-            db.session.add(prod)
-            products.append(prod)
-            product_supplier_map[prod] = suppliers[p_info["sup"]]
-        db.session.flush()
+        for group_name, brand_names in ITEM_GROUPS.items():
+            for brand_name in brand_names:
+                for label, size, unit, cost, price, per_carton, shelf_life in VARIANTS[group_name]:
+                    sku = f'{brand_name[:4].upper().replace("-", "")}-{group_name[:4].upper()}-{label.upper()}'
+                    p = Product(
+                        business_id=business.id,
+                        name=f'{brand_name} {label}',
+                        sku=sku,
+                        description=f'{brand_name} {group_name.lower()}, {label}',
+                        category_id=categories['Beverages'].id,
+                        item_group_id=groups[group_name].id,
+                        brand_id=brands[brand_name].id,
+                        variant_label=label,
+                        size_value=Decimal(size),
+                        size_unit=unit,
+                        barcode=f'60{random.randint(10**9, 10**10 - 1)}',
+                        cost_price=Decimal(cost),
+                        unit_price=Decimal(price),
+                        quantity_in_stock=0,          # only goods receipt adds stock
+                        min_stock_alert=per_carton,   # one carton is a realistic reorder point
+                        base_uom='pcs',
+                        purchase_uom='carton',
+                        units_per_purchase_uom=per_carton,
+                        is_active=True,
+                    )
+                    p._shelf_life = shelf_life        # transient, used below
+                    db.session.add(p)
+                    products.append(p)
 
-        # 4. Seed Customers (Wholesale Retailers)
-        customers_data = [
-            {"name": "Metro Retail Outlets", "phone": "0244-556677", "email": "procurement@metroretail.com", "address": "Oxford Street, Osu, Accra"},
-            {"name": "TechSavvy Distributors", "phone": "0208-667788", "email": "purchasing@techsavvy.com", "address": "Graphic Road, South Industrial Area, Accra"},
-            {"name": "National Office Supplies Co.", "phone": "0553-778899", "email": "office@nationalcorp.com", "address": "Axim Road, near Market Circle, Takoradi"},
-            {"name": "Active Life Gyms & Fitness", "phone": "0243-889900", "email": "facilities@activelifegym.com", "address": "Boundary Road, East Legon, Accra"},
-            {"name": "General Goods Emporium", "phone": "0208-990011", "email": "stock@generalgoods.com", "address": "Spintex Road, near Flower Pot, Accra"},
-            {"name": "Elite Business Supplies", "phone": "0553-112244", "email": "admin@elitesupplies.com", "address": "Collins Avenue, near Chapel Hill, Takoradi"}
-        ]
+        suppliers = []
+        for name, contact, phone, email, address in SUPPLIERS:
+            s = Supplier(business_id=business.id, name=name, contact=contact,
+                         phone=phone, email=email, address=address)
+            db.session.add(s)
+            suppliers.append(s)
 
         customers = []
-        for cust_info in customers_data:
-            cust = Customer(
-                name=cust_info["name"],
-                phone=cust_info["phone"],
-                email=cust_info["email"],
-                address=cust_info["address"]
-            )
-            db.session.add(cust)
-            customers.append(cust)
+        for name, phone, email, address in CUSTOMERS:
+            c = Customer(business_id=business.id, name=name, phone=phone,
+                         email=email, address=address)
+            db.session.add(c)
+            customers.append(c)
         db.session.flush()
 
-        # 5. Simulate Sales and Purchases over the past 30 days
-        print("Generating transaction history...")
-        start_date = datetime.date.today() - datetime.timedelta(days=30)
-        
-        # Track sold quantities to offset with purchases
-        total_sold = {p.id: 0 for p in products}
-        sales_records = []
+        # --- purchase orders, received into batches ---------------------------
+        today = datetime.date.today()
+        po_count = batch_count = 0
+        for weeks_ago in range(8, 0, -1):
+            order_date = today - datetime.timedelta(days=weeks_ago * 7)
+            supplier = random.choice(suppliers)
+            po = PurchaseOrder(
+                business_id=business.id,
+                supplier_id=supplier.id,
+                status='ordered',
+                order_date=order_date,
+                expected_date=order_date + datetime.timedelta(days=random.randint(3, 10)),
+            )
+            db.session.add(po)
+            db.session.flush()
+            po_count += 1
 
-        # We will create about 45 sales transactions
-        for i in range(45):
-            # Select random date in last 30 days
-            days_ago = random.randint(0, 30)
-            sale_date = datetime.date.today() - datetime.timedelta(days=days_ago)
-            cust = random.choice(customers)
-            
-            sale = Sale(sale_date=sale_date, customer=cust)
-            sales_records.append(sale)
-            
-            # Select 1 to 4 random products for this sale
-            selected_prods = random.sample(products, random.randint(1, 4))
-            for p in selected_prods:
-                # Wholesale bulk quantity (5 to 30 items)
-                qty = random.randint(5, 30)
-                total_sold[p.id] += qty
-                
-                item = SaleItem(
-                    sale=sale,
-                    product=p,
-                    quantity=qty,
-                    price_at_sale=p.unit_price
+            for product in random.sample(products, random.randint(6, 10)):
+                cartons = random.randint(15, 40)
+                qty = cartons * product.units_per_purchase_uom
+                item = PurchaseOrderItem(
+                    po_id=po.id, product_id=product.id,
+                    quantity_ordered=qty, quantity_received=0,
+                    unit_cost=product.cost_price,
                 )
                 db.session.add(item)
-        
-        # Save Sales
-        for sale in sales_records:
-            db.session.add(sale)
+                db.session.flush()
+
+                # The most recent PO stays outstanding so the receive screen has work to do
+                if weeks_ago == 1:
+                    continue
+
+                received_date = order_date + datetime.timedelta(days=random.randint(2, 8))
+                item.quantity_received = qty
+                expiry = (received_date + datetime.timedelta(days=product._shelf_life)
+                          if product._shelf_life else None)
+                db.session.add(StockBatch(
+                    business_id=business.id, product_id=product.id, po_item_id=item.id,
+                    batch_number=f'PO-{po.id}-{item.id}',
+                    quantity_received=qty, quantity_remaining=qty,
+                    received_date=received_date, expiry_date=expiry,
+                ))
+                product.quantity_in_stock += qty
+                batch_count += 1
+                po.status = 'received'
+
         db.session.flush()
 
-        # Generate Purchases
-        # For each product, the total purchased quantity = total_sold + target_ending_stock
-        for p in products:
-            # Wholesale target ending stock: random buffer above safety levels
-            target_stock = p.min_stock_alert + random.randint(10, 50)
-            required_purchase_qty = total_sold[p.id] + target_stock
-            
-            # Split required purchase quantity into 3 transactions distributed over the 30 days
-            # This ensures we stock up before sales occur and maintain healthy levels
-            dates = [
-                datetime.date.today() - datetime.timedelta(days=28), # Initial major restocking
-                datetime.date.today() - datetime.timedelta(days=18), # Mid-month top up
-                datetime.date.today() - datetime.timedelta(days=8)   # Recent restocking
-            ]
-            
-            # Divide required qty into 3 parts
-            qty_parts = [
-                int(required_purchase_qty * 0.5),
-                int(required_purchase_qty * 0.3),
-                required_purchase_qty - int(required_purchase_qty * 0.5) - int(required_purchase_qty * 0.3)
-            ]
-            
-            # Purchase cost is wholesale basis (55% to 70% of retail price)
-            cost_factor = Decimal(random.uniform(0.55, 0.70))
-            purchase_price = (p.unit_price * cost_factor).quantize(Decimal('0.01'))
-
-            for d, qty in zip(dates, qty_parts):
-                if qty <= 0:
+        # --- sales, drawing stock down FEFO -----------------------------------
+        sale_count = item_count = 0
+        for days_ago in range(30, -1, -1):
+            sale_date = today - datetime.timedelta(days=days_ago)
+            for _ in range(random.randint(1, 4)):
+                in_stock = [p for p in products if p.quantity_in_stock > 20]
+                if not in_stock:
                     continue
-                purchase = Purchase(
-                    product=p,
-                    supplier=product_supplier_map[p],
-                    quantity=qty,
-                    purchase_price=purchase_price,
-                    purchase_date=d
-                )
-                db.session.add(purchase)
-            
-            # Set the exact ending stock level on the product
-            p.quantity_in_stock = target_stock
+                sale = Sale(business_id=business.id, sale_date=sale_date,
+                            customer_id=random.choice(customers).id)
+                db.session.add(sale)
+                db.session.flush()
+                sale_count += 1
+
+                for product in random.sample(in_stock, min(len(in_stock), random.randint(1, 4))):
+                    qty = min(product.quantity_in_stock,
+                              random.randint(1, 4) * product.units_per_purchase_uom)
+                    if qty <= 0:
+                        continue
+                    db.session.add(SaleItem(sale_id=sale.id, product_id=product.id,
+                                            quantity=qty, price_at_sale=product.unit_price))
+                    product.quantity_in_stock -= qty
+                    item_count += 1
+
+                    # FEFO: soonest expiry first, undated batches last
+                    remaining = qty
+                    batches = StockBatch.query.filter(
+                        StockBatch.business_id == business.id,
+                        StockBatch.product_id == product.id,
+                        StockBatch.quantity_remaining > 0,
+                    ).order_by(
+                        StockBatch.expiry_date.asc().nulls_last(),
+                        StockBatch.received_date.asc(),
+                    ).all()
+                    for batch in batches:
+                        if remaining <= 0:
+                            break
+                        take = min(batch.quantity_remaining, remaining)
+                        batch.quantity_remaining -= take
+                        remaining -= take
 
         db.session.commit()
-        print("Database seeded successfully with wholesale records!")
 
-if __name__ == "__main__":
-    seed()
+        low_stock = sum(1 for p in products if p.quantity_in_stock <= p.min_stock_alert)
+        expiring = StockBatch.query.filter(
+            StockBatch.expiry_date.isnot(None),
+            StockBatch.expiry_date <= today + datetime.timedelta(days=30),
+            StockBatch.quantity_remaining > 0,
+        ).count()
+
+        print(f"""
+Seeded {BUSINESS_NAME}
+  {len(brands)} brands across {len(groups)} item groups
+  {len(products)} product variants
+  {len(suppliers)} suppliers, {len(customers)} customers
+  {po_count} purchase orders ({batch_count} received into stock batches, 1 left outstanding)
+  {sale_count} sales / {item_count} line items over the last 30 days
+  {low_stock} products below their reorder threshold
+  {expiring} stock batches expiring within 30 days
+
+Log in as:
+  Owner            {OWNER_EMAIL}
+  Manager          ama@accrabev.com
+  Inventory Staff  kwesi@accrabev.com
+  Sales Staff      efua@accrabev.com
+  Password (all)   {DEMO_PASSWORD}
+""")
+
+
+if __name__ == '__main__':
+    seed(auto_yes='--yes' in sys.argv)
