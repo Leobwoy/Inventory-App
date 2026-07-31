@@ -5,10 +5,16 @@ import os
 from extensions import db
 import subprocess
 from flask import send_file, request, redirect, url_for, flash
+from flask_migrate import Migrate
+from flask_httpauth import HTTPBasicAuth
+from flask_login import LoginManager
 
 # Initialize extensions
 bootstrap = Bootstrap()
 csrf = CSRFProtect()
+migrate = Migrate()
+auth = HTTPBasicAuth()
+login_manager = LoginManager()
 
 def create_app():
     app = Flask(__name__)
@@ -24,12 +30,29 @@ def create_app():
     bootstrap.init_app(app)
     db.init_app(app)
     csrf.init_app(app)
+    migrate.init_app(app, db)
+    login_manager.init_app(app)
+    login_manager.login_view = 'auth.login'
+
+    @login_manager.user_loader
+    def load_user(user_id):
+        from auth.models import User
+        return User.query.get(int(user_id))
+
+    @auth.verify_password
+    def verify_password(username, password):
+        expected_password = os.environ.get('BACKUP_PASSWORD', 'admin123')
+        if username == 'admin' and password == expected_password:
+            return username
+        return None
 
     # Register blueprints
     from products.routes import products_bp
     from sales.routes import sales_bp
     from purchases.routes import purchases_bp
     from reports.routes import reports_bp
+    from auth.routes import auth_bp
+    from auth import models as auth_models
     from products.models import Product
     from sales.models import Sale
     from sqlalchemy import func
@@ -39,26 +62,40 @@ def create_app():
     app.register_blueprint(sales_bp, url_prefix='/sales')
     app.register_blueprint(purchases_bp, url_prefix='/purchases')
     app.register_blueprint(reports_bp, url_prefix='/reports')
+    app.register_blueprint(auth_bp, url_prefix='/auth')
+
+    from auth.cli import create_owner_command
+    app.cli.add_command(create_owner_command)
+
+    from flask_login import login_required, current_user
 
     @app.route('/')
+    @login_required
     def index():
         # Low stock products
-        low_stock = Product.query.filter(Product.quantity_in_stock <= Product.min_stock_alert).all()
+        low_stock = Product.query.filter(
+            Product.quantity_in_stock <= Product.min_stock_alert,
+            Product.business_id == current_user.business_id
+        ).all()
         # Sales trend (last 7 days) for multi-item sales
         today = datetime.date.today()
         sales_dates = [(today - datetime.timedelta(days=i)) for i in range(6, -1, -1)]
         sales_data = {d: 0.0 for d in sales_dates}
-        sales = Sale.query.filter(Sale.sale_date >= today - datetime.timedelta(days=6)).all()
+        sales = Sale.query.filter(
+            Sale.sale_date >= today - datetime.timedelta(days=6),
+            Sale.business_id == current_user.business_id
+        ).all()
         for sale in sales:
             day = sale.sale_date
             for item in sale.items:
                 if day in sales_data:
                     sales_data[day] += float(item.price_at_sale) * item.quantity
         # Top 5 products by stock
-        top_products = Product.query.order_by(Product.quantity_in_stock.desc()).limit(5).all()
+        top_products = Product.query.filter_by(business_id=current_user.business_id).order_by(Product.quantity_in_stock.desc()).limit(5).all()
         return render_template('index.html', low_stock=low_stock, sales_data=sales_data, top_products=top_products, year=datetime.date.today().year)
 
     @app.route('/backup_restore', methods=['GET', 'POST'])
+    @auth.login_required
     def backup_restore():
         if request.method == 'POST':
             if 'backup' in request.form:

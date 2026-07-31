@@ -9,32 +9,37 @@ import pandas as pd
 from flask import send_file
 import io
 from .models import SaleItem
+from flask_login import login_required, current_user
+from purchases.models import StockBatch
 
 @sales_bp.route('/')
+@login_required
 def list_sales():
     page = request.args.get('page', 1, type=int)
-    pagination = Sale.query.order_by(Sale.sale_date.desc()).paginate(page=page, per_page=15, error_out=False)
+    pagination = Sale.query.filter_by(business_id=current_user.business_id).order_by(Sale.sale_date.desc()).paginate(page=page, per_page=15, error_out=False)
     return render_template('sales/list.html', sales=pagination.items, pagination=pagination)
 
 @sales_bp.route('/add', methods=['GET', 'POST'])
+@login_required
 def add_sale():
     form = SaleForm()
-    product_choices = [(str(p.id), p.name) for p in Product.query.all()]
-    product_prices = {str(p.id): float(p.unit_price) for p in Product.query.all()}
+    product_choices = [(str(p.id), p.name) for p in Product.query.filter_by(business_id=current_user.business_id).all()]
+    product_prices = {str(p.id): float(p.unit_price) for p in Product.query.filter_by(business_id=current_user.business_id).all()}
     for item_form in form.items:
         item_form.form.product_id.choices = product_choices  # type: ignore
-    form.customer_id.choices = [('0', 'No Customer')] + [(str(c.id), c.name) for c in Customer.query.order_by(Customer.name)]  # type: ignore
+    form.customer_id.choices = [('0', 'No Customer')] + [(str(c.id), c.name) for c in Customer.query.filter_by(business_id=current_user.business_id).order_by(Customer.name)]  # type: ignore
     if form.validate_on_submit():
         customer_id = int(form.customer_id.data) if form.customer_id.data and form.customer_id.data != '0' else None
         customer_name = form.customer_name.data.strip() if form.customer_name.data else None
         try:
             sale = Sale()
+            sale.business_id = current_user.business_id
             sale.sale_date = form.sale_date.data or date.today()
             sale.customer_id = customer_id
             db.session.add(sale)
             # Save all sale items
             for item_form in form.items:
-                product = Product.query.get(int(item_form.product_id.data))
+                product = Product.query.filter_by(id=int(item_form.product_id.data), business_id=current_user.business_id).first()
                 if product and product.quantity_in_stock >= item_form.quantity.data:
                     sale_item = SaleItem()
                     sale_item.product_id = product.id
@@ -42,6 +47,26 @@ def add_sale():
                     sale_item.price_at_sale = item_form.price_at_sale.data
                     sale.items.append(sale_item)
                     product.quantity_in_stock -= item_form.quantity.data
+                    
+                    # FEFO Stock deduction
+                    qty_to_deduct = item_form.quantity.data
+                    batches = StockBatch.query.filter(
+                        StockBatch.product_id == product.id,
+                        StockBatch.quantity_remaining > 0
+                    ).order_by(
+                        StockBatch.expiry_date.asc().nulls_last(),
+                        StockBatch.received_date.asc()
+                    ).all()
+                    
+                    for batch in batches:
+                        if qty_to_deduct <= 0:
+                            break
+                        if batch.quantity_remaining >= qty_to_deduct:
+                            batch.quantity_remaining -= qty_to_deduct
+                            qty_to_deduct = 0
+                        else:
+                            qty_to_deduct -= batch.quantity_remaining
+                            batch.quantity_remaining = 0
                 else:
                     db.session.rollback()
                     flash(f'Not enough stock for {product.name if product else "Unknown Product"}.', 'danger')
@@ -57,15 +82,18 @@ def add_sale():
 
 # Customer management
 @sales_bp.route('/customers')
+@login_required
 def list_customers():
-    customers = Customer.query.order_by(Customer.name).all()
+    customers = Customer.query.filter_by(business_id=current_user.business_id).order_by(Customer.name).all()
     return render_template('sales/customers.html', customers=customers)
 
 @sales_bp.route('/customers/add', methods=['GET', 'POST'])
+@login_required
 def add_customer():
     form = CustomerForm()
     if form.validate_on_submit():
         customer = Customer()
+        customer.business_id = current_user.business_id
         customer.name = form.name.data
         customer.phone = form.phone.data
         customer.email = form.email.data
@@ -77,8 +105,9 @@ def add_customer():
     return render_template('sales/customer_form.html', form=form, action='Add')
 
 @sales_bp.route('/customers/edit/<int:customer_id>', methods=['GET', 'POST'])
+@login_required
 def edit_customer(customer_id):
-    customer = Customer.query.get_or_404(customer_id)
+    customer = Customer.query.filter_by(id=customer_id, business_id=current_user.business_id).first_or_404()
     form = CustomerForm(obj=customer)
     if form.validate_on_submit():
         form.populate_obj(customer)
@@ -88,21 +117,23 @@ def edit_customer(customer_id):
     return render_template('sales/customer_form.html', form=form, action='Edit')
 
 @sales_bp.route('/customers/delete/<int:customer_id>', methods=['POST'])
+@login_required
 def delete_customer(customer_id):
-    customer = Customer.query.get_or_404(customer_id)
+    customer = Customer.query.filter_by(id=customer_id, business_id=current_user.business_id).first_or_404()
     db.session.delete(customer)
     db.session.commit()
     flash('Customer deleted!', 'info')
     return redirect(url_for('sales.list_customers'))
 
 @sales_bp.route('/bulk_action', methods=['POST'])
+@login_required
 def bulk_action():
     action = request.form.get('action')
     ids = request.form.getlist('sale_ids')
     if not ids:
         flash('No sales selected.', 'warning')
         return redirect(url_for('sales.list_sales'))
-    sales = Sale.query.filter(Sale.id.in_(ids)).all()
+    sales = Sale.query.filter(Sale.id.in_(ids), Sale.business_id == current_user.business_id).all()
     if action == 'delete':
         try:
             for sale in sales:
@@ -164,14 +195,16 @@ def bulk_action():
         return redirect(url_for('sales.list_sales'))
 
 @sales_bp.route('/invoice/<int:sale_id>')
+@login_required
 def sale_invoice(sale_id):
-    sale = Sale.query.get_or_404(sale_id)
+    sale = Sale.query.filter_by(id=sale_id, business_id=current_user.business_id).first_or_404()
     customer_name = request.args.get('customer_name')
     return render_template('sales/invoice.html', sale=sale, customer_name=customer_name)
 
 @sales_bp.route('/bulk_print_invoices')
+@login_required
 def bulk_print_invoices():
     ids = request.args.get('ids', '')
     id_list = [int(i) for i in ids.split(',') if i.isdigit()]
-    sales = Sale.query.filter(Sale.id.in_(id_list)).all()
-    return render_template('sales/bulk_invoices.html', sales=sales) 
+    sales = Sale.query.filter(Sale.id.in_(id_list), Sale.business_id == current_user.business_id).all()
+    return render_template('sales/bulk_invoices.html', sales=sales)

@@ -11,6 +11,7 @@ from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 import pandas as pd
+from flask_login import login_required, current_user
 
 def generate_pdf_report(title, headers, data_rows):
     buffer = io.BytesIO()
@@ -57,11 +58,12 @@ def export_to_csv(headers, data_rows, filename):
     return response
 
 @reports_bp.route('/sales')
+@login_required
 def sales_report():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     product_id = request.args.get('product_id', type=int)
-    query = Sale.query
+    query = Sale.query.filter_by(business_id=current_user.business_id)
     if start_date:
         query = query.filter(Sale.sale_date >= start_date)
     if end_date:
@@ -69,16 +71,13 @@ def sales_report():
     if product_id:
         query = query.join(SaleItem).filter(SaleItem.product_id == product_id)
     sales = query.order_by(Sale.sale_date.desc()).all()
-    products = Product.query.all()
+    products = Product.query.filter_by(business_id=current_user.business_id).all()
     
     total = 0
     data_rows = []
     
     for sale in sales:
         for item in sale.items:
-            # If filtering by product, we should only include relevant items or all?
-            # Usually filtering by product means "sales containing this product" or "only this product's text".
-            # For a report on a specific product, we usually want to show only that product's lines.
             if product_id and item.product_id != product_id:
                 continue
                 
@@ -107,11 +106,12 @@ def sales_report():
     return render_template('reports/sales_report.html', sales=sales, total=total, products=products, filters=request.args)
 
 @reports_bp.route('/purchases')
+@login_required
 def purchases_report():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     product_id = request.args.get('product_id', type=int)
-    query = Purchase.query
+    query = Purchase.query.filter_by(business_id=current_user.business_id)
     if start_date:
         query = query.filter(Purchase.purchase_date >= start_date)
     if end_date:
@@ -120,7 +120,7 @@ def purchases_report():
         query = query.filter(Purchase.product_id == product_id)
     purchases = query.order_by(Purchase.purchase_date.desc()).all()
     total = sum(purchase.purchase_price * purchase.quantity for purchase in purchases)
-    products = Product.query.all()
+    products = Product.query.filter_by(business_id=current_user.business_id).all()
     headers = ['Date', 'Product', 'Quantity', 'Purchase Price', 'Supplier', 'Total']
     data_rows = [[str(purchase.purchase_date), purchase.product.name, purchase.quantity, float(purchase.purchase_price), purchase.supplier.name if purchase.supplier else '', float(purchase.purchase_price * purchase.quantity)] for purchase in purchases]
     data_rows.append(['', '', '', '', 'Summary Total', float(total)])
@@ -138,8 +138,9 @@ def purchases_report():
     return render_template('reports/purchases_report.html', purchases=purchases, total=total, products=products, filters=request.args)
 
 @reports_bp.route('/stock')
+@login_required
 def stock_report():
-    products = Product.query.all()
+    products = Product.query.filter_by(business_id=current_user.business_id).all()
     headers = ['Name', 'SKU', 'Description', 'Unit Price', 'Quantity in Stock']
     data_rows = [[p.name, p.sku, p.description, float(p.unit_price), p.quantity_in_stock] for p in products]
     export = request.args.get('export')
@@ -153,4 +154,4 @@ def stock_report():
         return export_to_excel(headers, data_rows, 'stock_report.xlsx')
     if export == 'csv':
         return export_to_csv(headers, data_rows, 'stock_report.csv')
-    return render_template('reports/stock_report.html', products=products) 
+    return render_template('reports/stock_report.html', products=products)

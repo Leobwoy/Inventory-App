@@ -1,12 +1,12 @@
 {% extends 'base.html' %}
 {% from '_macros.html' import render_pagination %}
-{% block title %}Purchases | TrackTrack{% endblock %}
+{% block title %}Purchase Orders | TrackTrack{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Purchases Records</h2>
+    <h2>Purchase Orders</h2>
     <div class="page-header-actions">
-        <a href="{{ url_for('purchases.add_purchase') }}" class="btn btn-primary"><i class="bi bi-truck me-1"></i> Record Purchase</a>
+        <a href="{{ url_for('purchases.add_purchase') }}" class="btn btn-primary"><i class="bi bi-truck me-1"></i> Create PO</a>
     </div>
 </div>
 
@@ -18,13 +18,12 @@
                     <option value="">Bulk Action</option>
                     <option value="delete">Delete Selected</option>
                     <option value="export_csv">Export (CSV)</option>
-                    <option value="export_excel">Export (Excel)</option>
                 </select>
                 <button type="submit" class="btn btn-sm btn-outline-primary">Apply</button>
             </div>
             
             <div class="text-muted small">
-                Showing {{ purchases|length }} records
+                Showing {{ purchase_orders|length }} records
             </div>
         </div>
 
@@ -33,28 +32,49 @@
                 <thead>
                     <tr>
                         <th style="width: 40px;"><input class="form-check-input" type="checkbox" id="select-all"></th>
-                        <th>Date</th>
-                        <th>Product Details</th>
-                        <th>Quantity</th>
+                        <th>PO #</th>
+                        <th>Order Date</th>
                         <th>Supplier</th>
+                        <th>Status</th>
                         <th class="text-end">Total Amount</th>
+                        <th class="text-center">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {% for purchase in purchases %}
+                    {% for po in purchase_orders %}
                     <tr>
                         <td class="cell-checkbox">
-                            <input class="form-check-input" type="checkbox" name="purchase_ids" value="{{ purchase.id }}">
+                            <input class="form-check-input" type="checkbox" name="purchase_ids" value="{{ po.id }}">
                         </td>
-                        <td data-label="Date" class="text-muted">{{ purchase.purchase_date.strftime('%Y-%m-%d') if purchase.purchase_date else '' }}</td>
-                        <td data-label="Product" class="fw-medium">
-                            {{ purchase.product.name }}<br>
-                            <small class="text-muted">@ ₵{{ purchase.purchase_price }}</small>
+                        <td data-label="PO #"><strong>{{ po.id }}</strong></td>
+                        <td data-label="Date" class="text-muted">{{ po.order_date.strftime('%Y-%m-%d') if po.order_date else '' }}</td>
+                        <td data-label="Supplier">{{ po.supplier.name if po.supplier else 'N/A' }}</td>
+                        <td data-label="Status">
+                            {% if po.status == 'draft' %}
+                                <span class="badge bg-secondary">Draft</span>
+                            {% elif po.status == 'ordered' %}
+                                <span class="badge bg-primary">Ordered</span>
+                            {% elif po.status == 'partially_received' %}
+                                <span class="badge bg-warning text-dark">Partial</span>
+                            {% elif po.status == 'received' %}
+                                <span class="badge bg-success">Received</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ po.status }}</span>
+                            {% endif %}
                         </td>
-                        <td data-label="Qty"><span class="badge bg-secondary">{{ purchase.quantity }}</span></td>
-                        <td data-label="Supplier">{{ purchase.supplier.name if purchase.supplier else 'N/A' }}</td>
                         <td data-label="Total" class="fw-bold text-end">
-                            ₵{{ purchase.purchase_price * purchase.quantity }}
+                            {% set total = namespace(value=0) %}
+                            {% for item in po.items %}
+                                {% set total.value = total.value + (item.quantity_ordered * item.unit_cost) %}
+                            {% endfor %}
+                            ₵{{ '{:,.2f}'.format(total.value) }}
+                        </td>
+                        <td data-label="Actions" class="text-center">
+                            {% if po.status != 'received' %}
+                                <a href="{{ url_for('purchases.receive_po', po_id=po.id) }}" class="btn btn-sm btn-outline-success" title="Receive Goods"><i class="bi bi-box-arrow-in-down"></i></a>
+                            {% else %}
+                                <button class="btn btn-sm btn-outline-secondary" disabled title="Already Received"><i class="bi bi-check-all"></i></button>
+                            {% endif %}
                         </td>
                     </tr>
                     {% endfor %}

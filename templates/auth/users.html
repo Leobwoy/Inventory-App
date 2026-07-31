@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}User Management - TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>User Management</h2>
+    <div class="page-header-actions">
+        <a href="{{ url_for('auth.add_user') }}" class="btn btn-primary"><i class="bi bi-person-plus"></i> Add User</a>
+    </div>
+</div>
+
+<div class="glass-card table-responsive p-0">
+    <table class="table table-hover table-cards mb-0">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Status</th>
+                <th class="text-end">Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for user in users %}
+            <tr>
+                <td data-label="Name" class="fw-medium">{{ user.name }}</td>
+                <td data-label="Email">{{ user.email }}</td>
+                <td data-label="Role">
+                    <span class="badge bg-secondary">{{ user.role.name }}</span>
+                </td>
+                <td data-label="Status">
+                    {% if user.is_active %}
+                        <span class="badge bg-success">Active</span>
+                    {% else %}
+                        <span class="badge bg-danger">Inactive</span>
+                    {% endif %}
+                </td>
+                <td data-label="Actions" class="text-end cell-actions">
+                    <a href="#" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                </td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="5" class="text-center py-4 text-muted">No users found for your business.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endblock %}
