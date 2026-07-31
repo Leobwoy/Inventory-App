@@ -1,9 +1,10 @@
 from flask import render_template, request, make_response
 from . import reports_bp
 from sales.models import Sale, SaleItem
-from purchases.models import Purchase
+from purchases.models import PurchaseOrder, PurchaseOrderItem
 from products.models import Product
 from extensions import db
+from sqlalchemy.orm import joinedload
 from datetime import datetime
 import io
 from reportlab.lib.pagesizes import letter, landscape
@@ -111,19 +112,41 @@ def purchases_report():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     product_id = request.args.get('product_id', type=int)
-    query = Purchase.query.filter_by(business_id=current_user.business_id)
+
+    # Reads PurchaseOrderItem, not the legacy Purchase table. Nothing has written a
+    # Purchase row since the PO lifecycle landed, so this report was always empty (F-04).
+    query = (
+        PurchaseOrderItem.query
+        .join(PurchaseOrder, PurchaseOrderItem.po_id == PurchaseOrder.id)
+        .filter(PurchaseOrder.business_id == current_user.business_id)
+        .options(
+            joinedload(PurchaseOrderItem.product),
+            joinedload(PurchaseOrderItem.purchase_order).joinedload(PurchaseOrder.supplier),
+        )
+    )
     if start_date:
-        query = query.filter(Purchase.purchase_date >= start_date)
+        query = query.filter(PurchaseOrder.order_date >= start_date)
     if end_date:
-        query = query.filter(Purchase.purchase_date <= end_date)
+        query = query.filter(PurchaseOrder.order_date <= end_date)
     if product_id:
-        query = query.filter(Purchase.product_id == product_id)
-    purchases = query.order_by(Purchase.purchase_date.desc()).all()
-    total = sum(purchase.purchase_price * purchase.quantity for purchase in purchases)
+        query = query.filter(PurchaseOrderItem.product_id == product_id)
+
+    purchases = query.order_by(PurchaseOrder.order_date.desc()).all()
+    total = sum((item.unit_cost or 0) * item.quantity_ordered for item in purchases)
     products = Product.query.filter_by(business_id=current_user.business_id).all()
-    headers = ['Date', 'Product', 'Quantity', 'Purchase Price', 'Supplier', 'Total']
-    data_rows = [[str(purchase.purchase_date), purchase.product.name, purchase.quantity, float(purchase.purchase_price), purchase.supplier.name if purchase.supplier else '', float(purchase.purchase_price * purchase.quantity)] for purchase in purchases]
-    data_rows.append(['', '', '', '', 'Summary Total', float(total)])
+    headers = ['Date', 'PO', 'Product', 'Ordered', 'Received', 'Unit Cost', 'Supplier', 'Status', 'Total']
+    data_rows = [[
+        str(item.purchase_order.order_date),
+        f'PO-{item.po_id}',
+        item.product.name if item.product else '',
+        item.quantity_ordered,
+        item.quantity_received or 0,
+        float(item.unit_cost or 0),
+        item.purchase_order.supplier.name if item.purchase_order.supplier else '',
+        item.purchase_order.status,
+        float((item.unit_cost or 0) * item.quantity_ordered),
+    ] for item in purchases]
+    data_rows.append(['', '', '', '', '', '', '', 'Summary Total', float(total)])
     export = request.args.get('export')
     if export == 'pdf':
         pdf_buffer = generate_pdf_report('Purchases Report', headers, data_rows)

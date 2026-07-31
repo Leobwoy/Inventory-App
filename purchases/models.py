@@ -23,8 +23,16 @@ class PurchaseOrder(db.Model):
     expected_date = db.Column(db.Date)
     created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
     approved_by = db.Column(db.Integer, db.ForeignKey('user.id'))
-    
+
+    # Without this, po.supplier resolves to Undefined in Jinja (silently rendering
+    # "N/A" on the PO list) and raises AttributeError in the CSV export. Only the
+    # legacy Purchase model had a supplier relationship.
+    supplier = db.relationship('Supplier', backref=db.backref('purchase_orders', lazy=True))
+
     items = db.relationship('PurchaseOrderItem', backref='purchase_order', lazy=True, cascade='all, delete-orphan')
+
+    def __repr__(self):
+        return f'<PurchaseOrder {self.id} {self.status}>'
 
 class PurchaseOrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)

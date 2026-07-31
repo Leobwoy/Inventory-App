@@ -6,6 +6,9 @@ from auth.forms import RegistrationForm, ChangePasswordForm, UserForm
 from auth.decorators import permission_required
 from products.models import Brand, ItemGroup
 from extensions import db
+from sqlalchemy import func
+from datetime import datetime
+from urllib.parse import urlparse
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -23,16 +26,27 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for('index'))
     if request.method == 'POST':
-        email = request.form.get('email')
-        password = request.form.get('password')
-        user = User.query.filter_by(email=email).first()
+        email = (request.form.get('email') or '').strip().lower()
+        password = request.form.get('password') or ''
+        user = User.query.filter(func.lower(User.email) == email).first()
+
+        # Check is_active before revealing anything about the password, so a
+        # deactivated account cannot be used as a password oracle.
+        if user and not user.is_active:
+            flash("Your account is deactivated. Contact your administrator.", "danger")
+            return render_template('login.html')
+
         if user and check_password_hash(user.password_hash, password):
-            if not user.is_active:
-                flash("Your account is deactivated.", "danger")
-                return redirect(url_for('auth.login'))
             login_user(user)
+            user.last_login_at = datetime.utcnow()
+            db.session.commit()
+
+            # Only follow relative next targets - an absolute URL here is an open redirect.
             next_page = request.args.get('next')
-            return redirect(next_page or url_for('index'))
+            if not next_page or urlparse(next_page).netloc or not next_page.startswith('/'):
+                next_page = url_for('index')
+            return redirect(next_page)
+
         flash("Invalid email or password", "danger")
     return render_template('login.html')
 
@@ -55,10 +69,10 @@ def register():
             flash('Email address is already in use.', 'danger')
             return render_template('auth/register.html', form=form)
         
-        # 2. Get Admin role
-        admin_role = Role.query.filter_by(name='Admin').first()
-        if not admin_role:
-            flash('System error: Admin role not found. Please run database migrations.', 'danger')
+        # 2. Get Owner role - the person registering the business owns it
+        owner_role = Role.query.filter_by(name='Owner').first()
+        if not owner_role:
+            flash('System error: Owner role not found. Please run database migrations.', 'danger')
             return render_template('auth/register.html', form=form)
             
         # 3. Create Business with branding
@@ -70,13 +84,13 @@ def register():
         db.session.add(new_business)
         db.session.flush() # get new_business.id
 
-        # 4. Create User (must_change_password=False for self-registered Admin)
+        # 4. Create User (must_change_password=False for a self-registered Owner)
         new_user = User(
             business_id=new_business.id,
             name=form.user_name.data,
             email=form.email.data,
             password_hash=generate_password_hash(form.password.data),
-            role_id=admin_role.id,
+            role_id=owner_role.id,
             must_change_password=False
         )
         db.session.add(new_user)

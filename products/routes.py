@@ -7,6 +7,8 @@ from werkzeug.utils import secure_filename
 import openpyxl
 import os
 import re
+import tempfile
+from decimal import Decimal, InvalidOperation
 import pandas as pd
 from flask import send_file
 import io
@@ -169,36 +171,76 @@ def delete_product(product_id):
 def upload_products():
     form = ProductUploadForm()
     if form.validate_on_submit():
-        file = form.file.data
-        filename = secure_filename(file.filename)
-        filepath = os.path.join('/tmp', filename)
-        file.save(filepath)
-        wb = openpyxl.load_workbook(filepath)
-        ws = wb.active
-        
-        default_brand = Brand.query.filter_by(business_id=current_user.business_id, name='Default Brand').first()
-        default_group = ItemGroup.query.filter_by(business_id=current_user.business_id, name='Default ItemGroup').first()
-        
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            name, sku, description, unit_price, quantity_in_stock = row
-            if not Product.query.filter_by(sku=sku, business_id=current_user.business_id).first():
-                product = Product(
-                    business_id=current_user.business_id,
-                    name=name,
+        biz = current_user.business_id
+        # Fall back to whatever catalogue rows exist. The previous lookup was for
+        # 'Default Brand'/'Default ItemGroup', which nothing ever created, so this
+        # route raised AttributeError on None for every upload.
+        brand = (Brand.query.filter_by(business_id=biz, name='Generic').first()
+                 or Brand.query.filter_by(business_id=biz).order_by(Brand.id).first())
+        group = (ItemGroup.query.filter_by(business_id=biz, name='Uncategorized').first()
+                 or ItemGroup.query.filter_by(business_id=biz).order_by(ItemGroup.id).first())
+        if not brand or not group:
+            flash('Add at least one brand and item group before uploading products.', 'warning')
+            return redirect(url_for('products.list_products'))
+
+        # tempfile, not a hardcoded /tmp, which does not exist on Windows (F-20)
+        filename = secure_filename(form.file.data.filename)
+        filepath = os.path.join(tempfile.gettempdir(), filename)
+        added, skipped, errors = 0, 0, []
+        try:
+            form.file.data.save(filepath)
+            wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
+            ws = wb.active
+            for line_no, row in enumerate(ws.iter_rows(min_row=2, values_only=True), start=2):
+                if row is None or all(c is None for c in row):
+                    continue
+                # Pad/trim rather than unpacking a fixed width, which raised
+                # ValueError on any sheet that did not have exactly five columns.
+                cells = (list(row) + [None] * 5)[:5]
+                name, sku, description, unit_price, _qty = cells
+                if not name:
+                    errors.append(f'Row {line_no}: missing product name')
+                    continue
+                try:
+                    price = Decimal(str(unit_price)) if unit_price is not None else Decimal('0')
+                except (InvalidOperation, ValueError):
+                    errors.append(f'Row {line_no}: "{unit_price}" is not a valid price')
+                    continue
+
+                sku = (str(sku).strip() if sku else '') or generate_sku(brand, group, str(name))
+                if Product.query.filter_by(sku=sku).first():
+                    skipped += 1
+                    continue
+
+                db.session.add(Product(
+                    business_id=biz,
+                    name=str(name).strip(),
                     sku=sku,
-                    description=description,
-                    cost_price=unit_price,
-                    unit_price=unit_price,
-                    quantity_in_stock=0, # Must use PO for stock
-                    brand_id=default_brand.id,
-                    item_group_id=default_group.id,
+                    description=str(description).strip() if description else None,
+                    cost_price=price,
+                    unit_price=price,
+                    quantity_in_stock=0,  # stock only ever enters via goods receipt
+                    min_stock_alert=0,
+                    brand_id=brand.id,
+                    item_group_id=group.id,
                     base_uom='pcs',
                     purchase_uom='pcs',
                     units_per_purchase_uom=1
-                )
-                db.session.add(product)
-        db.session.commit()
-        flash('Products uploaded successfully!', 'success')
+                ))
+                added += 1
+            wb.close()
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Upload failed: {e}', 'danger')
+            return render_template('products/upload.html', form=form)
+        finally:
+            if os.path.exists(filepath):
+                os.remove(filepath)
+
+        flash(f'{added} product(s) added, {skipped} skipped as duplicates.', 'success')
+        for msg in errors[:10]:
+            flash(msg, 'warning')
         return redirect(url_for('products.list_products'))
     return render_template('products/upload.html', form=form)
 
@@ -217,13 +259,34 @@ def bulk_action():
         db.session.commit()
         flash(f'{len(products)} products deleted.', 'success')
         return redirect(url_for('products.list_products'))
-    elif action == 'export_csv':
+    elif action in ('export_csv', 'export_excel'):
         headers = ['Name', 'SKU', 'Brand', 'Item Group', 'Variant', 'Cost Price', 'Unit Price', 'Quantity in Stock']
-        data = [[p.name, p.sku, p.brand.name if hasattr(p, 'brand') and p.brand else '', p.item_group.name if hasattr(p, 'item_group') and p.item_group else '', p.variant_label, float(p.cost_price), float(p.unit_price), p.quantity_in_stock] for p in products]
+        data = [[
+            p.name,
+            p.sku,
+            p.brand.name if p.brand else '',
+            p.item_group.name if p.item_group else '',
+            p.variant_label,
+            float(p.cost_price or 0),
+            float(p.unit_price or 0),
+            p.quantity_in_stock,
+        ] for p in products]
         df = pd.DataFrame(data, columns=headers)
-        output = pd.io.common.StringIO()
+
+        if action == 'export_excel':
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                df.to_excel(writer, index=False, sheet_name='Products')
+            output.seek(0)
+            return send_file(
+                output,
+                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                as_attachment=True,
+                download_name='products_bulk_export.xlsx'
+            )
+
+        output = io.StringIO()
         df.to_csv(output, index=False)
-        output.seek(0)
         return send_file(
             io.BytesIO(output.getvalue().encode()),
             mimetype='text/csv',
