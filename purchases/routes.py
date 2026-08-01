@@ -10,6 +10,7 @@ from flask import send_file
 import io
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
+from services import stock
 
 @purchases_bp.route('/')
 @login_required
@@ -128,23 +129,22 @@ def receive_po(po_id):
 
             for item, qty, batch_number, expiry in receipts:
                 item.quantity_received = (item.quantity_received or 0) + qty
-                db.session.add(StockBatch(
+                # Stock enters only through the service, which creates the batch and
+                # refreshes the cached quantity from the batch sum (F-12).
+                stock.receive(
+                    product=item.product,
+                    quantity=qty,
                     business_id=current_user.business_id,
-                    product_id=item.product_id,
-                    po_item_id=item.id,
+                    received_date=received_on,
                     # Sequence per PO line, so a second delivery against the same
                     # line does not reuse the first batch's number.
                     batch_number=batch_number or (
                         f'PO{po.id}-L{item.id}-R'
                         f'{StockBatch.query.filter_by(po_item_id=item.id).count() + 1}'
                     ),
-                    quantity_received=qty,
-                    quantity_remaining=qty,
-                    received_date=received_on,
                     expiry_date=expiry,
-                ))
-                if item.product:
-                    item.product.quantity_in_stock += qty
+                    po_item_id=item.id,
+                )
 
             # Fully received only when every line is satisfied; otherwise the PO
             # stays open so the rest can be received later. This status could

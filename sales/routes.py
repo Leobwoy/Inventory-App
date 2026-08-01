@@ -11,7 +11,7 @@ import io
 from .models import SaleItem
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
-from purchases.models import StockBatch
+from services import stock
 
 @sales_bp.route('/')
 @login_required
@@ -43,40 +43,28 @@ def add_sale():
             # Save all sale items
             for item_form in form.items:
                 product = Product.query.filter_by(id=int(item_form.product_id.data), business_id=current_user.business_id).first()
-                if product and product.quantity_in_stock >= item_form.quantity.data:
-                    sale_item = SaleItem()
-                    sale_item.product_id = product.id
-                    sale_item.quantity = item_form.quantity.data
-                    sale_item.price_at_sale = item_form.price_at_sale.data
-                    sale.items.append(sale_item)
-                    product.quantity_in_stock -= item_form.quantity.data
-                    
-                    # FEFO Stock deduction
-                    qty_to_deduct = item_form.quantity.data
-                    batches = StockBatch.query.filter(
-                        StockBatch.product_id == product.id,
-                        StockBatch.quantity_remaining > 0
-                    ).order_by(
-                        StockBatch.expiry_date.asc().nulls_last(),
-                        StockBatch.received_date.asc()
-                    ).all()
-                    
-                    for batch in batches:
-                        if qty_to_deduct <= 0:
-                            break
-                        if batch.quantity_remaining >= qty_to_deduct:
-                            batch.quantity_remaining -= qty_to_deduct
-                            qty_to_deduct = 0
-                        else:
-                            qty_to_deduct -= batch.quantity_remaining
-                            batch.quantity_remaining = 0
-                else:
+                if not product:
                     db.session.rollback()
-                    flash(f'Not enough stock for {product.name if product else "Unknown Product"}.', 'danger')
+                    flash('One of the selected products is not available.', 'danger')
                     return render_template('sales/add.html', form=form, product_prices=product_prices)
+
+                sale_item = SaleItem()
+                sale_item.product_id = product.id
+                sale_item.quantity = item_form.quantity.data
+                sale_item.price_at_sale = item_form.price_at_sale.data
+                sale.items.append(sale_item)
+
+                # Stock moves only through the service, which draws down FEFO and
+                # refreshes the cached quantity from the batch sum (F-12).
+                stock.deduct_fefo(product, item_form.quantity.data, current_user.business_id)
+
             db.session.commit()
             flash('Sale recorded!', 'success')
             return redirect(url_for('sales.sale_invoice', sale_id=sale.id, customer_name=customer_name))
+        except stock.InsufficientStock as e:
+            db.session.rollback()
+            flash(str(e), 'danger')
+            return render_template('sales/add.html', form=form, product_prices=product_prices)
         except Exception as e:
             db.session.rollback()
             flash(f'An error occurred: {str(e)}', 'danger')
@@ -155,7 +143,10 @@ def bulk_action():
             for sale in sales:
                 for item in sale.items:
                     if item.product:
-                        item.product.quantity_in_stock += item.quantity
+                        # Restores into the batches the stock came from. Previously
+                        # this incremented only Product.quantity_in_stock, so the
+                        # cache and the batch sum diverged permanently (F-12).
+                        stock.restore(item.product, item.quantity, current_user.business_id)
                 db.session.delete(sale)
             db.session.commit()
             flash(f'{len(sales)} sales deleted and stock restored.', 'success')
