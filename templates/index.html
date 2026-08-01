@@ -41,7 +41,7 @@
                     <i class="bi bi-box-seam"></i>
                 </div>
                 <h5 class="text-muted mb-1">Total Products</h5>
-                <h3 class="mb-0 text-white">{{ top_products|length }} <span class="fs-6 text-muted fw-normal">tracked</span></h3>
+                <h3 class="mb-0 text-white">{{ product_count }} <span class="fs-6 text-muted fw-normal">tracked</span></h3>
             </div>
         </a>
     </div>
@@ -94,9 +94,9 @@
 <script>
     const ctx = document.getElementById('salesChart').getContext('2d');
     
-    // Prepare data from Jinja
-    const labels = [{% for date in sales_data.keys() %}'{{ date.strftime("%b %d") }}',{% endfor %}];
-    const data = [{% for total in sales_data.values() %}{{ total }},{% endfor %}];
+    // Prepare data from Jinja safely
+    const labels = JSON.parse('[{% for date in sales_data.keys() %}"{{ date.strftime("%b %d") }}"{% if not loop.last %},{% endif %}{% endfor %}]');
+    const data = JSON.parse('[{% for total in sales_data.values() %}{{ total }}{% if not loop.last %},{% endif %}{% endfor %}]');
     
     new Chart(ctx, {
         type: 'line',

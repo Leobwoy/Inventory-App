@@ -1,11 +1,11 @@
 {% extends 'base.html' %}
-{% block title %}Record Purchase | TrackTrack{% endblock %}
+{% block title %}Create Purchase Order | TrackTrack{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Record Purchase</h2>
+    <h2>Create Purchase Order</h2>
     <div class="page-header-actions">
-        <a href="{{ url_for('purchases.list_purchases') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back to Purchases</a>
+        <a href="{{ url_for('purchases.list_purchases') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back to POs</a>
     </div>
 </div>
 
@@ -15,38 +15,46 @@
         
         <div class="row g-4 mb-4">
             <div class="col-md-6">
-                <label class="form-label">{{ form.product_id.label.text }}</label>
-                {{ form.product_id(class_='form-select') }}
-            </div>
-            <div class="col-md-6">
                 <label class="form-label">{{ form.supplier_id.label.text }}</label>
                 <div class="input-group">
                     {{ form.supplier_id(class_='form-select') }}
                     <a href="/products/suppliers" class="btn btn-outline-secondary" title="Manage Suppliers"><i class="bi bi-buildings"></i></a>
                 </div>
             </div>
+            <div class="col-md-3">
+                <label class="form-label">{{ form.order_date.label.text }}</label>
+                {{ form.order_date(class_='form-control') }}
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">{{ form.expected_date.label.text }}</label>
+                {{ form.expected_date(class_='form-control') }}
+            </div>
         </div>
 
-        <div class="row g-4 mb-4">
-            <div class="col-md-4">
-                <label class="form-label">{{ form.quantity.label.text }}</label>
-                {{ form.quantity(class_='form-control') }}
-            </div>
-            <div class="col-md-4">
-                <label class="form-label">{{ form.purchase_price.label.text }}</label>
-                <div class="input-group">
-                    <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
-                    {{ form.purchase_price(class_='form-control') }}
+        <h5 class="mb-3">Order Items</h5>
+        {% for item in form.items %}
+            <div class="row g-4 mb-4">
+                {{ item.form.hidden_tag() }}
+                <div class="col-md-6">
+                    <label class="form-label">{{ item.form.product_id.label.text }}</label>
+                    {{ item.form.product_id(class_='form-select') }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">{{ item.form.quantity_ordered.label.text }}</label>
+                    {{ item.form.quantity_ordered(class_='form-control') }}
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">{{ item.form.unit_cost.label.text }}</label>
+                    <div class="input-group">
+                        <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
+                        {{ item.form.unit_cost(class_='form-control') }}
+                    </div>
                 </div>
             </div>
-            <div class="col-md-4">
-                <label class="form-label">{{ form.purchase_date.label.text }}</label>
-                {{ form.purchase_date(class_='form-control') }}
-            </div>
-        </div>
+        {% endfor %}
 
         <div class="d-flex gap-2 border-top border-secondary pt-4 mt-2">
-            <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check2-circle me-1"></i> Record Purchase</button>
+            <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check2-circle me-1"></i> Create Purchase Order</button>
             <a href="{{ url_for('purchases.list_purchases') }}" class="btn btn-outline-secondary">Cancel</a>
         </div>
     </form>

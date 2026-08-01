@@ -12,6 +12,7 @@
 
 <div class="glass-card">
     <form id="bulk-action-form" method="post" action="{{ url_for('sales.bulk_action') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card-toolbar">
             <div class="card-toolbar-actions">
                 <select name="action" class="form-select form-select-sm w-auto">

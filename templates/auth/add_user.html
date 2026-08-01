@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Add User - TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Add New User</h2>
+    <div class="page-header-actions">
+        <a href="{{ url_for('auth.users_list') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left"></i> Back to Users</a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-6 col-md-8">
+        <div class="glass-card">
+            <p class="text-muted mb-4">Create a new staff account. They will be forced to change this temporary password upon their first login.</p>
+            
+            <form method="POST" action="{{ url_for('auth.add_user') }}">
+                {{ form.csrf_token }}
+                
+                <div class="mb-3">
+                    <label class="form-label">{{ form.name.label }}</label>
+                    {{ form.name(class="form-control", placeholder="Full Name") }}
+                    {% for error in form.name.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">{{ form.email.label }}</label>
+                    {{ form.email(class="form-control", placeholder="email@example.com") }}
+                    {% for error in form.email.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                
+                <div class="mb-3">
+                    <label class="form-label">Role</label>
+                    <select name="role_id" class="form-select" required>
+                        <option value="" disabled selected>Select a role...</option>
+                        {% for role in roles %}
+                            <option value="{{ role.id }}">{{ role.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                
+                <div class="mb-4">
+                    <label class="form-label">{{ form.password.label }} <span class="text-muted fw-normal">(Temporary)</span></label>
+                    {{ form.password(class="form-control", placeholder="••••••••") }}
+                    {% for error in form.password.errors %}
+                        <div class="text-danger small mt-1">{{ error }}</div>
+                    {% endfor %}
+                </div>
+                
+                <hr class="border-secondary opacity-25 my-4">
+                
+                <div class="d-flex justify-content-end gap-2">
+                    <a href="{{ url_for('auth.users_list') }}" class="btn btn-outline-secondary">Cancel</a>
+                    {{ form.submit(class="btn btn-primary") }}
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+{% endblock %}

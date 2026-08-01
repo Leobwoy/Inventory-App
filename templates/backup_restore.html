@@ -1,20 +1,56 @@
 {% extends 'base.html' %}
-{% block title %}Backup & Restore{% endblock %}
+{% block title %}Backup &amp; Restore | TrackTrack{% endblock %}
 {% block content %}
-<h2>Database Backup & Restore</h2>
-<div class="alert alert-warning">
-  <strong>Warning:</strong> Restoring a backup will <b>overwrite all current data</b> in the database.<br>
-  Only use this if you are sure!
+<div class="page-header">
+  <h2>Backup &amp; Restore</h2>
 </div>
-<form method="post">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <button type="submit" name="backup" class="btn btn-success mb-3">Download Backup</button>
-</form>
-<form method="post" enctype="multipart/form-data">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-  <div class="mb-2">
-    <input type="file" name="restore_file" class="form-control" required>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="glass-card h-100">
+      <h5 class="mb-3"><i class="bi bi-download me-2"></i>Export your data</h5>
+      <p class="text-muted">
+        Downloads a ZIP of CSV files containing everything for
+        <strong>{{ current_user.business.name }}</strong> &mdash; catalogue, suppliers, customers,
+        purchase orders, stock batches and sales. Only this business's records are included.
+      </p>
+      <p class="text-muted small">
+        Keep the file somewhere safe: it lists your cost prices and margins.
+      </p>
+      <form method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" name="backup" value="1" class="btn btn-primary">
+          <i class="bi bi-download me-1"></i> Download backup
+        </button>
+      </form>
+    </div>
   </div>
-  <button type="submit" name="restore" class="btn btn-danger">Restore from Backup</button>
-</form>
-{% endblock %} 
+
+  <div class="col-lg-6">
+    <div class="glass-card h-100">
+      <h5 class="mb-3"><i class="bi bi-upload me-2"></i>Restore from a backup</h5>
+      <div class="alert alert-warning">
+        <i class="bi bi-exclamation-triangle me-2"></i>
+        This <strong>replaces</strong> your current products, suppliers, customers, purchase orders and
+        sales with the contents of the file. Your account, staff logins and audit history are not touched.
+        Export a fresh backup first if you are unsure.
+      </div>
+      <form method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="mb-3">
+          <label class="form-label">Backup file (.zip)</label>
+          <input type="file" name="restore_file" accept=".zip" class="form-control" required>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Type <code>REPLACE</code> to confirm</label>
+          <input type="text" name="confirm_restore" class="form-control" placeholder="REPLACE"
+                 autocomplete="off" required>
+        </div>
+        <button type="submit" name="restore" value="1" class="btn btn-danger">
+          <i class="bi bi-upload me-1"></i> Restore
+        </button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

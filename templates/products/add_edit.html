@@ -14,13 +14,62 @@
         {{ form.hidden_tag() }}
         
         <div class="row g-4 mb-3">
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <label class="form-label">{{ form.name.label.text }}</label>
                 {{ form.name(class_='form-control', placeholder='Product Name') }}
             </div>
-            <div class="col-md-6">
+            <div class="col-md-4">
                 <label class="form-label">{{ form.sku.label.text }}</label>
                 {{ form.sku(class_='form-control font-monospace', placeholder='e.g., ITEM-001') }}
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">{{ form.barcode.label.text }}</label>
+                {{ form.barcode(class_='form-control font-monospace', placeholder='Barcode') }}
+            </div>
+        </div>
+
+        <div class="row g-4 mb-3">
+            <div class="col-md-4">
+                <label class="form-label">{{ form.brand_id.label.text }}</label>
+                {{ form.brand_id(class_='form-select') }}
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">{{ form.item_group_id.label.text }}</label>
+                {{ form.item_group_id(class_='form-select') }}
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">{{ form.category_id.label.text }}</label>
+                {{ form.category_id(class_='form-select') }}
+            </div>
+        </div>
+
+        <div class="row g-4 mb-3">
+            <div class="col-md-4">
+                <label class="form-label">{{ form.variant_label.label.text }}</label>
+                {{ form.variant_label(class_='form-control', placeholder='e.g. 750ml, Large') }}
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">{{ form.size_value.label.text }}</label>
+                {{ form.size_value(class_='form-control') }}
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">{{ form.size_unit.label.text }}</label>
+                {{ form.size_unit(class_='form-control', placeholder='e.g. ml, kg') }}
+            </div>
+        </div>
+
+        <div class="row g-4 mb-3">
+            <div class="col-md-4">
+                <label class="form-label">{{ form.base_uom.label.text }}</label>
+                {{ form.base_uom(class_='form-control', placeholder='e.g. pcs') }}
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">{{ form.purchase_uom.label.text }}</label>
+                {{ form.purchase_uom(class_='form-control', placeholder='e.g. box') }}
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">{{ form.units_per_purchase_uom.label.text }}</label>
+                {{ form.units_per_purchase_uom(class_='form-control') }}
             </div>
         </div>
 
@@ -30,21 +79,27 @@
         </div>
 
         <div class="row g-4 mb-4">
-            <div class="col-md-4">
+            <div class="col-md-3">
+                <label class="form-label">{{ form.cost_price.label.text }}</label>
+                <div class="input-group">
+                    <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
+                    {{ form.cost_price(class_='form-control') }}
+                </div>
+            </div>
+            <div class="col-md-3">
                 <label class="form-label">{{ form.unit_price.label.text }}</label>
                 <div class="input-group">
                     <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
                     {{ form.unit_price(class_='form-control') }}
                 </div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label">{{ form.quantity_in_stock.label.text }}</label>
                 {{ form.quantity_in_stock(class_='form-control') }}
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label text-warning"><i class="bi bi-exclamation-triangle me-1"></i> {{ form.min_stock_alert.label.text }}</label>
                 {{ form.min_stock_alert(class_='form-control') }}
-                <div class="form-text text-muted small">Alert triggers at or below this level.</div>
             </div>
         </div>
 

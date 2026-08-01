@@ -2,6 +2,7 @@ from extensions import db
 
 class Customer(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     phone = db.Column(db.String(50))
     email = db.Column(db.String(100))
@@ -13,6 +14,7 @@ class Customer(db.Model):
 
 class Sale(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     sale_date = db.Column(db.Date, nullable=False)
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'))
     items = db.relationship('SaleItem', backref='sale', lazy=True, cascade='all, delete-orphan')

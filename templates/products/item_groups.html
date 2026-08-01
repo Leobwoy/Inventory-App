@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+{% block title %}Item Groups | TrackTrack{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>Item Groups</h2>
+  <div class="page-header-actions">
+    <a href="{{ url_for('products.add_item_group') }}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> Add Item Group</a>
+  </div>
+</div>
+
+<div class="glass-card">
+  {% if item_groups %}
+  <div class="table-responsive">
+    <table class="table table-hover table-cards">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Category</th>
+          <th>Products</th>
+          <th class="text-end">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item_group in item_groups %}
+        <tr>
+          <td data-label="Name" class="fw-bold">{{ item_group.name }}</td>
+          <td data-label="Category" class="text-muted">{{ item_group.category.name if item_group.category else '—' }}</td>
+          <td data-label="Products" class="text-muted">{{ item_group.products|length }}</td>
+          <td data-label="" class="cell-actions text-end">
+            <a href="{{ url_for('products.edit_item_group', item_group_id=item_group.id) }}" class="btn btn-sm btn-outline-primary">
+              <i class="bi bi-pencil"></i>
+            </a>
+            <form action="{{ url_for('products.delete_item_group', item_group_id=item_group.id) }}" method="post" style="display:inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button type="submit" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('Delete this item group?');">
+                <i class="bi bi-trash"></i>
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center py-5">
+    <i class="bi bi-collection fs-1 text-muted d-block mb-3"></i>
+    <h5>No item groups yet</h5>
+    <p class="text-muted">
+      An item group is the generic product concept that brands compete within &mdash; &ldquo;Bottled Water&rdquo;,
+      &ldquo;Soft Drinks&rdquo;. Grouping BelAqua and Verna under one item group is what lets you compare them later.
+    </p>
+    <a href="{{ url_for('products.add_item_group') }}" class="btn btn-primary mt-2">Add your first item group</a>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

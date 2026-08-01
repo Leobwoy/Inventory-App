@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block title %}{{ action }} Brand | TrackTrack{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h2>{{ action }} Brand</h2>
+  <div class="page-header-actions">
+    <a href="{{ url_for('products.list_brands') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back to Brands</a>
+  </div>
+</div>
+
+<div class="glass-card" style="max-width: 600px;">
+  <form method="post">
+    {{ form.hidden_tag() }}
+    <div class="mb-3">
+      <label class="form-label">{{ form.name.label.text }}</label>
+      {{ form.name(class_='form-control' + (' is-invalid' if form.name.errors else ''), placeholder='e.g. BelAqua') }}
+      {% for error in form.name.errors %}
+      <div class="invalid-feedback">{{ error }}</div>
+      {% endfor %}
+    </div>
+    <div class="d-flex gap-2">
+      <button type="submit" class="btn btn-primary px-4">{{ action }} Brand</button>
+      <a href="{{ url_for('products.list_brands') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

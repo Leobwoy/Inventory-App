@@ -32,6 +32,7 @@
                     <td data-label="" class="cell-actions text-end">
                         <a href="{{ url_for('sales.edit_customer', customer_id=customer.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
                         <form action="{{ url_for('sales.delete_customer', customer_id=customer.id) }}" method="post" style="display:inline;">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('Delete this customer?');"><i class="bi bi-trash"></i></button>
                         </form>
                     </td>

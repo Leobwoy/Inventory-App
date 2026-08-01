@@ -78,11 +78,13 @@
                         </ul>
                     </td>
                     <td data-label="Total" class="text-end fw-medium text-success">
-                        {% set row_total = 0 %}
+                        {# namespace is required: a plain {% set %} inside a for-loop is
+                           scoped to the iteration, so the total always came out as 0 #}
+                        {% set row = namespace(total=0) %}
                         {% for item in sale.items %}
-                            {% set row_total = row_total + (item.price_at_sale * item.quantity) %}
+                            {% set row.total = row.total + (item.price_at_sale * item.quantity) %}
                         {% endfor %}
-                        ₵{{ row_total | round(2) }}
+                        ₵{{ '%.2f'|format(row.total) }}
                     </td>
                 </tr>
                 {% endfor %}
@@ -97,7 +99,7 @@
                                 {% set ns.grand_total = ns.grand_total + (item.price_at_sale * item.quantity) %}
                             {% endfor %}
                         {% endfor %}
-                        ₵{{ ns.grand_total | round(2) }}
+                        ₵{{ '%.2f'|format(ns.grand_total) }}
                     </td>
                 </tr>
             </tfoot>
