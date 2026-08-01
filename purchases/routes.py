@@ -9,9 +9,11 @@ import pandas as pd
 from flask import send_file
 import io
 from flask_login import login_required, current_user
+from auth.decorators import permission_required
 
 @purchases_bp.route('/')
 @login_required
+@permission_required('purchase_orders.view')
 def list_purchases():
     page = request.args.get('page', 1, type=int)
     pagination = PurchaseOrder.query.filter_by(business_id=current_user.business_id).order_by(PurchaseOrder.order_date.desc()).paginate(page=page, per_page=15, error_out=False)
@@ -19,6 +21,7 @@ def list_purchases():
 
 @purchases_bp.route('/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('purchase_orders.create')
 def add_purchase():
     form = PurchaseOrderForm()
     supplier_choices = [(0, 'No Supplier')] + [(s.id, s.name) for s in Supplier.query.filter_by(business_id=current_user.business_id).order_by(Supplier.name)]
@@ -64,6 +67,7 @@ def add_purchase():
 
 @purchases_bp.route('/receive/<int:po_id>', methods=['GET', 'POST'])
 @login_required
+@permission_required('purchase_orders.receive')
 def receive_po(po_id):
     po = PurchaseOrder.query.filter_by(id=po_id, business_id=current_user.business_id).first_or_404()
     if po.status == 'received':
@@ -109,6 +113,14 @@ def bulk_action():
     if not ids:
         flash('No Purchase Orders selected.', 'warning')
         return redirect(url_for('purchases.list_purchases'))
+    # Checked per action, not on the route: one endpoint, several privilege levels.
+    # Deleting a PO destroys spend history, so it needs approval rights.
+    required = {'delete': 'purchase_orders.approve',
+                'export_csv': 'reports.export'}.get(action)
+    if not required or not current_user.can(required):
+        flash('You do not have permission to do that.', 'danger')
+        return redirect(url_for('purchases.list_purchases'))
+
     pos = PurchaseOrder.query.filter(PurchaseOrder.id.in_(ids), PurchaseOrder.business_id == current_user.business_id).all()
     if action == 'delete':
         try:

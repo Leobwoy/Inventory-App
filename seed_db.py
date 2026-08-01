@@ -105,13 +105,22 @@ def seed(auto_yes=False):
         db.session.flush()
 
         roles = {r.name: r for r in Role.query.all()}
-        db.session.add(User(business_id=business.id, name='Kofi Mensah', email=OWNER_EMAIL,
-                            password_hash=generate_password_hash(DEMO_PASSWORD),
-                            role_id=roles['Owner'].id, must_change_password=False))
+        owner = User(business_id=business.id, name='Kofi Mensah', email=OWNER_EMAIL,
+                     password_hash=generate_password_hash(DEMO_PASSWORD),
+                     role_id=roles['Owner'].id, must_change_password=False)
+        db.session.add(owner)
+        db.session.flush()
+        owner.apply_role_preset('Owner')
+
         for name, email, role_name in STAFF:
-            db.session.add(User(business_id=business.id, name=name, email=email,
-                                password_hash=generate_password_hash(DEMO_PASSWORD),
-                                role_id=roles[role_name].id, must_change_password=False))
+            staff = User(business_id=business.id, name=name, email=email,
+                         password_hash=generate_password_hash(DEMO_PASSWORD),
+                         role_id=roles[role_name].id, must_change_password=False)
+            db.session.add(staff)
+            db.session.flush()
+            # Roles are only presets - authorization reads UserPermission, so
+            # without this the seeded staff would have no permissions at all.
+            staff.apply_role_preset(role_name)
 
         # --- catalogue --------------------------------------------------------
         categories = {}

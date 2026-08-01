@@ -31,6 +31,19 @@ class RolePermission(db.Model):
     role_id = db.Column(db.Integer, db.ForeignKey('role.id'), primary_key=True)
     permission_id = db.Column(db.Integer, db.ForeignKey('permission.id'), primary_key=True)
 
+class UserPermission(db.Model):
+    """The single source of truth for what a user may do.
+
+    Roles are presets: picking one at user creation copies its permissions in
+    here, after which the Owner edits them per person. Authorization never reads
+    Role, so there are no precedence rules to reason about when debugging why
+    someone can or cannot do something.
+    """
+    __tablename__ = 'user_permission'
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id', ondelete='CASCADE'), primary_key=True)
+    permission_id = db.Column(db.Integer, db.ForeignKey('permission.id', ondelete='CASCADE'), primary_key=True)
+    granted_at = db.Column(db.DateTime, default=datetime.utcnow)
+
 class User(UserMixin, db.Model):
     # Globally unique, deliberately - unlike the other tenant-scoped tables. An
     # email must identify a *person*, because every identity-recovery flow
@@ -47,6 +60,43 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login_at = db.Column(db.DateTime)
+
+    permissions = db.relationship(
+        'Permission',
+        secondary='user_permission',
+        backref=db.backref('users', lazy='dynamic'),
+        lazy='joined',           # loaded with the user; can() is called on every request
+    )
+
+    # Owner is the account that registered the business. It always holds every
+    # permission, so revoking one by accident can never lock a business out of
+    # its own data.
+    OWNER_ROLE = 'Owner'
+
+    @property
+    def is_owner(self):
+        return bool(self.role and self.role.name == self.OWNER_ROLE)
+
+    def can(self, permission_code):
+        """True if this user holds `permission_code`. Owners hold everything."""
+        if not self.is_active:
+            return False
+        if self.is_owner:
+            return True
+        return any(p.code == permission_code for p in self.permissions)
+
+    def permission_codes(self):
+        return {p.code for p in self.permissions}
+
+    def set_permissions(self, codes):
+        """Replace this user's permissions with exactly `codes`."""
+        codes = list(codes)
+        self.permissions = Permission.query.filter(Permission.code.in_(codes)).all() if codes else []
+
+    def apply_role_preset(self, role_name):
+        """Seed permissions from a role preset. Presets are a starting point only."""
+        from auth.permissions import preset_for
+        self.set_permissions(preset_for(role_name))
 
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)

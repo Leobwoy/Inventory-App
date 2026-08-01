@@ -13,9 +13,11 @@ import pandas as pd
 from flask import send_file
 import io
 from flask_login import login_required, current_user
+from auth.decorators import permission_required
 
 @products_bp.route('/')
 @login_required
+@permission_required('products.view')
 def list_products():
     page = request.args.get('page', 1, type=int)
     search_query = request.args.get('q', '').strip()
@@ -72,6 +74,7 @@ def _scoped_catalogue(form):
 
 @products_bp.route('/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('products.create')
 def add_product():
     form = ProductForm()
     form.category_id.choices = [(0, 'No Category')] + [(c.id, c.name) for c in Category.query.filter_by(business_id=current_user.business_id).order_by(Category.name)]
@@ -117,6 +120,7 @@ def add_product():
 
 @products_bp.route('/edit/<int:product_id>', methods=['GET', 'POST'])
 @login_required
+@permission_required('products.edit')
 def edit_product(product_id):
     product = Product.query.filter_by(id=product_id, business_id=current_user.business_id).first_or_404()
     form = ProductForm(obj=product)
@@ -160,6 +164,7 @@ def edit_product(product_id):
 
 @products_bp.route('/delete/<int:product_id>', methods=['POST'])
 @login_required
+@permission_required('products.delete')
 def delete_product(product_id):
     product = Product.query.filter_by(id=product_id, business_id=current_user.business_id).first_or_404()
     db.session.delete(product)
@@ -169,6 +174,7 @@ def delete_product(product_id):
 
 @products_bp.route('/upload', methods=['GET', 'POST'])
 @login_required
+@permission_required('products.create')
 def upload_products():
     form = ProductUploadForm()
     if form.validate_on_submit():
@@ -253,6 +259,14 @@ def bulk_action():
     if not ids:
         flash('No products selected.', 'warning')
         return redirect(url_for('products.list_products'))
+    # Checked per action, not on the route: one endpoint, several privilege levels.
+    required = {'delete': 'products.delete',
+                'export_csv': 'reports.export',
+                'export_excel': 'reports.export'}.get(action)
+    if not required or not current_user.can(required):
+        flash('You do not have permission to do that.', 'danger')
+        return redirect(url_for('products.list_products'))
+
     products = Product.query.filter(Product.id.in_(ids), Product.business_id == current_user.business_id).all()
     if action == 'delete':
         for product in products:
@@ -301,12 +315,14 @@ def bulk_action():
 # Category management
 @products_bp.route('/categories')
 @login_required
+@permission_required('catalogue.manage')
 def list_categories():
     categories = Category.query.filter_by(business_id=current_user.business_id).order_by(Category.name).all()
     return render_template('products/categories.html', categories=categories)
 
 @products_bp.route('/categories/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('catalogue.manage')
 def add_category():
     form = CategoryForm()
     if form.validate_on_submit():
@@ -319,6 +335,7 @@ def add_category():
 
 @products_bp.route('/categories/edit/<int:category_id>', methods=['GET', 'POST'])
 @login_required
+@permission_required('catalogue.manage')
 def edit_category(category_id):
     category = Category.query.filter_by(id=category_id, business_id=current_user.business_id).first_or_404()
     form = CategoryForm(obj=category)
@@ -331,6 +348,7 @@ def edit_category(category_id):
 
 @products_bp.route('/categories/delete/<int:category_id>', methods=['POST'])
 @login_required
+@permission_required('catalogue.manage')
 def delete_category(category_id):
     category = Category.query.filter_by(id=category_id, business_id=current_user.business_id).first_or_404()
     db.session.delete(category)
@@ -341,12 +359,14 @@ def delete_category(category_id):
 # Brand management
 @products_bp.route('/brands')
 @login_required
+@permission_required('catalogue.manage')
 def list_brands():
     brands = Brand.query.filter_by(business_id=current_user.business_id).order_by(Brand.name).all()
     return render_template('products/brands.html', brands=brands)
 
 @products_bp.route('/brands/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('catalogue.manage')
 def add_brand():
     form = BrandForm()
     if form.validate_on_submit():
@@ -359,6 +379,7 @@ def add_brand():
 
 @products_bp.route('/brands/edit/<int:brand_id>', methods=['GET', 'POST'])
 @login_required
+@permission_required('catalogue.manage')
 def edit_brand(brand_id):
     brand = Brand.query.filter_by(id=brand_id, business_id=current_user.business_id).first_or_404()
     form = BrandForm(obj=brand)
@@ -371,6 +392,7 @@ def edit_brand(brand_id):
 
 @products_bp.route('/brands/delete/<int:brand_id>', methods=['POST'])
 @login_required
+@permission_required('catalogue.manage')
 def delete_brand(brand_id):
     brand = Brand.query.filter_by(id=brand_id, business_id=current_user.business_id).first_or_404()
     db.session.delete(brand)
@@ -381,12 +403,14 @@ def delete_brand(brand_id):
 # Item Group management
 @products_bp.route('/item_groups')
 @login_required
+@permission_required('catalogue.manage')
 def list_item_groups():
     item_groups = ItemGroup.query.filter_by(business_id=current_user.business_id).order_by(ItemGroup.name).all()
     return render_template('products/item_groups.html', item_groups=item_groups)
 
 @products_bp.route('/item_groups/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('catalogue.manage')
 def add_item_group():
     form = ItemGroupForm()
     form.category_id.choices = [(0, 'No Category')] + [(c.id, c.name) for c in Category.query.filter_by(business_id=current_user.business_id).order_by(Category.name)]
@@ -401,6 +425,7 @@ def add_item_group():
 
 @products_bp.route('/item_groups/edit/<int:item_group_id>', methods=['GET', 'POST'])
 @login_required
+@permission_required('catalogue.manage')
 def edit_item_group(item_group_id):
     item_group = ItemGroup.query.filter_by(id=item_group_id, business_id=current_user.business_id).first_or_404()
     form = ItemGroupForm(obj=item_group)
@@ -417,6 +442,7 @@ def edit_item_group(item_group_id):
 
 @products_bp.route('/item_groups/delete/<int:item_group_id>', methods=['POST'])
 @login_required
+@permission_required('catalogue.manage')
 def delete_item_group(item_group_id):
     item_group = ItemGroup.query.filter_by(id=item_group_id, business_id=current_user.business_id).first_or_404()
     db.session.delete(item_group)
@@ -427,12 +453,14 @@ def delete_item_group(item_group_id):
 # Supplier management
 @products_bp.route('/suppliers')
 @login_required
+@permission_required('suppliers.view')
 def list_suppliers():
     suppliers = Supplier.query.filter_by(business_id=current_user.business_id).order_by(Supplier.name).all()
     return render_template('products/suppliers.html', suppliers=suppliers)
 
 @products_bp.route('/suppliers/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('suppliers.manage')
 def add_supplier():
     form = SupplierForm()
     if form.validate_on_submit():
@@ -452,6 +480,7 @@ def add_supplier():
 
 @products_bp.route('/suppliers/edit/<int:supplier_id>', methods=['GET', 'POST'])
 @login_required
+@permission_required('suppliers.manage')
 def edit_supplier(supplier_id):
     supplier = Supplier.query.filter_by(id=supplier_id, business_id=current_user.business_id).first_or_404()
     form = SupplierForm(obj=supplier)
@@ -464,6 +493,7 @@ def edit_supplier(supplier_id):
 
 @products_bp.route('/suppliers/delete/<int:supplier_id>', methods=['POST'])
 @login_required
+@permission_required('suppliers.manage')
 def delete_supplier(supplier_id):
     supplier = Supplier.query.filter_by(id=supplier_id, business_id=current_user.business_id).first_or_404()
     db.session.delete(supplier)

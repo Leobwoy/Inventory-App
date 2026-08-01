@@ -4,6 +4,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from auth.models import User, Business, Role
 from auth.forms import RegistrationForm, ChangePasswordForm, UserForm
 from auth.decorators import permission_required
+from auth.permissions import ALL as ALL_PERMISSION_CODES, GROUP_ORDER, PERMISSIONS
 from products.models import Brand, ItemGroup
 from extensions import db
 from sqlalchemy import func
@@ -98,6 +99,10 @@ def register():
             must_change_password=False
         )
         db.session.add(new_user)
+        db.session.flush()
+        # Owners implicitly hold everything via User.can(), but write the rows too so
+        # the permission grid renders correctly for them.
+        new_user.apply_role_preset('Owner')
 
         # 4. Seed catalogue fallbacks. Product.brand_id and item_group_id are NOT NULL,
         # so without these the business cannot save a single product.
@@ -155,17 +160,98 @@ def add_user():
                 flash('That email address already has a TrackTrack account.', 'danger')
                 return render_template('auth/add_user.html', form=form, roles=roles)
                 
+            role = Role.query.get(role_id)
+            if not role or role.name == 'Owner':
+                # Owner is the account that registered the business; it is not
+                # assignable, or a staff member could be handed the whole tenant.
+                flash('Select a valid role.', 'danger')
+                return render_template('auth/add_user.html', form=form, roles=roles)
+
             new_user = User(
                 business_id=current_user.business_id,
                 name=form.name.data,
                 email=form.email.data,
                 password_hash=generate_password_hash(form.password.data),
-                role_id=role_id,
+                role_id=role.id,
                 must_change_password=True  # Force reset for staff created by admin
             )
             db.session.add(new_user)
+            db.session.flush()
+
+            # The role seeds a starting set; the Owner tunes it per person afterwards.
+            new_user.apply_role_preset(role.name)
             db.session.commit()
-            flash(f'User {new_user.name} added successfully. They must change their password on first login.', 'success')
-            return redirect(url_for('auth.users_list'))
-            
+            flash(f'{new_user.name} added. Review their permissions, and note they must '
+                  'change their password on first login.', 'success')
+            return redirect(url_for('auth.edit_user_permissions', user_id=new_user.id))
+
     return render_template('auth/add_user.html', form=form, roles=roles)
+
+
+@auth_bp.route('/users/<int:user_id>/permissions', methods=['GET', 'POST'])
+@login_required
+@permission_required('users.manage')
+def edit_user_permissions(user_id):
+    """Per-person permission grid. UserPermission is the authority, not Role."""
+    user = User.query.filter_by(id=user_id, business_id=current_user.business_id).first_or_404()
+
+    if user.is_owner:
+        flash("The Owner always holds every permission and cannot be restricted.", 'info')
+        return redirect(url_for('auth.users_list'))
+
+    if request.method == 'POST':
+        submitted = set(request.form.getlist('permissions'))
+        # Ignore anything not in the catalogue - never trust posted codes.
+        user.set_permissions(submitted & ALL_PERMISSION_CODES)
+        db.session.commit()
+        flash(f"Permissions updated for {user.name}.", 'success')
+        return redirect(url_for('auth.users_list'))
+
+    granted = user.permission_codes()
+    grouped = {}
+    for code, (description, group) in PERMISSIONS.items():
+        grouped.setdefault(group, []).append((code, description, code in granted))
+    ordered = [(g, grouped[g]) for g in GROUP_ORDER if g in grouped]
+
+    return render_template('auth/user_permissions.html', user=user, grouped=ordered,
+                           roles=Role.query.filter(Role.name != 'Owner').all())
+
+
+@auth_bp.route('/users/<int:user_id>/apply_preset', methods=['POST'])
+@login_required
+@permission_required('users.manage')
+def apply_user_preset(user_id):
+    """Reset a user's permissions to a role preset, as a starting point."""
+    user = User.query.filter_by(id=user_id, business_id=current_user.business_id).first_or_404()
+    if user.is_owner:
+        flash("The Owner's permissions cannot be changed.", 'warning')
+        return redirect(url_for('auth.users_list'))
+
+    role = Role.query.filter(Role.id == request.form.get('role_id', type=int),
+                             Role.name != 'Owner').first()
+    if not role:
+        flash('Select a valid role.', 'danger')
+        return redirect(url_for('auth.edit_user_permissions', user_id=user.id))
+
+    user.role_id = role.id
+    user.apply_role_preset(role.name)
+    db.session.commit()
+    flash(f"{user.name} reset to the {role.name} preset. Adjust individual permissions below.", 'success')
+    return redirect(url_for('auth.edit_user_permissions', user_id=user.id))
+
+
+@auth_bp.route('/users/<int:user_id>/toggle_active', methods=['POST'])
+@login_required
+@permission_required('users.manage')
+def toggle_user_active(user_id):
+    """Suspend or reinstate a staff member. Never hard-delete - it breaks the audit trail."""
+    user = User.query.filter_by(id=user_id, business_id=current_user.business_id).first_or_404()
+    if user.is_owner:
+        flash('The Owner account cannot be suspended.', 'warning')
+    elif user.id == current_user.id:
+        flash('You cannot suspend your own account.', 'warning')
+    else:
+        user.is_active = not user.is_active
+        db.session.commit()
+        flash(f"{user.name} {'reinstated' if user.is_active else 'suspended'}.", 'success')
+    return redirect(url_for('auth.users_list'))

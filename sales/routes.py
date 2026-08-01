@@ -10,10 +10,12 @@ from flask import send_file
 import io
 from .models import SaleItem
 from flask_login import login_required, current_user
+from auth.decorators import permission_required
 from purchases.models import StockBatch
 
 @sales_bp.route('/')
 @login_required
+@permission_required('sales.view')
 def list_sales():
     page = request.args.get('page', 1, type=int)
     pagination = Sale.query.filter_by(business_id=current_user.business_id).order_by(Sale.sale_date.desc()).paginate(page=page, per_page=15, error_out=False)
@@ -21,6 +23,7 @@ def list_sales():
 
 @sales_bp.route('/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('sales.create')
 def add_sale():
     form = SaleForm()
     product_choices = [(str(p.id), p.name) for p in Product.query.filter_by(business_id=current_user.business_id).all()]
@@ -83,12 +86,14 @@ def add_sale():
 # Customer management
 @sales_bp.route('/customers')
 @login_required
+@permission_required('customers.view')
 def list_customers():
     customers = Customer.query.filter_by(business_id=current_user.business_id).order_by(Customer.name).all()
     return render_template('sales/customers.html', customers=customers)
 
 @sales_bp.route('/customers/add', methods=['GET', 'POST'])
 @login_required
+@permission_required('customers.manage')
 def add_customer():
     form = CustomerForm()
     if form.validate_on_submit():
@@ -106,6 +111,7 @@ def add_customer():
 
 @sales_bp.route('/customers/edit/<int:customer_id>', methods=['GET', 'POST'])
 @login_required
+@permission_required('customers.manage')
 def edit_customer(customer_id):
     customer = Customer.query.filter_by(id=customer_id, business_id=current_user.business_id).first_or_404()
     form = CustomerForm(obj=customer)
@@ -118,6 +124,7 @@ def edit_customer(customer_id):
 
 @sales_bp.route('/customers/delete/<int:customer_id>', methods=['POST'])
 @login_required
+@permission_required('customers.manage')
 def delete_customer(customer_id):
     customer = Customer.query.filter_by(id=customer_id, business_id=current_user.business_id).first_or_404()
     db.session.delete(customer)
@@ -133,6 +140,15 @@ def bulk_action():
     if not ids:
         flash('No sales selected.', 'warning')
         return redirect(url_for('sales.list_sales'))
+    # Checked per action, not on the route: one endpoint, several privilege levels.
+    required = {'delete': 'sales.void',
+                'export_csv': 'reports.export',
+                'export_excel': 'reports.export',
+                'print_invoices': 'sales.view'}.get(action)
+    if not required or not current_user.can(required):
+        flash('You do not have permission to do that.', 'danger')
+        return redirect(url_for('sales.list_sales'))
+
     sales = Sale.query.filter(Sale.id.in_(ids), Sale.business_id == current_user.business_id).all()
     if action == 'delete':
         try:
@@ -196,6 +212,7 @@ def bulk_action():
 
 @sales_bp.route('/invoice/<int:sale_id>')
 @login_required
+@permission_required('sales.view')
 def sale_invoice(sale_id):
     sale = Sale.query.filter_by(id=sale_id, business_id=current_user.business_id).first_or_404()
     customer_name = request.args.get('customer_name')
@@ -203,6 +220,7 @@ def sale_invoice(sale_id):
 
 @sales_bp.route('/bulk_print_invoices')
 @login_required
+@permission_required('sales.view')
 def bulk_print_invoices():
     ids = request.args.get('ids', '')
     id_list = [int(i) for i in ids.split(',') if i.isdigit()]

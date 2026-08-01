@@ -16,7 +16,9 @@
             <tr>
                 <th>Name</th>
                 <th>Email</th>
-                <th>Role</th>
+                <th>Role preset</th>
+                <th>Permissions</th>
+                <th>Last login</th>
                 <th>Status</th>
                 <th class="text-end">Actions</th>
             </tr>
@@ -24,25 +26,57 @@
         <tbody>
             {% for user in users %}
             <tr>
-                <td data-label="Name" class="fw-medium">{{ user.name }}</td>
+                <td data-label="Name" class="fw-medium">
+                    {{ user.name }}
+                    {% if user.id == current_user.id %}<span class="text-muted small">(you)</span>{% endif %}
+                </td>
                 <td data-label="Email">{{ user.email }}</td>
                 <td data-label="Role">
-                    <span class="badge bg-secondary">{{ user.role.name }}</span>
+                    <span class="badge bg-secondary">{{ user.role.name if user.role else 'None' }}</span>
+                </td>
+                <td data-label="Permissions" class="text-muted">
+                    {% if user.is_owner %}
+                        <span class="badge bg-primary">All</span>
+                    {% else %}
+                        {{ user.permissions|length }} granted
+                    {% endif %}
+                </td>
+                <td data-label="Last login" class="text-muted">
+                    {{ user.last_login_at.strftime('%Y-%m-%d %H:%M') if user.last_login_at else 'Never' }}
                 </td>
                 <td data-label="Status">
                     {% if user.is_active %}
                         <span class="badge bg-success">Active</span>
                     {% else %}
-                        <span class="badge bg-danger">Inactive</span>
+                        <span class="badge bg-danger">Suspended</span>
                     {% endif %}
                 </td>
                 <td data-label="Actions" class="text-end cell-actions">
-                    <a href="#" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                    {% if not user.is_owner %}
+                    <a href="{{ url_for('auth.edit_user_permissions', user_id=user.id) }}"
+                       class="btn btn-sm btn-outline-primary" title="Edit permissions">
+                        <i class="bi bi-sliders"></i>
+                    </a>
+                    {% if user.id != current_user.id %}
+                    <form method="post" action="{{ url_for('auth.toggle_user_active', user_id=user.id) }}"
+                          style="display:inline;">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                        <button type="submit"
+                                class="btn btn-sm btn-outline-{{ 'warning' if user.is_active else 'success' }} ms-1"
+                                title="{{ 'Suspend' if user.is_active else 'Reinstate' }}"
+                                onclick="return confirm('{{ 'Suspend' if user.is_active else 'Reinstate' }} {{ user.name }}?');">
+                            <i class="bi bi-{{ 'pause' if user.is_active else 'play' }}"></i>
+                        </button>
+                    </form>
+                    {% endif %}
+                    {% else %}
+                    <span class="text-muted small">Owner</span>
+                    {% endif %}
                 </td>
             </tr>
             {% else %}
             <tr>
-                <td colspan="5" class="text-center py-4 text-muted">No users found for your business.</td>
+                <td colspan="7" class="text-center py-4 text-muted">No staff yet. Add someone to get started.</td>
             </tr>
             {% endfor %}
         </tbody>

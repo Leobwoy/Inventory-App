@@ -1,4 +1,4 @@
-from flask import render_template, request, make_response
+from flask import render_template, request, make_response, flash
 from . import reports_bp
 from sales.models import Sale, SaleItem
 from purchases.models import PurchaseOrder, PurchaseOrderItem
@@ -13,6 +13,7 @@ from reportlab.lib import colors
 from reportlab.platypus import Table, TableStyle
 import pandas as pd
 from flask_login import login_required, current_user
+from auth.decorators import permission_required
 
 def generate_pdf_report(title, headers, data_rows):
     buffer = io.BytesIO()
@@ -60,6 +61,7 @@ def export_to_csv(headers, data_rows, filename):
 
 @reports_bp.route('/sales')
 @login_required
+@permission_required('reports.view')
 def sales_report():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
@@ -94,6 +96,9 @@ def sales_report():
     headers = ['Date', 'Product', 'Quantity', 'Unit Price', 'Total']
     data_rows.append(['', '', '', 'Summary Total', float(total)])
     export = request.args.get('export')
+    if export and not current_user.can('reports.export'):
+        flash('You do not have permission to export reports.', 'danger')
+        export = None
     if export == 'pdf':
         pdf_buffer = generate_pdf_report('Sales Report', headers, data_rows)
         response = make_response(pdf_buffer.read())
@@ -108,6 +113,7 @@ def sales_report():
 
 @reports_bp.route('/purchases')
 @login_required
+@permission_required('reports.view')
 def purchases_report():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
@@ -148,6 +154,9 @@ def purchases_report():
     ] for item in purchases]
     data_rows.append(['', '', '', '', '', '', '', 'Summary Total', float(total)])
     export = request.args.get('export')
+    if export and not current_user.can('reports.export'):
+        flash('You do not have permission to export reports.', 'danger')
+        export = None
     if export == 'pdf':
         pdf_buffer = generate_pdf_report('Purchases Report', headers, data_rows)
         response = make_response(pdf_buffer.read())
@@ -162,11 +171,15 @@ def purchases_report():
 
 @reports_bp.route('/stock')
 @login_required
+@permission_required('reports.view')
 def stock_report():
     products = Product.query.filter_by(business_id=current_user.business_id).all()
     headers = ['Name', 'SKU', 'Description', 'Unit Price', 'Quantity in Stock']
     data_rows = [[p.name, p.sku, p.description, float(p.unit_price), p.quantity_in_stock] for p in products]
     export = request.args.get('export')
+    if export and not current_user.can('reports.export'):
+        flash('You do not have permission to export reports.', 'danger')
+        export = None
     if export == 'pdf':
         pdf_buffer = generate_pdf_report('Stock Report', headers, data_rows)
         response = make_response(pdf_buffer.read())
