@@ -57,6 +57,19 @@ def generate_sku(brand, item_group, variant_label=None, business_id=None):
     return candidate[:50]
 
 
+def _strip_cost_price(form):
+    """Remove cost_price from a form when the user may not see it.
+
+    Deleting the bound field, rather than just hiding it in the template, means
+    validation does not demand a value the user was never shown, and a value
+    posted by hand is ignored rather than saved.
+    """
+    if not current_user.can('products.cost_price.view'):
+        del form.cost_price
+        return False
+    return True
+
+
 def _scoped_catalogue(form):
     """Resolve brand/item group/category from the form, scoped to the caller's business.
 
@@ -77,6 +90,7 @@ def _scoped_catalogue(form):
 @permission_required('products.create')
 def add_product():
     form = ProductForm()
+    may_see_cost = _strip_cost_price(form)
     form.category_id.choices = [(0, 'No Category')] + [(c.id, c.name) for c in Category.query.filter_by(business_id=current_user.business_id).order_by(Category.name)]
     form.brand_id.choices = [(b.id, b.name) for b in Brand.query.filter_by(business_id=current_user.business_id).order_by(Brand.name)]
     form.item_group_id.choices = [(i.id, i.name) for i in ItemGroup.query.filter_by(business_id=current_user.business_id).order_by(ItemGroup.name)]
@@ -98,7 +112,10 @@ def add_product():
             sku=(form.sku.data or '').strip() or generate_sku(brand, item_group, form.variant_label.data),
             barcode=form.barcode.data,
             description=form.description.data,
-            cost_price=form.cost_price.data,
+            # Staff without cost visibility create the product at zero cost; an
+            # Owner or Manager fills it in later. Never inferred from sale price,
+            # which would fabricate a margin.
+            cost_price=form.cost_price.data if may_see_cost else 0,
             unit_price=form.unit_price.data,
             quantity_in_stock=0, # Initialized to 0, managed via StockBatch
             min_stock_alert=form.min_stock_alert.data or 0,
@@ -115,6 +132,9 @@ def add_product():
         db.session.add(product)
         db.session.commit()
         flash(f'Product added as {product.sku}. Stock is added by receiving a Purchase Order.', 'success')
+        if not may_see_cost:
+            flash('Cost price was left at 0 — ask an Owner or Manager to set it so margin '
+                  'reporting is accurate.', 'warning')
         return redirect(url_for('products.list_products'))
     return render_template('products/add_edit.html', form=form, action='Add')
 
@@ -124,6 +144,7 @@ def add_product():
 def edit_product(product_id):
     product = Product.query.filter_by(id=product_id, business_id=current_user.business_id).first_or_404()
     form = ProductForm(obj=product)
+    may_see_cost = _strip_cost_price(form)
     form.category_id.choices = [(0, 'No Category')] + [(c.id, c.name) for c in Category.query.filter_by(business_id=current_user.business_id).order_by(Category.name)]
     form.brand_id.choices = [(b.id, b.name) for b in Brand.query.filter_by(business_id=current_user.business_id).order_by(Brand.name)]
     form.item_group_id.choices = [(i.id, i.name) for i in ItemGroup.query.filter_by(business_id=current_user.business_id).order_by(ItemGroup.name)]
@@ -138,9 +159,19 @@ def edit_product(product_id):
             return render_template('products/add_edit.html', form=form, action='Edit')
 
         existing_sku, existing_qty = product.sku, product.quantity_in_stock
+        existing_cost = product.cost_price
         form.populate_obj(product)
 
-        product.category = category
+        # populate_obj skips the deleted field, but be explicit: a user who cannot
+        # see cost price must never overwrite it, not even to null.
+        if not may_see_cost:
+            product.cost_price = existing_cost
+
+        # Set the FK column, not the relationship. populate_obj has already written
+        # category_id = 0 (the "No Category" sentinel), and assigning
+        # product.category = None is a no-op when the relationship is already None -
+        # so the 0 would survive and violate the foreign key.
+        product.category_id = category.id if category else None
         product.brand_id = brand.id
         product.item_group_id = item_group.id
 
@@ -275,17 +306,27 @@ def bulk_action():
         flash(f'{len(products)} products deleted.', 'success')
         return redirect(url_for('products.list_products'))
     elif action in ('export_csv', 'export_excel'):
-        headers = ['Name', 'SKU', 'Brand', 'Item Group', 'Variant', 'Cost Price', 'Unit Price', 'Quantity in Stock']
-        data = [[
-            p.name,
-            p.sku,
-            p.brand.name if p.brand else '',
-            p.item_group.name if p.item_group else '',
-            p.variant_label,
-            float(p.cost_price or 0),
-            float(p.unit_price or 0),
-            p.quantity_in_stock,
-        ] for p in products]
+        # The export is the easiest way to walk out with margins, so it obeys the
+        # same gate as the screen - the column is omitted entirely, not blanked.
+        show_cost = current_user.can('products.cost_price.view')
+        headers = ['Name', 'SKU', 'Brand', 'Item Group', 'Variant']
+        if show_cost:
+            headers.append('Cost Price')
+        headers += ['Unit Price', 'Quantity in Stock']
+
+        data = []
+        for p in products:
+            row = [
+                p.name,
+                p.sku,
+                p.brand.name if p.brand else '',
+                p.item_group.name if p.item_group else '',
+                p.variant_label,
+            ]
+            if show_cost:
+                row.append(float(p.cost_price or 0))
+            row += [float(p.unit_price or 0), p.quantity_in_stock]
+            data.append(row)
         df = pd.DataFrame(data, columns=headers)
 
         if action == 'export_excel':

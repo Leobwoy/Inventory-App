@@ -79,13 +79,21 @@
         </div>
 
         <div class="row g-4 mb-4">
+            {# Cost price is deliberately withheld from staff without the permission -
+               owners routinely do not want floor staff seeing purchase cost against
+               sale price. The route enforces this too; hiding here is only cosmetic. #}
+            {% if current_user.can('products.cost_price.view') %}
             <div class="col-md-3">
                 <label class="form-label">{{ form.cost_price.label.text }}</label>
                 <div class="input-group">
                     <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
-                    {{ form.cost_price(class_='form-control') }}
+                    {{ form.cost_price(class_='form-control' + (' is-invalid' if form.cost_price.errors else '')) }}
+                    {% for error in form.cost_price.errors %}
+                    <div class="invalid-feedback">{{ error }}</div>
+                    {% endfor %}
                 </div>
             </div>
+            {% endif %}
             <div class="col-md-3">
                 <label class="form-label">{{ form.unit_price.label.text }}</label>
                 <div class="input-group">
