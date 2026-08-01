@@ -32,16 +32,15 @@ class RolePermission(db.Model):
     permission_id = db.Column(db.Integer, db.ForeignKey('permission.id'), primary_key=True)
 
 class User(UserMixin, db.Model):
-    # Unique per business, not globally. Tenants are fully isolated, so the same
-    # person may hold accounts at two businesses (e.g. their own shop and a
-    # relative's). Login disambiguates by verifying the password against every
-    # candidate and only then offering a business picker - see auth/routes.py.
-    __table_args__ = (db.UniqueConstraint('business_id', 'email', name='uq_user_business_email'),)
-
+    # Globally unique, deliberately - unlike the other tenant-scoped tables. An
+    # email must identify a *person*, because every identity-recovery flow
+    # (password reset, MFA, security alerts, support lookups) depends on that.
+    # If one person ever needs accounts at two businesses, the answer is a
+    # Membership table, not a per-tenant email.
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    email = db.Column(db.String(100), nullable=False)
+    email = db.Column(db.String(100), nullable=False, unique=True)
     password_hash = db.Column(db.String(255), nullable=False)
     must_change_password = db.Column(db.Boolean, default=True)
     role_id = db.Column(db.Integer, db.ForeignKey('role.id'))

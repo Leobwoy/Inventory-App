@@ -21,37 +21,6 @@
                 {% endfor %}
               {% endif %}
             {% endwith %}
-            {% if businesses %}
-            {# Credentials matched more than one business. Only reached after the
-               password verified, so listing these discloses nothing to a stranger. #}
-            <p class="text-muted mb-3">
-                <i class="bi bi-building me-1"></i>
-                You have an account at more than one business. Which one are you signing in to?
-            </p>
-            <form method="POST" action="{{ url_for('auth.login') }}">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
-                <input type="hidden" name="email" value="{{ email }}"/>
-                <div class="mb-3">
-                    <label for="password" class="form-label">Confirm your password</label>
-                    <div class="input-group">
-                        <span class="input-group-text bg-transparent border-secondary text-muted"><i class="bi bi-lock"></i></span>
-                        <input type="password" class="form-control border-secondary" id="password" name="password"
-                               placeholder="••••••••" required autofocus>
-                    </div>
-                </div>
-                <div class="d-grid gap-2 mb-3">
-                    {% for business_id, business_name in businesses %}
-                    <button type="submit" name="business_id" value="{{ business_id }}"
-                            class="btn btn-outline-primary text-start py-2">
-                        <i class="bi bi-shop me-2"></i>{{ business_name }}
-                    </button>
-                    {% endfor %}
-                </div>
-                <a href="{{ url_for('auth.login') }}" class="btn btn-link w-100 text-muted text-decoration-none">
-                    Use a different email
-                </a>
-            </form>
-            {% else %}
             <form method="POST" action="{{ url_for('auth.login') }}">
                 <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
                 <div class="mb-3">
@@ -75,7 +44,6 @@
                     <a href="{{ url_for('auth.register') }}" class="text-primary text-decoration-none fw-medium">Register your business</a>
                 </div>
             </form>
-            {% endif %}
         </div>
     </div>
 </div>

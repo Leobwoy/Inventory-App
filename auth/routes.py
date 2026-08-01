@@ -28,36 +28,17 @@ def login():
     if request.method == 'POST':
         email = (request.form.get('email') or '').strip().lower()
         password = request.form.get('password') or ''
-        chosen_business = request.form.get('business_id', type=int)
 
-        # Email is unique per business, not globally (F-17), so an address may
-        # match users in several tenants. Verify the password against each and
-        # only then disclose which businesses matched - doing it the other way
-        # round would turn this form into a tenant-enumeration oracle.
-        candidates = User.query.filter(func.lower(User.email) == email).all()
-        matched = [u for u in candidates if check_password_hash(u.password_hash, password)]
+        # Email is globally unique, so an address resolves to exactly one account.
+        user = User.query.filter(func.lower(User.email) == email).first()
 
-        active = [u for u in matched if u.is_active]
-        if matched and not active:
+        # Check is_active before revealing anything about the password, so a
+        # deactivated account cannot be used as a password oracle.
+        if user and not user.is_active:
             flash("Your account is deactivated. Contact your administrator.", "danger")
             return render_template('login.html')
 
-        if len(active) > 1:
-            if chosen_business:
-                active = [u for u in active if u.business_id == chosen_business]
-            else:
-                # Same credentials at more than one business - let them pick.
-                return render_template(
-                    'login.html',
-                    email=email,
-                    businesses=sorted(
-                        ((u.business_id, u.business.name) for u in active),
-                        key=lambda pair: pair[1],
-                    ),
-                )
-
-        if len(active) == 1:
-            user = active[0]
+        if user and check_password_hash(user.password_hash, password):
             login_user(user)
             user.last_login_at = datetime.utcnow()
             db.session.commit()
@@ -84,11 +65,15 @@ def register():
     
     form = RegistrationForm()
     if form.validate_on_submit():
-        # No global email check: emails are unique per business (F-17), and a
-        # brand-new business cannot collide with itself. The same person may
-        # legitimately register more than one business.
+        # 1. Email identifies a person globally, so it may only back one account
+        existing_user = User.query.filter(
+            func.lower(User.email) == (form.email.data or '').strip().lower()
+        ).first()
+        if existing_user:
+            flash('That email address is already registered. Sign in instead.', 'danger')
+            return render_template('auth/register.html', form=form)
 
-        # 1. Get Owner role - the person registering the business owns it
+        # 2. Get Owner role - the person registering the business owns it
         owner_role = Role.query.filter_by(name='Owner').first()
         if not owner_role:
             flash('System error: Owner role not found. Please run database migrations.', 'danger')
@@ -163,13 +148,11 @@ def add_user():
             return render_template('auth/add_user.html', form=form, roles=roles)
             
         if form.validate_on_submit():
-            # Scoped to this business - the same address may exist in another tenant.
             existing_user = User.query.filter(
-                func.lower(User.email) == (form.email.data or '').strip().lower(),
-                User.business_id == current_user.business_id,
+                func.lower(User.email) == (form.email.data or '').strip().lower()
             ).first()
             if existing_user:
-                flash('Someone in this business is already using that email address.', 'danger')
+                flash('That email address already has a TrackTrack account.', 'danger')
                 return render_template('auth/add_user.html', form=form, roles=roles)
                 
             new_user = User(
