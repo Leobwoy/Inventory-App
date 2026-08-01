@@ -65,6 +65,16 @@ def add_purchase():
             flash(f'An error occurred: {str(e)}', 'danger')
     return render_template('purchases/add.html', form=form)
 
+def _parse_date(raw):
+    """Parse an ISO date from a form field, returning None for blank or malformed input."""
+    if not raw:
+        return None
+    try:
+        return date.fromisoformat(raw.strip())
+    except (ValueError, AttributeError):
+        return None
+
+
 @purchases_bp.route('/receive/<int:po_id>', methods=['GET', 'POST'])
 @login_required
 @permission_required('purchase_orders.receive')
@@ -75,35 +85,86 @@ def receive_po(po_id):
         return redirect(url_for('purchases.list_purchases'))
         
     if request.method == 'POST':
+        received_on = _parse_date(request.form.get('received_date')) or date.today()
+        if received_on > date.today():
+            flash('The receipt date cannot be in the future.', 'danger')
+            return render_template('purchases/receive.html', po=po, today=date.today())
+
         try:
+            errors, receipts = [], []
             for item in po.items:
-                qty_to_receive = item.quantity_ordered - item.quantity_received
-                if qty_to_receive > 0:
-                    item.quantity_received += qty_to_receive
-                    
-                    batch = StockBatch(
-                        business_id=current_user.business_id,
-                        product_id=item.product_id,
-                        po_item_id=item.id,
-                        batch_number=f"PO-{po.id}-ITEM-{item.id}",
-                        quantity_received=qty_to_receive,
-                        quantity_remaining=qty_to_receive,
-                        received_date=date.today()
+                outstanding = item.quantity_ordered - (item.quantity_received or 0)
+                if outstanding <= 0:
+                    continue
+
+                qty = request.form.get(f'qty_{item.id}', type=int) or 0
+                if qty <= 0:
+                    continue          # this line simply is not being received now
+                if qty > outstanding:
+                    errors.append(
+                        f'{item.product.name if item.product else "Item"}: cannot receive {qty}, '
+                        f'only {outstanding} outstanding.'
                     )
-                    db.session.add(batch)
-                    
-                    if item.product:
-                        item.product.quantity_in_stock += qty_to_receive
-            
-            po.status = 'received'
+                    continue
+
+                expiry = _parse_date(request.form.get(f'expiry_{item.id}'))
+                if expiry and expiry <= received_on:
+                    errors.append(
+                        f'{item.product.name if item.product else "Item"}: expiry date must be '
+                        'after the receipt date.'
+                    )
+                    continue
+
+                receipts.append((item, qty, request.form.get(f'batch_{item.id}', '').strip(), expiry))
+
+            if errors:
+                for message in errors:
+                    flash(message, 'danger')
+                return render_template('purchases/receive.html', po=po, today=date.today())
+
+            if not receipts:
+                flash('Enter a quantity for at least one line to receive.', 'warning')
+                return render_template('purchases/receive.html', po=po, today=date.today())
+
+            for item, qty, batch_number, expiry in receipts:
+                item.quantity_received = (item.quantity_received or 0) + qty
+                db.session.add(StockBatch(
+                    business_id=current_user.business_id,
+                    product_id=item.product_id,
+                    po_item_id=item.id,
+                    # Sequence per PO line, so a second delivery against the same
+                    # line does not reuse the first batch's number.
+                    batch_number=batch_number or (
+                        f'PO{po.id}-L{item.id}-R'
+                        f'{StockBatch.query.filter_by(po_item_id=item.id).count() + 1}'
+                    ),
+                    quantity_received=qty,
+                    quantity_remaining=qty,
+                    received_date=received_on,
+                    expiry_date=expiry,
+                ))
+                if item.product:
+                    item.product.quantity_in_stock += qty
+
+            # Fully received only when every line is satisfied; otherwise the PO
+            # stays open so the rest can be received later. This status could
+            # never occur before, because receipt was all-or-nothing.
+            fully = all((i.quantity_received or 0) >= i.quantity_ordered for i in po.items)
+            po.status = 'received' if fully else 'partially_received'
+
             db.session.commit()
-            flash('Goods received successfully!', 'success')
+            total = sum(qty for _i, qty, _b, _e in receipts)
+            flash(
+                f'Received {total} unit(s) across {len(receipts)} line(s). '
+                + ('Order complete.' if fully else 'Order remains open for the balance.'),
+                'success',
+            )
             return redirect(url_for('purchases.list_purchases'))
         except Exception as e:
             db.session.rollback()
             flash(f'An error occurred: {str(e)}', 'danger')
-            
-    return render_template('purchases/receive.html', po=po)
+
+    return render_template('purchases/receive.html', po=po, today=date.today())
 
 @purchases_bp.route('/bulk_action', methods=['POST'])
 @login_required

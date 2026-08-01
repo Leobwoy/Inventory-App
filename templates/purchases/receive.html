@@ -5,47 +5,130 @@
 <div class="page-header">
     <h2>Receive Purchase Order #{{ po.id }}</h2>
     <div class="page-header-actions">
-        <a href="{{ url_for('purchases.list_purchases') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back to POs</a>
+        <a href="{{ url_for('purchases.list_purchases') }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-left me-1"></i> Back to POs
+        </a>
     </div>
 </div>
 
-<div class="glass-card" style="max-width: 800px;">
-    <p><strong>Supplier:</strong> {{ po.supplier.name if po.supplier else 'None' }}</p>
-    <p><strong>Order Date:</strong> {{ po.order_date }}</p>
-    <hr class="border-secondary">
-    <h5 class="mb-4">Items to Receive</h5>
-    
-    <div class="table-responsive">
-        <table class="table table-hover table-borderless">
-            <thead class="border-bottom border-secondary">
-                <tr>
-                    <th>Product</th>
-                    <th>Ordered</th>
-                    <th>Received</th>
-                    <th>To Receive Now</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for item in po.items %}
-                <tr>
-                    <td>{{ item.product.name }}</td>
-                    <td>{{ item.quantity_ordered }}</td>
-                    <td>{{ item.quantity_received }}</td>
-                    <td><strong>{{ item.quantity_ordered - item.quantity_received }}</strong></td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+<form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+    <div class="glass-card mb-4">
+        <div class="row g-4">
+            <div class="col-md-3">
+                <div class="text-muted small">Supplier</div>
+                <div class="fw-bold">{{ po.supplier.name if po.supplier else 'None' }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small">Ordered</div>
+                <div class="fw-bold">{{ po.order_date }}</div>
+            </div>
+            <div class="col-md-3">
+                <div class="text-muted small">Expected</div>
+                <div class="fw-bold">{{ po.expected_date or '—' }}</div>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small text-muted mb-1">Received on</label>
+                <input type="date" name="received_date" class="form-control"
+                       value="{{ today.isoformat() }}" max="{{ today.isoformat() }}" required>
+            </div>
+        </div>
     </div>
-    
-    <form method="post">
-        <!-- No CSRF token field manually generated if we don't have a specific form class rendered -->
-        <!-- Flask-WTF CSRFProtect expects `csrf_token` in POST body. We can use a raw input here -->
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+
+    <div class="glass-card">
+        <div class="card-toolbar">
+            <h5 class="mb-0">Lines to receive</h5>
+            <div class="card-toolbar-actions">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="receive-all">
+                    Fill outstanding
+                </button>
+            </div>
+        </div>
+
+        <p class="text-muted small">
+            Enter what actually arrived. Leave a line at 0 if it did not come &mdash; the order stays open
+            for the balance. Record expiry dates where they apply: stock is sold soonest-expiry-first, so
+            without them that ordering cannot work.
+        </p>
+
+        <div class="table-responsive">
+            <table class="table table-hover table-cards align-middle">
+                <thead>
+                    <tr>
+                        <th>Product</th>
+                        <th class="text-end">Ordered</th>
+                        <th class="text-end">Already in</th>
+                        <th class="text-end">Outstanding</th>
+                        <th style="width: 120px;">Receiving now</th>
+                        <th style="width: 160px;">Batch number</th>
+                        <th style="width: 170px;">Expiry date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in po.items %}
+                    {% set outstanding = item.quantity_ordered - (item.quantity_received or 0) %}
+                    <tr class="{{ 'opacity-50' if outstanding <= 0 }}">
+                        <td data-label="Product">
+                            <div class="fw-bold">{{ item.product.name if item.product else '—' }}</div>
+                            <small class="text-muted font-monospace">{{ item.product.sku if item.product else '' }}</small>
+                        </td>
+                        <td data-label="Ordered" class="text-end">{{ item.quantity_ordered }}</td>
+                        <td data-label="Already in" class="text-end text-muted">{{ item.quantity_received or 0 }}</td>
+                        <td data-label="Outstanding" class="text-end">
+                            {% if outstanding > 0 %}
+                            <span class="badge bg-warning text-dark">{{ outstanding }}</span>
+                            {% else %}
+                            <span class="badge bg-success">Complete</span>
+                            {% endif %}
+                        </td>
+                        <td data-label="Receiving now">
+                            {% if outstanding > 0 %}
+                            <input type="number" name="qty_{{ item.id }}" class="form-control qty-input"
+                                   min="0" max="{{ outstanding }}" value="0"
+                                   data-outstanding="{{ outstanding }}">
+                            {% else %}
+                            <span class="text-muted">&mdash;</span>
+                            {% endif %}
+                        </td>
+                        <td data-label="Batch number">
+                            {% if outstanding > 0 %}
+                            <input type="text" name="batch_{{ item.id }}" class="form-control"
+                                   placeholder="Auto" maxlength="100">
+                            {% else %}
+                            <span class="text-muted">&mdash;</span>
+                            {% endif %}
+                        </td>
+                        <td data-label="Expiry date">
+                            {% if outstanding > 0 %}
+                            <input type="date" name="expiry_{{ item.id }}" class="form-control"
+                                   min="{{ today.isoformat() }}">
+                            {% else %}
+                            <span class="text-muted">&mdash;</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
         <div class="d-flex gap-2 border-top border-secondary pt-4 mt-4">
-            <button type="submit" class="btn btn-success px-4"><i class="bi bi-box-seam me-1"></i> Receive Goods</button>
+            <button type="submit" class="btn btn-success px-4">
+                <i class="bi bi-box-seam me-1"></i> Record receipt
+            </button>
             <a href="{{ url_for('purchases.list_purchases') }}" class="btn btn-outline-secondary">Cancel</a>
         </div>
-    </form>
-</div>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('receive-all').addEventListener('click', function () {
+    document.querySelectorAll('.qty-input').forEach(function (input) {
+        input.value = input.dataset.outstanding;
+    });
+});
+</script>
 {% endblock %}
