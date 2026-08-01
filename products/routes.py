@@ -37,18 +37,19 @@ def _sku_token(text, length=4):
     return re.sub(r'[^A-Z0-9]', '', (text or '').upper())[:length]
 
 
-def generate_sku(brand, item_group, variant_label=None):
+def generate_sku(brand, item_group, variant_label=None, business_id=None):
     """Build a {brand}-{itemgroup}-{variant} SKU, suffixed until it is unique.
 
-    Uniqueness is checked globally because Product.sku still carries a global
-    UNIQUE constraint; this becomes per-business once that migrates (F-17).
+    Scoped to one business: SKUs are unique per tenant, so two businesses may
+    each hold the same code without colliding (F-17).
     """
+    business_id = business_id or current_user.business_id
     parts = [_sku_token(brand.name if brand else ''), _sku_token(item_group.name if item_group else '')]
     if variant_label:
         parts.append(_sku_token(variant_label, 6))
     base = '-'.join(p for p in parts if p) or 'SKU'
     candidate, n = base, 1
-    while Product.query.filter_by(sku=candidate).first():
+    while Product.query.filter_by(sku=candidate, business_id=business_id).first():
         n += 1
         candidate = f'{base}-{n}'
     return candidate[:50]
@@ -207,8 +208,8 @@ def upload_products():
                     errors.append(f'Row {line_no}: "{unit_price}" is not a valid price')
                     continue
 
-                sku = (str(sku).strip() if sku else '') or generate_sku(brand, group, str(name))
-                if Product.query.filter_by(sku=sku).first():
+                sku = (str(sku).strip() if sku else '') or generate_sku(brand, group, str(name), biz)
+                if Product.query.filter_by(sku=sku, business_id=biz).first():
                     skipped += 1
                     continue
 

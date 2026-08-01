@@ -28,15 +28,36 @@ def login():
     if request.method == 'POST':
         email = (request.form.get('email') or '').strip().lower()
         password = request.form.get('password') or ''
-        user = User.query.filter(func.lower(User.email) == email).first()
+        chosen_business = request.form.get('business_id', type=int)
 
-        # Check is_active before revealing anything about the password, so a
-        # deactivated account cannot be used as a password oracle.
-        if user and not user.is_active:
+        # Email is unique per business, not globally (F-17), so an address may
+        # match users in several tenants. Verify the password against each and
+        # only then disclose which businesses matched - doing it the other way
+        # round would turn this form into a tenant-enumeration oracle.
+        candidates = User.query.filter(func.lower(User.email) == email).all()
+        matched = [u for u in candidates if check_password_hash(u.password_hash, password)]
+
+        active = [u for u in matched if u.is_active]
+        if matched and not active:
             flash("Your account is deactivated. Contact your administrator.", "danger")
             return render_template('login.html')
 
-        if user and check_password_hash(user.password_hash, password):
+        if len(active) > 1:
+            if chosen_business:
+                active = [u for u in active if u.business_id == chosen_business]
+            else:
+                # Same credentials at more than one business - let them pick.
+                return render_template(
+                    'login.html',
+                    email=email,
+                    businesses=sorted(
+                        ((u.business_id, u.business.name) for u in active),
+                        key=lambda pair: pair[1],
+                    ),
+                )
+
+        if len(active) == 1:
+            user = active[0]
             login_user(user)
             user.last_login_at = datetime.utcnow()
             db.session.commit()
@@ -63,19 +84,17 @@ def register():
     
     form = RegistrationForm()
     if form.validate_on_submit():
-        # 1. Validate global email uniqueness
-        existing_user = User.query.filter_by(email=form.email.data).first()
-        if existing_user:
-            flash('Email address is already in use.', 'danger')
-            return render_template('auth/register.html', form=form)
-        
-        # 2. Get Owner role - the person registering the business owns it
+        # No global email check: emails are unique per business (F-17), and a
+        # brand-new business cannot collide with itself. The same person may
+        # legitimately register more than one business.
+
+        # 1. Get Owner role - the person registering the business owns it
         owner_role = Role.query.filter_by(name='Owner').first()
         if not owner_role:
             flash('System error: Owner role not found. Please run database migrations.', 'danger')
             return render_template('auth/register.html', form=form)
             
-        # 3. Create Business with branding
+        # 2. Create Business with branding
         new_business = Business(
             name=form.business_name.data,
             address=form.business_address.data,
@@ -84,7 +103,7 @@ def register():
         db.session.add(new_business)
         db.session.flush() # get new_business.id
 
-        # 4. Create User (must_change_password=False for a self-registered Owner)
+        # 3. Create User (must_change_password=False for a self-registered Owner)
         new_user = User(
             business_id=new_business.id,
             name=form.user_name.data,
@@ -95,7 +114,7 @@ def register():
         )
         db.session.add(new_user)
 
-        # 5. Seed catalogue fallbacks. Product.brand_id and item_group_id are NOT NULL,
+        # 4. Seed catalogue fallbacks. Product.brand_id and item_group_id are NOT NULL,
         # so without these the business cannot save a single product.
         db.session.add(Brand(business_id=new_business.id, name='Generic'))
         db.session.add(ItemGroup(business_id=new_business.id, name='Uncategorized'))
@@ -144,9 +163,13 @@ def add_user():
             return render_template('auth/add_user.html', form=form, roles=roles)
             
         if form.validate_on_submit():
-            existing_user = User.query.filter_by(email=form.email.data).first()
+            # Scoped to this business - the same address may exist in another tenant.
+            existing_user = User.query.filter(
+                func.lower(User.email) == (form.email.data or '').strip().lower(),
+                User.business_id == current_user.business_id,
+            ).first()
             if existing_user:
-                flash('Email address is already in use globally.', 'danger')
+                flash('Someone in this business is already using that email address.', 'danger')
                 return render_template('auth/add_user.html', form=form, roles=roles)
                 
             new_user = User(

@@ -1,9 +1,13 @@
 from extensions import db
 
 class Category(db.Model):
+    # Unique per business, not globally: one tenant naming a category "Beverages"
+    # must not stop every other tenant from doing the same (F-17).
+    __table_args__ = (db.UniqueConstraint('business_id', 'name', name='uq_category_business_name'),)
+
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
-    name = db.Column(db.String(100), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
     description = db.Column(db.Text)
     products = db.relationship('Product', backref='category', lazy=True)
 
@@ -11,9 +15,11 @@ class Category(db.Model):
         return f'<Category {self.name}>'
 
 class Supplier(db.Model):
+    __table_args__ = (db.UniqueConstraint('business_id', 'name', name='uq_supplier_business_name'),)
+
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
-    name = db.Column(db.String(100), unique=True, nullable=False)
+    name = db.Column(db.String(100), nullable=False)
     contact = db.Column(db.String(100))
     phone = db.Column(db.String(50))
     email = db.Column(db.String(100))
@@ -24,6 +30,8 @@ class Supplier(db.Model):
         return f'<Supplier {self.name}>'
 
 class Brand(db.Model):
+    __table_args__ = (db.UniqueConstraint('business_id', 'name', name='uq_brand_business_name'),)
+
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
@@ -33,6 +41,8 @@ class Brand(db.Model):
         return f'<Brand {self.name}>'
 
 class ItemGroup(db.Model):
+    __table_args__ = (db.UniqueConstraint('business_id', 'name', name='uq_item_group_business_name'),)
+
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
@@ -44,10 +54,12 @@ class ItemGroup(db.Model):
         return f'<ItemGroup {self.name}>'
 
 class Product(db.Model):
+    __table_args__ = (db.UniqueConstraint('business_id', 'sku', name='uq_product_business_sku'),)
+
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
-    sku = db.Column(db.String(50), unique=True, nullable=False)
+    sku = db.Column(db.String(50), nullable=False)
     description = db.Column(db.Text)
     unit_price = db.Column(db.Numeric(10, 2), nullable=False)
     quantity_in_stock = db.Column(db.Integer, nullable=False, default=0)
