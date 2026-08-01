@@ -74,7 +74,7 @@ A premium, production-ready Flask web application for tracking products, managin
 1. **Clone the Repository** and navigate to the project directory:
    ```bash
    git clone <your-repo-url>
-   cd "Sales&Purchase"
+   cd "TrackTrack"
    ```
 
 2. **Set Up a Virtual Environment** (recommended):
@@ -132,11 +132,7 @@ A premium, production-ready Flask web application for tracking products, managin
 
 ## Deploying to Production (Koyeb + Neon)
 
-Both tiers are free with no expiry clock. **Do not use Render's free
-PostgreSQL**: it is deleted 30 days after creation (plus a 14-day grace period)
-and supports no backups. AWS is not a viable free option either — its
-always-free tier includes no PostgreSQL and no persistent server, and new
-accounts close automatically after six months.
+Both tiers are free with no expiry clock. 
 
 ### 1. Database — Neon
 1. Create a project at [neon.tech](https://neon.tech), region **Frankfurt**
@@ -156,8 +152,6 @@ accounts close automatically after six months.
 ### Notes
 - The free Koyeb instance scales to zero after 1 hour idle; the next request
   incurs a cold start of a few seconds. This cannot be disabled on the free tier.
-- Render URLs use the `postgres://` prefix, which SQLAlchemy rejects; `app.py`
-  still patches this on boot, so a Render database would also work if needed.
 - When a pilot needs no cold starts at all, graduate to an **Oracle Cloud Always
   Free** ARM VM (4 cores / 24 GB / 200 GB, never sleeps) running Postgres
   locally with `pg_dump` backups to free Object Storage.
