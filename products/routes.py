@@ -221,9 +221,14 @@ def upload_products():
             flash('Add at least one brand and item group before uploading products.', 'warning')
             return redirect(url_for('products.list_products'))
 
-        # tempfile, not a hardcoded /tmp, which does not exist on Windows (F-20)
-        filename = secure_filename(form.file.data.filename)
-        filepath = os.path.join(tempfile.gettempdir(), filename)
+        # A unique temporary path per upload, not the uploaded filename. Two
+        # businesses uploading "products.xlsx" at the same moment would otherwise
+        # share one path on disk - one overwriting, reading or deleting the
+        # other's file, and importing another tenant's products.
+        # (mkstemp also replaces the hardcoded /tmp, which does not exist on Windows.)
+        suffix = os.path.splitext(secure_filename(form.file.data.filename))[1] or '.xlsx'
+        descriptor, filepath = tempfile.mkstemp(prefix='product-upload-', suffix=suffix)
+        os.close(descriptor)
         added, skipped, errors = 0, 0, []
         wb = None
         try:

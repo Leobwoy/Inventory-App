@@ -115,7 +115,7 @@ def client(app):
 # --------------------------------------------------------------------------
 
 @pytest.fixture
-def register(client):
+def register(app, client):
     """Register a business and return (client, business_id). Client is logged in as Owner."""
     def _register(name='Accra Beverages', email='owner@ab.example.com', c=None):
         # A client that has already registered carries a session cookie, and

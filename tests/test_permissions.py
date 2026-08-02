@@ -200,6 +200,39 @@ def test_upload_never_sets_cost_price(business, make_staff):
     assert float(uploaded.cost_price) == 0.0
 
 
+def test_uploads_with_the_same_filename_do_not_collide(business, make_staff, register, app):
+    """Two businesses uploading products.xlsx must not share a path on disk."""
+    import io
+    import openpyxl
+
+    def sheet_for(sku, name):
+        workbook = openpyxl.Workbook()
+        ws = workbook.active
+        ws.append(['Name', 'SKU', 'Description', 'Unit Price', 'Qty'])
+        ws.append([name, sku, '', 2.0, 0])
+        buffer = io.BytesIO()
+        workbook.save(buffer)
+        buffer.seek(0)
+        return buffer
+
+    owner_a = app.test_client()
+    owner_a.post('/auth/login', data={'email': 'owner@ab.example.com', 'password': 'Str0ngPass!23'},
+                 follow_redirects=True)
+    _c, business_b = register(name='Beta Shop', email='beta@x.example.com')
+
+    # Same uploaded filename, different tenants and contents.
+    owner_a.post('/products/upload', data={'file': (sheet_for('A-1', 'Alpha Item'), 'products.xlsx')},
+                 content_type='multipart/form-data', follow_redirects=True)
+    owner_b = app.test_client()
+    owner_b.post('/auth/login', data={'email': 'beta@x.example.com', 'password': 'Str0ngPass!23'},
+                 follow_redirects=True)
+    owner_b.post('/products/upload', data={'file': (sheet_for('B-1', 'Beta Item'), 'products.xlsx')},
+                 content_type='multipart/form-data', follow_redirects=True)
+
+    assert Product.query.filter_by(sku='A-1', business_id=business).one().name == 'Alpha Item'
+    assert Product.query.filter_by(sku='B-1', business_id=business_b).one().name == 'Beta Item'
+
+
 def test_export_omits_cost_price_for_unpermitted_staff(business, make_staff, make_product):
     product = make_product(business)
     sku = product.sku
