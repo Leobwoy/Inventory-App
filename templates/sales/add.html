@@ -38,6 +38,14 @@
         </div>
 
         <h5 class="mb-3 border-bottom border-secondary pb-2">Sale Items</h5>
+
+        {% if can_discount and max_discount and max_discount > 0 %}
+        <p class="text-muted small">
+            <i class="bi bi-tag me-1"></i>
+            You may discount up to <strong>{{ max_discount }}%</strong> below the listed price.
+            Any price change is recorded against your account.
+        </p>
+        {% endif %}
         
         <div class="table-responsive mb-4">
             <table class="table table-bordered table-hover align-middle table-cards table-sale-items" id="items-table">
@@ -67,7 +75,13 @@
                         <td data-label="Unit Price">
                             <div class="input-group">
                                 <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
+                                {# Editable only for staff who may discount. Either way the
+                                   server re-resolves the price - readonly is not a control. #}
+                                {% if can_discount %}
+                                {{ subform.price_at_sale(class_='form-control price-input') }}
+                                {% else %}
                                 {{ subform.price_at_sale(class_='form-control price-input', readonly=True) }}
+                                {% endif %}
                             </div>
                         </td>
                         <td data-label="" class="cell-actions text-center">

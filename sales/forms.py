@@ -12,7 +12,9 @@ class CustomerForm(FlaskForm):
 class SaleItemForm(FlaskForm):
     product_id = SelectField('Product', coerce=str, validators=[DataRequired()])
     quantity = IntegerField('Quantity', validators=[DataRequired(), NumberRange(min=1)])
-    price_at_sale = DecimalField('Unit Price', validators=[DataRequired(), NumberRange(min=0)])
+    # Optional: the server resolves the price from the product and treats anything
+    # submitted here as a request, subject to the discount policy (F-07).
+    price_at_sale = DecimalField('Unit Price', validators=[Optional(), NumberRange(min=0)])
 
 class SaleForm(FlaskForm):
     items = FieldList(FormField(SaleItemForm), min_entries=1, max_entries=20)
