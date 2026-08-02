@@ -3,10 +3,20 @@ from flask_login import UserMixin
 from datetime import datetime
 
 class Business(db.Model):
+    # A ceiling above 100 would make the discount floor negative, silently
+    # disabling the limit it exists to enforce.
+    __table_args__ = (
+        db.CheckConstraint('max_discount_percent >= 0 AND max_discount_percent <= 100',
+                           name='ck_business_max_discount_percent_range'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     expiry_alert_days = db.Column(db.Integer, default=30)
+    # Ceiling on how far below list a sale may go, for staff holding
+    # sales.discount. Default 0 - discounting is off until an Owner allows it.
+    max_discount_percent = db.Column(db.Numeric(5, 2), nullable=False, default=0)
     address = db.Column(db.String(255))
     contact_number = db.Column(db.String(50))
     logo_path = db.Column(db.String(255))

@@ -54,8 +54,9 @@ def create_app():
     app.register_blueprint(reports_bp, url_prefix='/reports')
     app.register_blueprint(auth_bp, url_prefix='/auth')
 
-    from auth.cli import create_owner_command
+    from auth.cli import create_owner_command, reconcile_stock_command
     app.cli.add_command(create_owner_command)
+    app.cli.add_command(reconcile_stock_command)
 
     from flask_login import login_required, current_user
     from auth.decorators import permission_required
