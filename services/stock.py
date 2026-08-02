@@ -41,6 +41,19 @@ def batch_total(product_id, business_id):
     ).scalar() or 0
 
 
+def _lock_product(product):
+    """Take a row lock on the product for the rest of the transaction.
+
+    deduct_fefo locks the batch rows it draws from, but receive creates a *new*
+    batch, so there is nothing existing to lock and two concurrent receipts would
+    each compute the cached total from a snapshot missing the other's row. The
+    last commit then wins and Product.quantity_in_stock lands too low. Locking
+    the product serialises every mutation for that product while leaving other
+    products free.
+    """
+    db.session.query(Product.id).filter(Product.id == product.id).with_for_update().one()
+
+
 def _refresh_cache(product, business_id):
     """Point Product.quantity_in_stock at the batch sum."""
     product.quantity_in_stock = batch_total(product.id, business_id)
@@ -53,6 +66,7 @@ def receive(product, quantity, business_id, received_date, batch_number=None,
     if quantity <= 0:
         raise ValueError('Received quantity must be greater than zero.')
 
+    _lock_product(product)
     batch = StockBatch(
         business_id=business_id,
         product_id=product.id,
@@ -113,6 +127,7 @@ def deduct_fefo(product, quantity, business_id):
     if quantity <= 0:
         raise ValueError('Deducted quantity must be greater than zero.')
 
+    _lock_product(product)
     batches = available_batches(product.id, business_id, for_update=True)
     available = sum(b.quantity_remaining for b in batches)
     if available < quantity:
@@ -142,6 +157,7 @@ def restore(product, quantity, business_id):
     if quantity <= 0:
         raise ValueError('Restored quantity must be greater than zero.')
 
+    _lock_product(product)
     # Locked for the same reason as deduct_fefo: read-then-write on
     # quantity_remaining. Ordering exactly reverses available_batches, with id as
     # the final tie-break so refills land in a deterministic order.

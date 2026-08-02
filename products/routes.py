@@ -225,6 +225,7 @@ def upload_products():
         filename = secure_filename(form.file.data.filename)
         filepath = os.path.join(tempfile.gettempdir(), filename)
         added, skipped, errors = 0, 0, []
+        wb = None
         try:
             form.file.data.save(filepath)
             wb = openpyxl.load_workbook(filepath, read_only=True, data_only=True)
@@ -255,7 +256,12 @@ def upload_products():
                     name=str(name).strip(),
                     sku=sku,
                     description=str(description).strip() if description else None,
-                    cost_price=price,
+                    # The sheet carries one price column, which is the sale price.
+                    # Cost is genuinely unknown, so it starts at 0 for an Owner to
+                    # fill in. Copying the sale price here would fabricate a zero
+                    # margin and would also hand cost data to uploaders who are not
+                    # allowed to see it (F-16).
+                    cost_price=Decimal('0'),
                     unit_price=price,
                     quantity_in_stock=0,  # stock only ever enters via goods receipt
                     min_stock_alert=0,
@@ -266,18 +272,24 @@ def upload_products():
                     units_per_purchase_uom=1
                 ))
                 added += 1
-            wb.close()
             db.session.commit()
-        except Exception as e:
+        except Exception:
             db.session.rollback()
             current_app.logger.exception('product upload failed')
             flash('That file could not be read. Check it is a valid Excel file.', 'danger')
             return render_template('products/upload.html', form=form)
         finally:
+            # Close before deleting: if processing raised while the workbook was
+            # open, Windows refuses to remove a file that still has a handle.
+            if wb is not None:
+                wb.close()
             if os.path.exists(filepath):
                 os.remove(filepath)
 
         flash(f'{added} product(s) added, {skipped} skipped as duplicates.', 'success')
+        if added:
+            flash('Cost prices were left at 0 — set them so margin reporting is accurate.',
+                  'warning')
         for msg in errors[:10]:
             flash(msg, 'warning')
         return redirect(url_for('products.list_products'))

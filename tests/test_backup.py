@@ -126,10 +126,13 @@ def test_restore_writes_only_into_the_callers_tenant(two_shops, app):
     assert Product.query.filter_by(sku='ALPHA-SKU-1', business_id=business_a).count() == 1
     assert Product.query.filter_by(business_id=business_a).count() == 1
 
-    # Beta either kept its own rows or took Alpha's under its own id; either way
-    # nothing of Alpha's may exist under Beta while still existing under Alpha.
+    # Restore replaces Beta's data with the archive's, so Beta now holds Alpha's
+    # SKU under Beta's own business_id - possible only because SKUs are unique
+    # per tenant (F-17). The point is that it lands as Beta's row while Alpha
+    # keeps its own, asserted above.
     beta_skus_after = {p.sku for p in Product.query.filter_by(business_id=business_b)}
-    assert beta_skus_after == beta_skus_before or 'ALPHA-SKU-1' not in beta_skus_before
+    assert beta_skus_after == {'ALPHA-SKU-1'}
+    assert beta_skus_after != beta_skus_before
 
 
 def test_no_drop_database_remains_in_the_codebase():

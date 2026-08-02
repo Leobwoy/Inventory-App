@@ -242,13 +242,24 @@ def test_reconcile_detects_and_repairs_drift(register, make_product):
     assert stock.find_drift(business_id) == []
 
 
-def test_po_lines_cannot_exist_without_a_product():
+def test_po_lines_cannot_exist_without_a_product(register, make_product, make_po):
     """The receive route guards against item.product being None.
 
-    That guard is defensive only: product_id is NOT NULL on purchase_order_item,
-    and the foreign key blocks deleting a product a line still references, so the
-    state cannot be constructed. Asserting the constraint is the honest test -
-    if it is ever relaxed, the guard becomes load-bearing.
+    That guard is defensive only: the database refuses a line with no product, so
+    the state cannot be reached. Asserting the constraint itself - rather than the
+    model metadata, which would only prove what SQLAlchemy was told - means the
+    guard becomes load-bearing the moment the schema is relaxed.
     """
+    import pytest
+    from sqlalchemy.exc import IntegrityError
     from purchases.models import PurchaseOrderItem
-    assert PurchaseOrderItem.product_id.nullable is False
+
+    _client, business_id = register()
+    product = make_product(business_id)
+    po, _item = make_po(business_id, product, quantity=50)
+
+    db.session.add(PurchaseOrderItem(po_id=po.id, product_id=None,
+                                     quantity_ordered=10, quantity_received=0))
+    with pytest.raises(IntegrityError):
+        db.session.flush()
+    db.session.rollback()

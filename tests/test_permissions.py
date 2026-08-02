@@ -176,6 +176,30 @@ def test_posted_cost_price_is_ignored_on_edit(business, make_staff, make_product
     assert refreshed.name == 'Renamed'             # the rest of the edit applied
 
 
+def test_upload_never_sets_cost_price(business, make_staff):
+    """The sheet has no cost column, so copying the sale price would both invent
+    a zero margin and hand cost data to an uploader who may not see it."""
+    import io
+    import openpyxl
+
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append(['Name', 'SKU', 'Description', 'Unit Price', 'Qty'])
+    sheet.append(['Uploaded Water', 'UP-1', 'from a sheet', 4.50, 0])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+
+    inventory = make_staff(business, 'Inventory Staff', 'inv@x.example.com')
+    inventory.post('/products/upload',
+                   data={'file': (buffer, 'products.xlsx')},
+                   content_type='multipart/form-data', follow_redirects=True)
+
+    uploaded = Product.query.filter_by(sku='UP-1').one()
+    assert float(uploaded.unit_price) == 4.50
+    assert float(uploaded.cost_price) == 0.0
+
+
 def test_export_omits_cost_price_for_unpermitted_staff(business, make_staff, make_product):
     product = make_product(business)
     sku = product.sku
