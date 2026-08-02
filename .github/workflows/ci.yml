@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres123
+          POSTGRES_DB: postgres
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      TEST_ADMIN_URL: postgresql://postgres:postgres123@localhost:5432/postgres
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      # A fresh deploy was impossible for months because nothing ever ran the
+      # migration chain against an empty database (F-02). This is that check.
+      - name: Migrations apply to an empty database
+        env:
+          DATABASE_URL: postgresql://postgres:postgres123@localhost:5432/migration_check
+          FLASK_APP: app:create_app
+        run: |
+          psql "$TEST_ADMIN_URL" -c 'CREATE DATABASE migration_check'
+          flask db upgrade
+          # Registration needs the seeded roles, which only migrations create.
+          psql "$DATABASE_URL" -c "SELECT name FROM role" | grep -q Owner
+
+      - name: Tests
+        run: pytest
