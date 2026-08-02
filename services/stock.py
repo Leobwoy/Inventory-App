@@ -10,6 +10,8 @@ Every mutation goes through here so that invariant holds in one place rather
 than being re-derived at each call site. Nothing here commits - callers own the
 transaction, so a failure part-way rolls the whole operation back.
 """
+import datetime
+
 from sqlalchemy import func
 
 from extensions import db
@@ -67,7 +69,7 @@ def receive(product, quantity, business_id, received_date, batch_number=None,
     return batch
 
 
-def available_batches(product_id, business_id):
+def available_batches(product_id, business_id, for_update=False):
     """Open batches in FEFO order: soonest expiry first, undated last.
 
     Scoped by business_id. The original query filtered on product_id alone - the
@@ -75,8 +77,11 @@ def available_batches(product_id, business_id):
     exploitable then, because product ids are globally unique and already
     tenant-checked upstream, but it broke the invariant the security model rests
     on.
+
+    Pass for_update=True to take a row lock, which every mutating caller must do
+    - see deduct_fefo.
     """
-    return StockBatch.query.filter(
+    query = StockBatch.query.filter(
         StockBatch.product_id == product_id,
         StockBatch.business_id == business_id,
         StockBatch.quantity_remaining > 0,
@@ -84,7 +89,10 @@ def available_batches(product_id, business_id):
         StockBatch.expiry_date.asc().nulls_last(),
         StockBatch.received_date.asc(),
         StockBatch.id.asc(),
-    ).all()
+    )
+    if for_update:
+        query = query.with_for_update()
+    return query.all()
 
 
 def deduct_fefo(product, quantity, business_id):
@@ -93,16 +101,25 @@ def deduct_fefo(product, quantity, business_id):
     Returns [(batch, taken)] so a caller can record exactly which batches a sale
     consumed. Raises InsufficientStock without mutating anything if there is not
     enough on hand.
+
+    The batch rows are locked FOR UPDATE before availability is measured, and the
+    total is computed from those same locked rows rather than a separate query.
+    Without the lock, two tills selling the same product under READ COMMITTED
+    both see the pre-sale total, both pass the check, and both write a value
+    derived from a stale read - a lost update that can drive quantity_remaining
+    negative. The lock holds until the caller's transaction ends, so concurrent
+    sales of one product serialise while different products still run freely.
     """
     if quantity <= 0:
         raise ValueError('Deducted quantity must be greater than zero.')
 
-    available = batch_total(product.id, business_id)
+    batches = available_batches(product.id, business_id, for_update=True)
+    available = sum(b.quantity_remaining for b in batches)
     if available < quantity:
         raise InsufficientStock(product, quantity, available)
 
     drawn, outstanding = [], quantity
-    for batch in available_batches(product.id, business_id):
+    for batch in batches:
         if outstanding <= 0:
             break
         taken = min(batch.quantity_remaining, outstanding)
@@ -125,14 +142,18 @@ def restore(product, quantity, business_id):
     if quantity <= 0:
         raise ValueError('Restored quantity must be greater than zero.')
 
+    # Locked for the same reason as deduct_fefo: read-then-write on
+    # quantity_remaining. Ordering exactly reverses available_batches, with id as
+    # the final tie-break so refills land in a deterministic order.
     partial = StockBatch.query.filter(
         StockBatch.product_id == product.id,
         StockBatch.business_id == business_id,
         StockBatch.quantity_remaining < StockBatch.quantity_received,
     ).order_by(
-        StockBatch.expiry_date.desc().nullsfirst(),
+        StockBatch.expiry_date.desc().nulls_first(),
         StockBatch.received_date.desc(),
-    ).all()
+        StockBatch.id.desc(),
+    ).with_for_update().all()
 
     outstanding = quantity
     for batch in partial:
@@ -146,7 +167,6 @@ def restore(product, quantity, business_id):
     if outstanding > 0:
         # No batch to return it to - the original was deleted, or stock predates
         # batch tracking. Record it rather than dropping it on the floor.
-        import datetime
         db.session.add(StockBatch(
             business_id=business_id,
             product_id=product.id,
@@ -174,7 +194,6 @@ def adjust(product, new_quantity, business_id, reason='manual adjustment'):
         return 0
 
     if delta > 0:
-        import datetime
         receive(product, delta, business_id, datetime.date.today(),
                 batch_number=f'ADJ-{reason[:20].upper().replace(" ", "-")}')
     else:

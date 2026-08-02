@@ -152,3 +152,14 @@ def test_selling_at_list_price_creates_no_audit_noise(shop):
     client, _business_id, product = shop
     sell(client, product, '3.00')
     assert AuditLog.query.filter_by(action='sale.price_override').count() == 0
+
+
+def test_discount_ceiling_cannot_exceed_100(shop):
+    """Above 100 the computed floor goes negative, disabling the limit entirely."""
+    from sqlalchemy.exc import IntegrityError
+
+    _client, business_id, _product = shop
+    Business.query.get(business_id).max_discount_percent = Decimal('150')
+    with pytest.raises(IntegrityError):
+        db.session.commit()
+    db.session.rollback()

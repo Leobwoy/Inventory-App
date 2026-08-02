@@ -109,6 +109,8 @@ def test_restore_writes_only_into_the_callers_tenant(two_shops, app):
     owner_a, business_a, business_b = two_shops
     archive = owner_a.post('/backup_restore', data={'backup': '1'}).data
 
+    beta_skus_before = {p.sku for p in Product.query.filter_by(business_id=business_b)}
+
     owner_b = app.test_client()
     owner_b.post('/auth/login', data={'email': 'b@x.example.com', 'password': 'Str0ngPass!23'},
                  follow_redirects=True)
@@ -117,10 +119,17 @@ def test_restore_writes_only_into_the_callers_tenant(two_shops, app):
         'restore_file': (io.BytesIO(archive), 'backup.zip'),
     }, content_type='multipart/form-data', follow_redirects=True)
 
-    # Whatever the outcome, every row Beta holds belongs to Beta, and Alpha is intact.
-    assert all(p.business_id == business_b
-               for p in Product.query.filter_by(business_id=business_b))
+    # Alpha's rows are untouched no matter how Beta's restore resolved. Asserting
+    # `all(p.business_id == business_b for p in query.filter_by(business_id=business_b))`
+    # would be a tautology - the filter guarantees it - so compare against what
+    # Alpha actually held.
     assert Product.query.filter_by(sku='ALPHA-SKU-1', business_id=business_a).count() == 1
+    assert Product.query.filter_by(business_id=business_a).count() == 1
+
+    # Beta either kept its own rows or took Alpha's under its own id; either way
+    # nothing of Alpha's may exist under Beta while still existing under Alpha.
+    beta_skus_after = {p.sku for p in Product.query.filter_by(business_id=business_b)}
+    assert beta_skus_after == beta_skus_before or 'ALPHA-SKU-1' not in beta_skus_before
 
 
 def test_no_drop_database_remains_in_the_codebase():

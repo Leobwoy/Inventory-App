@@ -101,8 +101,10 @@
                         </td>
                         <td data-label="Expiry date">
                             {% if outstanding > 0 %}
+                            {# The server requires expiry strictly after the receipt date,
+                               so the picker must not offer today itself. #}
                             <input type="date" name="expiry_{{ item.id }}" class="form-control"
-                                   min="{{ today.isoformat() }}">
+                                   min="{{ earliest_expiry.isoformat() }}">
                             {% else %}
                             <span class="text-muted">&mdash;</span>
                             {% endif %}

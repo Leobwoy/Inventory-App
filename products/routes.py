@@ -1,4 +1,4 @@
-from flask import render_template, redirect, url_for, flash, request
+from flask import render_template, redirect, url_for, flash, request, current_app
 from . import products_bp
 from .models import Product, Category, Supplier, Brand, ItemGroup
 from .forms import ProductForm, ProductUploadForm, CategoryForm, SupplierForm, BrandForm, ItemGroupForm
@@ -270,7 +270,8 @@ def upload_products():
             db.session.commit()
         except Exception as e:
             db.session.rollback()
-            flash(f'Upload failed: {e}', 'danger')
+            current_app.logger.exception('product upload failed')
+            flash('That file could not be read. Check it is a valid Excel file.', 'danger')
             return render_template('products/upload.html', form=form)
         finally:
             if os.path.exists(filepath):

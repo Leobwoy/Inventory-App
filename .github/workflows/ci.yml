@@ -28,6 +28,9 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Do not leave the job token in .git/config for later steps to reach.
+          persist-credentials: false
 
       - uses: actions/setup-python@v5
         with:

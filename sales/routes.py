@@ -1,4 +1,4 @@
-from flask import render_template, redirect, url_for, flash, request
+from flask import render_template, redirect, url_for, flash, request, current_app
 from . import sales_bp
 from .models import Sale, Customer
 from products.models import Product
@@ -92,7 +92,8 @@ def add_sale():
                                max_discount=current_user.business.max_discount_percent)
         except Exception as e:
             db.session.rollback()
-            flash(f'An error occurred: {str(e)}', 'danger')
+            current_app.logger.exception('%s failed', request.endpoint)
+            flash('Something went wrong and nothing was saved. Please try again.', 'danger')
             return render_template('sales/add.html', form=form, product_prices=product_prices,
                                can_discount=current_user.can('sales.discount'),
                                max_discount=current_user.business.max_discount_percent)
@@ -181,7 +182,8 @@ def bulk_action():
             flash(f'{len(sales)} sales deleted and stock restored.', 'success')
         except Exception as e:
             db.session.rollback()
-            flash(f'An error occurred during deletion: {str(e)}', 'danger')
+            current_app.logger.exception('%s bulk delete failed', request.endpoint)
+            flash('Something went wrong and nothing was deleted.', 'danger')
         return redirect(url_for('sales.list_sales'))
     elif action == 'export_csv':
         headers = ['Date', 'Product', 'Quantity', 'Unit Price', 'Total']

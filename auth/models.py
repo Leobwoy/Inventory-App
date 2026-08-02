@@ -3,6 +3,13 @@ from flask_login import UserMixin
 from datetime import datetime
 
 class Business(db.Model):
+    # A ceiling above 100 would make the discount floor negative, silently
+    # disabling the limit it exists to enforce.
+    __table_args__ = (
+        db.CheckConstraint('max_discount_percent >= 0 AND max_discount_percent <= 100',
+                           name='ck_business_max_discount_percent_range'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)

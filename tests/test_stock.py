@@ -240,3 +240,15 @@ def test_reconcile_detects_and_repairs_drift(register, make_product):
 
     assert Product.query.get(product.id).quantity_in_stock == 100
     assert stock.find_drift(business_id) == []
+
+
+def test_po_lines_cannot_exist_without_a_product():
+    """The receive route guards against item.product being None.
+
+    That guard is defensive only: product_id is NOT NULL on purchase_order_item,
+    and the foreign key blocks deleting a product a line still references, so the
+    state cannot be constructed. Asserting the constraint is the honest test -
+    if it is ever relaxed, the guard becomes load-bearing.
+    """
+    from purchases.models import PurchaseOrderItem
+    assert PurchaseOrderItem.product_id.nullable is False

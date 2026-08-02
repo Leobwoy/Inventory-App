@@ -148,3 +148,49 @@ def test_suspension_takes_effect_on_an_active_session(business, make_staff, app)
     db.session.commit()
 
     assert staff_client.get('/products/').status_code in (302, 403)
+
+
+def test_cost_price_field_is_absent_for_unpermitted_staff(business, make_staff):
+    """Hidden in the template is not enough - the bound field is removed."""
+    inventory = make_staff(business, 'Inventory Staff', 'inv@x.example.com')
+    assert 'cost_price' not in inventory.get('/products/add').get_data(as_text=True)
+
+    manager = make_staff(business, 'Manager', 'mgr2@x.example.com')
+    assert 'cost_price' in manager.get('/products/add').get_data(as_text=True)
+
+
+def test_posted_cost_price_is_ignored_on_edit(business, make_staff, make_product):
+    """A hand-crafted POST must not reach the column."""
+    product = make_product(business, cost_price='2.00')
+    inventory = make_staff(business, 'Inventory Staff', 'inv@x.example.com')
+
+    inventory.post(f'/products/edit/{product.id}', data={
+        'name': 'Renamed', 'unit_price': '3.50', 'cost_price': '999',
+        'brand_id': str(product.brand_id), 'item_group_id': str(product.item_group_id),
+        'category_id': '0', 'sku': product.sku, 'base_uom': 'pcs', 'purchase_uom': 'pcs',
+        'units_per_purchase_uom': '1', 'min_stock_alert': '0', 'quantity_in_stock': '0',
+    }, follow_redirects=True)
+
+    refreshed = Product.query.get(product.id)
+    assert float(refreshed.cost_price) == 2.00     # unchanged
+    assert refreshed.name == 'Renamed'             # the rest of the edit applied
+
+
+def test_export_omits_cost_price_for_unpermitted_staff(business, make_staff, make_product):
+    product = make_product(business)
+    sku = product.sku
+    inventory = make_staff(
+        business, 'Inventory Staff', 'inv@x.example.com',
+        permissions={'products.view', 'reports.export'},
+    )
+    body = inventory.post('/products/bulk_action',
+                          data={'action': 'export_csv', 'product_ids': [str(product.id)]}
+                          ).get_data(as_text=True)
+    assert 'Cost Price' not in body
+    assert sku in body
+
+    manager = make_staff(business, 'Manager', 'mgr2@x.example.com')
+    manager_body = manager.post('/products/bulk_action',
+                                data={'action': 'export_csv', 'product_ids': [str(product.id)]}
+                                ).get_data(as_text=True)
+    assert 'Cost Price' in manager_body

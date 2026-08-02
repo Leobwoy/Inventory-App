@@ -122,4 +122,8 @@ def test_login_ignores_absolute_next_target(register, client):
     client.get('/auth/logout')
     response = client.post('/auth/login?next=https://evil.example/steal',
                            data={'email': 'owner@ab.example.com', 'password': 'Str0ngPass!23'})
+    # Assert the redirect happened: a 200 (failed login) would leave Location
+    # empty and pass the check below without ever exercising the redirect path.
+    assert response.status_code == 302
     assert 'evil.example' not in response.headers.get('Location', '')
+    assert response.headers['Location'] in ('/', 'http://localhost/')

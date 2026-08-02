@@ -118,7 +118,13 @@ def client(app):
 def register(client):
     """Register a business and return (client, business_id). Client is logged in as Owner."""
     def _register(name='Accra Beverages', email='owner@ab.example.com', c=None):
-        c = c or client
+        # A client that has already registered carries a session cookie, and
+        # /auth/register redirects an authenticated user straight out. Default to
+        # the shared client for the first call and a fresh one after that, so a
+        # second register() cannot silently create nothing.
+        if c is None:
+            c = client if not _register.used else app.test_client()
+            _register.used = True
         c.post('/auth/register', data={
             'business_name': name, 'business_address': 'Accra', 'business_contact': '024',
             'user_name': 'Owner', 'email': email,
@@ -129,6 +135,8 @@ def register(client):
         # None when registration was meant to fail (e.g. a duplicate email), so
         # tests can assert on the rejection rather than blowing up in the fixture.
         return c, (business.id if business else None)
+
+    _register.used = False
     return _register
 
 

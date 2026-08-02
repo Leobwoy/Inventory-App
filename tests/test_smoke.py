@@ -112,10 +112,16 @@ def test_dashboard_product_count_is_not_capped(register, make_product):
 def test_every_post_form_carries_a_csrf_token():
     """Six templates posted without one, so every bulk action 400'd (F-28)."""
     import pathlib
+    import re
+
+    # Matches method="post", method='post' and bare method=post. Checking only
+    # for the double-quoted spelling would let an unprotected form slip past.
+    post_form = re.compile(r'method\s*=\s*["\']?post["\']?', re.IGNORECASE)
+
     templates = pathlib.Path(__file__).resolve().parent.parent / 'templates'
     offenders = []
     for path in templates.rglob('*.html'):
         text = path.read_text(encoding='utf-8')
-        if 'method="post"' in text.lower() and 'csrf_token' not in text and 'hidden_tag' not in text:
+        if post_form.search(text) and 'csrf_token' not in text and 'hidden_tag' not in text:
             offenders.append(path.name)
     assert offenders == [], f'templates posting without CSRF: {offenders}'
