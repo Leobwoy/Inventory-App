@@ -77,7 +77,11 @@ class Product(db.Model):
     base_uom = db.Column(db.String(20), nullable=False)
     purchase_uom = db.Column(db.String(20), nullable=False)
     units_per_purchase_uom = db.Column(db.Integer, nullable=False, default=1)
-    is_active = db.Column(db.Boolean, default=True)
+    # NOT NULL because plan limits count active products: a NULL would be
+    # neither counted nor blocked, which is the gap someone gaming the free tier
+    # would find. Deactivating retires a product from new sales and orders while
+    # leaving all of its history intact.
+    is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.text('true'))
 
     def __repr__(self):
         return f'<Product {self.name}>' 

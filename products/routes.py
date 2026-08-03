@@ -270,6 +270,16 @@ def toggle_product_active(product_id):
     sales, purchase orders and stock batches stay intact and reportable.
     """
     product = Product.query.filter_by(id=product_id, business_id=current_user.business_id).first_or_404()
+
+    if not product.is_active:
+        # Switching one back on consumes the allowance exactly as creating one
+        # does. Without this, a business over its cap could rotate through an
+        # unlimited catalogue fifty products at a time.
+        allowed, message = limits.can_add_product()
+        if not allowed:
+            flash(message, 'warning')
+            return redirect(url_for('products.list_products'))
+
     product.is_active = not bool(product.is_active)
     audit.log('product.reactivate' if product.is_active else 'product.deactivate',
               entity_type='product', entity_id=product.id, sku=product.sku)
@@ -303,7 +313,18 @@ def upload_products():
         suffix = os.path.splitext(secure_filename(form.file.data.filename))[1] or '.xlsx'
         descriptor, filepath = tempfile.mkstemp(prefix='product-upload-', suffix=suffix)
         os.close(descriptor)
-        added, skipped, errors = 0, 0, []
+        # Compute the remaining allowance once rather than querying per row. The
+        # upload is the obvious way round a per-product limit, so it has to obey
+        # the same cap as the form.
+        plan = limits.effective_plan(biz)
+        remaining = None
+        if plan is not None and plan.max_products is not None:
+            remaining = max(0, plan.max_products - limits.active_product_count(biz))
+            if remaining == 0:
+                flash(limits.can_add_product(biz)[1], 'warning')
+                return redirect(url_for('products.list_products'))
+
+        added, skipped, errors, over_limit = 0, 0, [], 0
         wb = None
         try:
             form.file.data.save(filepath)
@@ -328,6 +349,10 @@ def upload_products():
                 sku = (str(sku).strip() if sku else '') or generate_sku(brand, group, str(name), biz)
                 if Product.query.filter_by(sku=sku, business_id=biz).first():
                     skipped += 1
+                    continue
+
+                if remaining is not None and added >= remaining:
+                    over_limit += 1
                     continue
 
                 db.session.add(Product(
@@ -366,6 +391,9 @@ def upload_products():
                 os.remove(filepath)
 
         flash(f'{added} product(s) added, {skipped} skipped as duplicates.', 'success')
+        if over_limit:
+            flash(f'{over_limit} product(s) were not added because the {plan.name} plan covers '
+                  f'{plan.max_products} active products. Upgrade to import the rest.', 'warning')
         if added:
             flash('Cost prices were left at 0 — set them so margin reporting is accurate.',
                   'warning')

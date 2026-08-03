@@ -80,41 +80,64 @@ def has_feature(code, business_id=None):
     return code in (plan.features or features_for_tier(plan.code))
 
 
-def can_add_user(business_id=None):
-    """(allowed, message). Message is None when allowed."""
+def active_user_count(business_id):
+    """Suspended staff hold no seat - they cannot log in."""
     from auth.models import User
 
+    return db.session.query(db.func.count(User.id)).filter(
+        User.business_id == business_id,
+        User.is_active.isnot(False),
+    ).scalar() or 0
+
+
+def active_product_count(business_id):
+    """Only products that can actually be sold count against the plan.
+
+    Counting *every* row would let a customer buy one month of a large plan,
+    bulk-load a catalogue, drop to the free tier and keep trading on all of it -
+    and would also punish a paying customer who retires old lines, since those
+    would still consume the allowance.
+    """
+    return db.session.query(db.func.count(Product.id)).filter(
+        Product.business_id == business_id,
+        Product.is_active.isnot(False),
+    ).scalar() or 0
+
+
+def can_add_user(business_id=None):
+    """(allowed, message). Message is None when allowed."""
     business_id = business_id or _current_business_id()
     plan = effective_plan(business_id)
     if plan is None or plan.max_users is None:
         return True, None
 
-    current = User.query.filter_by(business_id=business_id).count()
+    current = active_user_count(business_id)
     if current < plan.max_users:
         return True, None
     return False, (
         f'The {plan.name} plan covers {plan.max_users} '
         f'{"person" if plan.max_users == 1 else "people"}, and you have {current}. '
-        'Upgrade to add more staff.'
+        'Upgrade to add more staff, or suspend someone first.'
     )
 
 
 def can_add_product(business_id=None, adding=1):
-    """(allowed, message). `adding` lets a bulk upload check the whole batch."""
+    """(allowed, message). `adding` lets a bulk upload check the whole batch.
+
+    Also gates *reactivating* a product, since switching one back on consumes the
+    allowance exactly as creating one does.
+    """
     business_id = business_id or _current_business_id()
     plan = effective_plan(business_id)
     if plan is None or plan.max_products is None:
         return True, None
 
-    current = db.session.query(db.func.count(Product.id)).filter(
-        Product.business_id == business_id
-    ).scalar() or 0
-
+    current = active_product_count(business_id)
     if current + adding <= plan.max_products:
         return True, None
     return False, (
-        f'The {plan.name} plan covers {plan.max_products} products, and you have {current}. '
-        'Upgrade to add more.'
+        f'The {plan.name} plan covers {plan.max_products} active products, and you have '
+        f'{current}. Upgrade to add more, or deactivate a product you no longer stock.'
     )
 
 
