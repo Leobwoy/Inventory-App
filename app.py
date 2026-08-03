@@ -119,6 +119,7 @@ def create_app():
         Scoped per tenant: the export contains just the caller's rows, and the
         import writes only into the caller's business_id, remapping primary keys.
         """
+        from services import audit
         from services import backup as backup_service
 
         if request.method == 'POST':
@@ -128,6 +129,9 @@ def create_app():
                 except Exception as e:
                     flash(f'Export failed: {e}', 'danger')
                     return redirect(url_for('backup_restore'))
+                audit.log('backup.export', entity_type='business',
+                          entity_id=current_user.business_id, filename=filename)
+                db.session.commit()
                 return send_file(
                     archive,
                     mimetype='application/zip',
@@ -145,6 +149,9 @@ def create_app():
                     return redirect(url_for('backup_restore'))
                 try:
                     written = backup_service.import_business(current_user.business_id, upload)
+                    audit.log('backup.restore', entity_type='business',
+                              entity_id=current_user.business_id,
+                              filename=upload.filename, rows=written)
                     db.session.commit()
                 except ValueError as e:
                     db.session.rollback()

@@ -10,7 +10,7 @@ from flask import send_file
 import io
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
-from services import stock
+from services import audit, stock
 
 @purchases_bp.route('/')
 @login_required
@@ -169,6 +169,12 @@ def receive_po(po_id):
             fully = all((i.quantity_received or 0) >= i.quantity_ordered for i in locked_items)
             po.status = 'received' if fully else 'partially_received'
 
+            audit.log('purchase_order.receive', entity_type='purchase_order', entity_id=po.id,
+                      received_on=str(received_on), status=po.status,
+                      lines=[{'sku': i.product.sku, 'qty': q,
+                              'batch': b or None, 'expiry': str(e) if e else None}
+                             for i, q, b, e in receipts])
+
             db.session.commit()
             total = sum(qty for _i, qty, _b, _e in receipts)
             flash(
@@ -205,6 +211,8 @@ def bulk_action():
     if action == 'delete':
         try:
             for po in pos:
+                audit.log('purchase_order.delete', entity_type='purchase_order', entity_id=po.id,
+                          status=po.status, supplier=po.supplier.name if po.supplier else None)
                 db.session.delete(po)
             db.session.commit()
             flash(f'{len(pos)} purchase orders deleted.', 'success')

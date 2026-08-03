@@ -214,6 +214,13 @@ def adjust(product, new_quantity, business_id, reason='manual adjustment'):
                 batch_number=f'ADJ-{reason[:20].upper().replace(" ", "-")}')
     else:
         deduct_fefo(product, -delta, business_id)
+
+    # A stock count correction changes the books without a sale or a delivery to
+    # explain it, so it is exactly the kind of movement the log exists for.
+    from services import audit
+    audit.log('stock.adjust', entity_type='product', entity_id=product.id,
+              business_id=business_id, sku=product.sku,
+              old=current, new=new_quantity, delta=delta, reason=reason)
     return delta
 
 

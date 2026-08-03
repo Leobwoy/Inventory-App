@@ -78,10 +78,14 @@
             <a class="nav-link" href="/reports/sales" id="nav-reports"><i class="bi bi-bar-chart"></i> Reports</a>
             {% endif %}
 
-            {% if current_user.can('users.manage') or current_user.can('backup.run') %}
+            {% if current_user.can('users.manage') or current_user.can('backup.run')
+                  or current_user.can('audit.view') %}
             <div class="nav-section-label">Administration</div>
             {% if current_user.can('users.manage') %}
             <a class="nav-link" href="/auth/users" id="nav-users"><i class="bi bi-people-fill"></i> Staff</a>
+            {% endif %}
+            {% if current_user.can('audit.view') %}
+            <a class="nav-link" href="/auth/audit" id="nav-audit"><i class="bi bi-clock-history"></i> Activity</a>
             {% endif %}
             {% if current_user.can('backup.run') %}
             <a class="nav-link" href="/backup_restore" id="nav-backup"><i class="bi bi-hdd-network"></i> Backup</a>

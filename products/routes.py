@@ -14,6 +14,7 @@ from flask import send_file
 import io
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
+from services import audit
 
 @products_bp.route('/')
 @login_required
@@ -68,6 +69,33 @@ def _strip_cost_price(form):
         del form.cost_price
         return False
     return True
+
+
+def _history_blocking_delete(product):
+    """Describe why a product cannot be deleted, or None if it can.
+
+    StockBatch.product_id, SaleItem.product_id and PurchaseOrderItem.product_id
+    are all NOT NULL, so deleting a product that has any of them raises a
+    constraint violation as SQLAlchemy tries to null the foreign keys - a 500
+    with no explanation. Beyond the crash, deleting a product that has traded
+    would erase the history behind every report that mentions it.
+    """
+    from sales.models import SaleItem
+    from purchases.models import PurchaseOrderItem, StockBatch
+
+    reasons = []
+    if StockBatch.query.filter_by(product_id=product.id).count():
+        reasons.append('stock history')
+    if SaleItem.query.filter_by(product_id=product.id).count():
+        reasons.append('recorded sales')
+    if PurchaseOrderItem.query.filter_by(product_id=product.id).count():
+        reasons.append('purchase orders')
+
+    if not reasons:
+        return None
+    if len(reasons) == 1:
+        return reasons[0]
+    return ', '.join(reasons[:-1]) + ' and ' + reasons[-1]
 
 
 def _scoped_catalogue(form):
@@ -160,6 +188,7 @@ def edit_product(product_id):
 
         existing_sku, existing_qty = product.sku, product.quantity_in_stock
         existing_cost = product.cost_price
+        existing_unit_price = product.unit_price
         form.populate_obj(product)
 
         # populate_obj skips the deleted field, but be explicit: a user who cannot
@@ -185,6 +214,17 @@ def edit_product(product_id):
         # Stock is owned by StockBatch/goods receipt, never by this form
         product.quantity_in_stock = existing_qty
 
+        # "Who changed this price" is the question this log exists to answer, so
+        # record the before and after rather than just that an edit happened.
+        if product.unit_price != existing_unit_price:
+            audit.log('product.price_change', entity_type='product', entity_id=product.id,
+                      sku=product.sku, field='unit_price',
+                      old=str(existing_unit_price), new=str(product.unit_price))
+        if may_see_cost and product.cost_price != existing_cost:
+            audit.log('product.price_change', entity_type='product', entity_id=product.id,
+                      sku=product.sku, field='cost_price',
+                      old=str(existing_cost), new=str(product.cost_price))
+
         db.session.commit()
         flash('Product updated successfully!', 'success')
         return redirect(url_for('products.list_products'))
@@ -198,9 +238,38 @@ def edit_product(product_id):
 @permission_required('products.delete')
 def delete_product(product_id):
     product = Product.query.filter_by(id=product_id, business_id=current_user.business_id).first_or_404()
+
+    blocker = _history_blocking_delete(product)
+    if blocker:
+        flash(f'{product.name} cannot be deleted because it has {blocker}. '
+              'Deactivate it instead so it stops appearing in new sales and orders.', 'warning')
+        return redirect(url_for('products.list_products'))
+
+    audit.log('product.delete', entity_type='product', entity_id=product.id,
+              sku=product.sku, name=product.name, stock_at_deletion=product.quantity_in_stock)
     db.session.delete(product)
     db.session.commit()
     flash('Product deleted!', 'info')
+    return redirect(url_for('products.list_products'))
+
+
+@products_bp.route('/deactivate/<int:product_id>', methods=['POST'])
+@login_required
+@permission_required('products.edit')
+def toggle_product_active(product_id):
+    """Retire a product without destroying its history.
+
+    is_active has existed on the model since the variant restructure and nothing
+    ever read or wrote it. This is what a wholesaler actually wants when they
+    stop stocking something: it disappears from new sales and orders, while past
+    sales, purchase orders and stock batches stay intact and reportable.
+    """
+    product = Product.query.filter_by(id=product_id, business_id=current_user.business_id).first_or_404()
+    product.is_active = not bool(product.is_active)
+    audit.log('product.reactivate' if product.is_active else 'product.deactivate',
+              entity_type='product', entity_id=product.id, sku=product.sku)
+    db.session.commit()
+    flash(f'{product.name} {"reactivated" if product.is_active else "deactivated"}.', 'success')
     return redirect(url_for('products.list_products'))
 
 @products_bp.route('/upload', methods=['GET', 'POST'])
@@ -318,10 +387,21 @@ def bulk_action():
 
     products = Product.query.filter(Product.id.in_(ids), Product.business_id == current_user.business_id).all()
     if action == 'delete':
-        for product in products:
-            db.session.delete(product)
-        db.session.commit()
-        flash(f'{len(products)} products deleted.', 'success')
+        # Same rule as the single delete: anything that has traded is kept.
+        deletable = [p for p in products if not _history_blocking_delete(p)]
+        blocked = [p for p in products if p not in deletable]
+
+        if deletable:
+            audit.log('product.bulk_delete', entity_type='product',
+                      count=len(deletable), skus=[p.sku for p in deletable])
+            for product in deletable:
+                db.session.delete(product)
+            db.session.commit()
+            flash(f'{len(deletable)} product(s) deleted.', 'success')
+        if blocked:
+            flash(f'{len(blocked)} product(s) kept because they have sales, orders or stock '
+                  f'history: {", ".join(p.name for p in blocked[:5])}'
+                  f'{"..." if len(blocked) > 5 else ""}. Deactivate them instead.', 'warning')
         return redirect(url_for('products.list_products'))
     elif action in ('export_csv', 'export_excel'):
         # The export is the easiest way to walk out with margins, so it obeys the
@@ -555,6 +635,7 @@ def edit_supplier(supplier_id):
 @permission_required('suppliers.manage')
 def delete_supplier(supplier_id):
     supplier = Supplier.query.filter_by(id=supplier_id, business_id=current_user.business_id).first_or_404()
+    audit.log('supplier.delete', entity_type='supplier', entity_id=supplier.id, name=supplier.name)
     db.session.delete(supplier)
     db.session.commit()
     flash('Supplier deleted!', 'info')

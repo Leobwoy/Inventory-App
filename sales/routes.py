@@ -145,6 +145,7 @@ def edit_customer(customer_id):
 @permission_required('customers.manage')
 def delete_customer(customer_id):
     customer = Customer.query.filter_by(id=customer_id, business_id=current_user.business_id).first_or_404()
+    audit.log('customer.delete', entity_type='customer', entity_id=customer.id, name=customer.name)
     db.session.delete(customer)
     db.session.commit()
     flash('Customer deleted!', 'info')
@@ -171,6 +172,11 @@ def bulk_action():
     if action == 'delete':
         try:
             for sale in sales:
+                audit.log('sale.void', entity_type='sale', entity_id=sale.id,
+                          sale_date=str(sale.sale_date),
+                          lines=[{'sku': i.product.sku if i.product else None,
+                                  'qty': i.quantity, 'price': str(i.price_at_sale)}
+                                 for i in sale.items])
                 for item in sale.items:
                     if item.product:
                         # Restores into the batches the stock came from. Previously

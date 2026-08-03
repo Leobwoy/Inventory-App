@@ -1,11 +1,13 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
-from auth.models import User, Business, Role
+from auth.models import User, Business, Role, AuditLog
+from sqlalchemy.orm import joinedload
 from auth.forms import RegistrationForm, ChangePasswordForm, UserForm
 from auth.decorators import permission_required
 from auth.permissions import ALL as ALL_PERMISSION_CODES, GROUP_ORDER, PERMISSIONS
 from products.models import Brand, ItemGroup
+from services import audit
 from extensions import db
 from sqlalchemy import func
 from datetime import datetime
@@ -180,6 +182,9 @@ def add_user():
 
             # The role seeds a starting set; the Owner tunes it per person afterwards.
             new_user.apply_role_preset(role.name)
+            audit.log('user.create', entity_type='user', entity_id=new_user.id,
+                      email=new_user.email, name=new_user.name, preset=role.name,
+                      permissions=sorted(new_user.permission_codes()))
             db.session.commit()
             flash(f'{new_user.name} added. Review their permissions, and note they must '
                   'change their password on first login.', 'success')
@@ -202,7 +207,13 @@ def edit_user_permissions(user_id):
     if request.method == 'POST':
         submitted = set(request.form.getlist('permissions'))
         # Ignore anything not in the catalogue - never trust posted codes.
+        before = user.permission_codes()
         user.set_permissions(submitted & ALL_PERMISSION_CODES)
+        after = user.permission_codes()
+        if before != after:
+            audit.log('user.permissions_change', entity_type='user', entity_id=user.id,
+                      email=user.email,
+                      granted=sorted(after - before), revoked=sorted(before - after))
         db.session.commit()
         flash(f"Permissions updated for {user.name}.", 'success')
         return redirect(url_for('auth.users_list'))
@@ -233,11 +244,54 @@ def apply_user_preset(user_id):
         flash('Select a valid role.', 'danger')
         return redirect(url_for('auth.edit_user_permissions', user_id=user.id))
 
+    before = user.permission_codes()
     user.role_id = role.id
     user.apply_role_preset(role.name)
+    audit.log('user.preset_applied', entity_type='user', entity_id=user.id,
+              email=user.email, preset=role.name,
+              granted=sorted(user.permission_codes() - before),
+              revoked=sorted(before - user.permission_codes()))
     db.session.commit()
     flash(f"{user.name} reset to the {role.name} preset. Adjust individual permissions below.", 'success')
     return redirect(url_for('auth.edit_user_permissions', user_id=user.id))
+
+
+@auth_bp.route('/audit')
+@login_required
+@permission_required('audit.view')
+def audit_log():
+    """Who did what, and when. Filterable by person, kind of action and date."""
+    page = request.args.get('page', 1, type=int)
+    action = request.args.get('action', '').strip()
+    user_id = request.args.get('user_id', type=int)
+    start, end = request.args.get('start_date'), request.args.get('end_date')
+
+    query = AuditLog.query.filter_by(business_id=current_user.business_id) \
+        .options(joinedload(AuditLog.user))
+    if action:
+        query = query.filter(AuditLog.action == action)
+    if user_id:
+        query = query.filter(AuditLog.user_id == user_id)
+    if start:
+        query = query.filter(AuditLog.timestamp >= start)
+    if end:
+        # end is a date; include everything on that day
+        query = query.filter(AuditLog.timestamp < f'{end} 23:59:59')
+
+    pagination = query.order_by(AuditLog.timestamp.desc()).paginate(
+        page=page, per_page=50, error_out=False)
+
+    # Only offer filters for actions this business has actually recorded.
+    actions = [row[0] for row in db.session.query(AuditLog.action)
+               .filter_by(business_id=current_user.business_id)
+               .distinct().order_by(AuditLog.action).all()]
+
+    return render_template(
+        'auth/audit.html',
+        entries=pagination.items, pagination=pagination, actions=actions,
+        users=User.query.filter_by(business_id=current_user.business_id).order_by(User.name).all(),
+        filters=request.args,
+    )
 
 
 @auth_bp.route('/users/<int:user_id>/toggle_active', methods=['POST'])
@@ -252,6 +306,8 @@ def toggle_user_active(user_id):
         flash('You cannot suspend your own account.', 'warning')
     else:
         user.is_active = not user.is_active
+        audit.log('user.reinstate' if user.is_active else 'user.suspend',
+                  entity_type='user', entity_id=user.id, email=user.email)
         db.session.commit()
         flash(f"{user.name} {'reinstated' if user.is_active else 'suspended'}.", 'success')
     return redirect(url_for('auth.users_list'))

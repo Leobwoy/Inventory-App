@@ -77,7 +77,15 @@
                             <a href="{{ url_for('products.edit_product', product_id=product.id) }}" class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-pencil"></i>
                             </a>
-                            <button type="submit" formaction="{{ url_for('products.delete_product', product_id=product.id) }}" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('Delete this product?');">
+                            {# Retiring a product keeps its sales, orders and stock history.
+                               Deleting is only possible for one that never traded. #}
+                            <button type="submit"
+                                    formaction="{{ url_for('products.toggle_product_active', product_id=product.id) }}"
+                                    class="btn btn-sm btn-outline-{{ 'success' if product.is_active is false else 'warning' }} ms-1"
+                                    title="{{ 'Reactivate' if product.is_active is false else 'Deactivate' }}">
+                                <i class="bi bi-{{ 'arrow-counterclockwise' if product.is_active is false else 'pause' }}"></i>
+                            </button>
+                            <button type="submit" formaction="{{ url_for('products.delete_product', product_id=product.id) }}" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('Delete this product? Only possible if it has never been sold or ordered.');">
                                 <i class="bi bi-trash"></i>
                             </button>
                         </td>

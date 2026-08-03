@@ -111,7 +111,10 @@ class User(UserMixin, db.Model):
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
+    # Nullable so an entry survives the user being deleted - the trail must
+    # outlive the account, otherwise removing someone erases what they did.
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    user = db.relationship('User', backref=db.backref('audit_entries', lazy='dynamic'))
     action = db.Column(db.String(100), nullable=False)
     entity_type = db.Column(db.String(100))
     entity_id = db.Column(db.Integer)
