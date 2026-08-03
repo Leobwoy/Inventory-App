@@ -62,6 +62,20 @@ def create_app():
     from flask_login import login_required, current_user
     from auth.decorators import permission_required
 
+    @app.context_processor
+    def billing_helpers():
+        """Let templates ask what the business's plan includes.
+
+        Permissions are already reachable via current_user.can(); this is the
+        other gate - what the business has paid for rather than who is asking.
+        """
+        from services import limits, uom
+
+        def has_feature(code):
+            return limits.has_feature(code)
+
+        return {'has_feature': has_feature, 'uom': uom}
+
     @app.route('/')
     @login_required
     def index():

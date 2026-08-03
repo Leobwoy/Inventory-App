@@ -98,7 +98,7 @@ def test_blank_batch_numbers_are_generated_uniquely(register, make_product, make
 
 
 @pytest.mark.parametrize('payload,expected', [
-    ({'qty': 9999}, 'only 100 outstanding'),
+    ({'qty': 9999}, 'only 100 pcs outstanding'),
     ({'qty': 10, 'expiry': TODAY - datetime.timedelta(days=1)}, 'after the receipt date'),
     ({'qty': 0}, 'at least one line'),
 ])

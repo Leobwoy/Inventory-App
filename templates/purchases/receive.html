@@ -78,15 +78,37 @@
                         <td data-label="Outstanding" class="text-end">
                             {% if outstanding > 0 %}
                             <span class="badge bg-warning text-dark">{{ outstanding }}</span>
+                            {% if item.product and uom.has_conversion(item.product) %}
+                            <div class="text-muted" style="font-size: 0.75rem;">
+                                {{ uom.describe(item.product, outstanding) }}
+                            </div>
+                            {% endif %}
                             {% else %}
                             <span class="badge bg-success">Complete</span>
                             {% endif %}
                         </td>
                         <td data-label="Receiving now">
                             {% if outstanding > 0 %}
-                            <input type="number" name="qty_{{ item.id }}" class="form-control qty-input"
-                                   min="0" max="{{ outstanding }}" value="0"
-                                   data-outstanding="{{ outstanding }}">
+                            {% set convertible = has_feature('uom_conversion') and item.product
+                                                 and uom.has_conversion(item.product) %}
+                            <div class="input-group">
+                                <input type="number" name="qty_{{ item.id }}" class="form-control qty-input"
+                                       min="0" max="{{ outstanding }}" value="0"
+                                       data-outstanding="{{ outstanding }}"
+                                       data-per="{{ item.product.units_per_purchase_uom if item.product else 1 }}">
+                                {% if convertible %}
+                                {# Deliveries arrive in whatever the supplier ships;
+                                   the server converts to base units either way. #}
+                                <select name="unit_{{ item.id }}" class="form-select unit-select"
+                                        style="max-width: 8rem;">
+                                    <option value="purchase">{{ item.product.purchase_uom }}</option>
+                                    <option value="base">{{ item.product.base_uom }}</option>
+                                </select>
+                                {% endif %}
+                            </div>
+                            {% if convertible %}
+                            <small class="text-muted qty-hint" data-for="{{ item.id }}"></small>
+                            {% endif %}
                             {% else %}
                             <span class="text-muted">&mdash;</span>
                             {% endif %}
@@ -127,9 +149,50 @@
 
 {% block scripts %}
 <script>
+// Quantities are typed in cartons or pieces; the server converts either way.
+// This only mirrors that back so the person can see what they are committing to.
+function unitFor(input) {
+    var select = input.closest('.input-group').querySelector('.unit-select');
+    return select ? select.value : 'base';
+}
+
+function toBase(input) {
+    var per = parseInt(input.dataset.per || '1', 10) || 1;
+    var typed = parseInt(input.value || '0', 10) || 0;
+    return unitFor(input) === 'purchase' ? typed * per : typed;
+}
+
+function refreshHint(input) {
+    var hint = document.querySelector('.qty-hint[data-for="' + input.name.replace('qty_', '') + '"]');
+    if (!hint) return;
+    var base = toBase(input);
+    var outstanding = parseInt(input.dataset.outstanding || '0', 10);
+    if (!base) { hint.textContent = ''; return; }
+    hint.textContent = '= ' + base + ' in stock units';
+    hint.classList.toggle('text-danger', base > outstanding);
+    if (base > outstanding) {
+        hint.textContent += ' — more than the ' + outstanding + ' outstanding';
+    }
+}
+
+document.querySelectorAll('.qty-input').forEach(function (input) {
+    input.addEventListener('input', function () { refreshHint(input); });
+    var select = input.closest('.input-group').querySelector('.unit-select');
+    if (select) select.addEventListener('change', function () { refreshHint(input); });
+});
+
 document.getElementById('receive-all').addEventListener('click', function () {
     document.querySelectorAll('.qty-input').forEach(function (input) {
-        input.value = input.dataset.outstanding;
+        var per = parseInt(input.dataset.per || '1', 10) || 1;
+        var outstanding = parseInt(input.dataset.outstanding || '0', 10);
+        var select = input.closest('.input-group').querySelector('.unit-select');
+        // Filling in cartons only works when the outstanding amount divides
+        // evenly; otherwise switch that line to pieces so nothing is lost.
+        if (select && per > 1 && outstanding % per !== 0) {
+            select.value = 'base';
+        }
+        input.value = (select && select.value === 'purchase') ? outstanding / per : outstanding;
+        refreshHint(input);
     });
 });
 </script>

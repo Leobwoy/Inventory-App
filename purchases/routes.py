@@ -10,7 +10,7 @@ from flask import send_file
 import io
 from flask_login import login_required, current_user
 from auth.decorators import permission_required, requires_feature
-from services import audit, stock
+from services import audit, stock, uom
 
 @purchases_bp.route('/')
 @login_required
@@ -30,9 +30,19 @@ def add_purchase():
     supplier_choices = [(0, 'No Supplier')] + [(s.id, s.name) for s in Supplier.query.filter_by(business_id=current_user.business_id).order_by(Supplier.name)]
     form.supplier_id.choices = supplier_choices
     
-    product_choices = [(p.id, p.name) for p in Product.query.filter_by(business_id=current_user.business_id).all()]
+    products = Product.query.filter_by(business_id=current_user.business_id).all()
+    product_choices = [(p.id, p.name) for p in products]
     for item in form.items:
         item.form.product_id.choices = product_choices
+        if uom.has_conversion_available(products):
+            item.form.order_unit.choices = [('purchase', 'Purchase unit'), ('base', 'Stock unit')]
+
+    # Feeds the line preview: what a carton price works out to per unit.
+    product_uom = {
+        str(p.id): {'per': uom.factor(p), 'base': p.base_uom or 'pcs',
+                    'purchase': p.purchase_uom or 'unit'}
+        for p in products
+    }
 
     if form.validate_on_submit():
         try:
@@ -48,26 +58,41 @@ def add_purchase():
             db.session.add(po)
             db.session.flush() # get po.id
             
+            converted = []
             for item_form in form.items:
                 product = Product.query.filter_by(id=item_form.product_id.data, business_id=current_user.business_id).first()
-                if product:
-                    poi = PurchaseOrderItem(
-                        po_id=po.id,
-                        product_id=product.id,
-                        quantity_ordered=item_form.quantity_ordered.data,
-                        quantity_received=0,
-                        unit_cost=item_form.unit_cost.data
-                    )
-                    db.session.add(poi)
-            
+                if not product:
+                    continue
+
+                # Entered in cartons or pieces; stored in base units either way,
+                # so nothing downstream has to ask which unit a row is in.
+                entered_unit = item_form.order_unit.data or uom.BASE
+                if not uom.has_conversion(product):
+                    entered_unit = uom.BASE
+
+                base_quantity = uom.to_base(product, item_form.quantity_ordered.data, entered_unit)
+                base_cost = uom.cost_to_base(product, item_form.unit_cost.data, entered_unit)
+
+                db.session.add(PurchaseOrderItem(
+                    po_id=po.id,
+                    product_id=product.id,
+                    quantity_ordered=base_quantity,
+                    quantity_received=0,
+                    unit_cost=base_cost,
+                ))
+                if entered_unit == uom.PURCHASE:
+                    converted.append(f'{product.name}: {uom.describe(product, base_quantity)}')
+
             db.session.commit()
             flash('Purchase Order created!', 'success')
+            for line in converted:
+                flash(line, 'info')
             return redirect(url_for('purchases.list_purchases'))
         except Exception as e:
             db.session.rollback()
             current_app.logger.exception('%s failed', request.endpoint)
             flash('Something went wrong and nothing was saved. Please try again.', 'danger')
-    return render_template('purchases/add.html', form=form)
+    return render_template('purchases/add.html', form=form, product_uom=product_uom)
 
 def _parse_date(raw):
     """Parse an ISO date from a form field, returning None for blank or malformed input."""
@@ -116,13 +141,21 @@ def receive_po(po_id):
                     errors.append(f'Line {item.id} has no product and cannot be received.')
                     continue
 
-                qty = request.form.get(f'qty_{item.id}', type=int) or 0
+                # A delivery arrives in whatever unit the supplier ships. Convert
+                # to base before anything is compared or stored.
+                entered = request.form.get(f'qty_{item.id}', type=int) or 0
+                entered_unit = request.form.get(f'unit_{item.id}') or uom.BASE
+                if not uom.has_conversion(item.product):
+                    entered_unit = uom.BASE
+                qty = uom.to_base(item.product, entered, entered_unit)
+
                 if qty <= 0:
                     continue          # this line simply is not being received now
                 if qty > outstanding:
                     errors.append(
-                        f'{item.product.name}: cannot receive {qty}, '
-                        f'only {outstanding} outstanding.'
+                        f'{item.product.name}: cannot receive '
+                        f'{uom.describe(item.product, qty)}, only '
+                        f'{uom.describe(item.product, outstanding)} outstanding.'
                     )
                     continue
 
