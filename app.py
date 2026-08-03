@@ -44,6 +44,7 @@ def create_app():
     from auth.routes import auth_bp
     from auth import models as auth_models
     from products.models import Product
+    from billing import models as billing_models
     from sales.models import Sale
     from sqlalchemy import func
     import datetime

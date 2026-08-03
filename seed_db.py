@@ -25,6 +25,7 @@ from werkzeug.security import generate_password_hash
 from app import create_app
 from extensions import db
 from auth.models import Business, Role, User
+from billing.models import Plan, Subscription
 from products.models import Brand, Category, ItemGroup, Product, Supplier
 from purchases.models import PurchaseOrder, PurchaseOrderItem, StockBatch
 from sales.models import Customer, Sale, SaleItem
@@ -103,6 +104,16 @@ def seed(auto_yes=False):
                             contact_number='0302 555 000', expiry_alert_days=30)
         db.session.add(business)
         db.session.flush()
+
+        # This business is built directly rather than through registration, so it
+        # would otherwise have no subscription at all and fall back to the Free
+        # plan - which excludes purchase orders, and the demo is full of them.
+        advanced = Plan.query.filter_by(code='advanced').first()
+        if advanced:
+            db.session.add(Subscription(
+                business_id=business.id, plan_id=advanced.id, status='active',
+                paid_through=datetime.datetime.utcnow() + datetime.timedelta(days=365),
+            ))
 
         roles = {r.name: r for r in Role.query.all()}
         owner = User(business_id=business.id, name='Kofi Mensah', email=OWNER_EMAIL,

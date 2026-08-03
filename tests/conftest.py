@@ -27,6 +27,7 @@ PASSWORD = 'Str0ngPass!23'
 # Truncated between tests. Order is irrelevant with CASCADE, but role, permission
 # and role_permission are deliberately absent: they are seeded reference data.
 DATA_TABLES = [
+    'payment_transaction', 'subscription',
     'user_permission', 'audit_log', 'sale_item', 'sale', 'stock_batch',
     'purchase_order_item', 'purchase_order', 'purchase', 'product',
     'item_group', 'brand', 'category', 'supplier', 'customer', '"user"', 'business',

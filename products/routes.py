@@ -14,7 +14,7 @@ from flask import send_file
 import io
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
-from services import audit
+from services import audit, limits
 
 @products_bp.route('/')
 @login_required
@@ -128,6 +128,11 @@ def add_product():
         form.quantity_in_stock.data = 0
 
     if form.validate_on_submit():
+        allowed, message = limits.can_add_product()
+        if not allowed:
+            flash(message, 'warning')
+            return render_template('products/add_edit.html', form=form, action='Add')
+
         brand, item_group, category = _scoped_catalogue(form)
         if not brand or not item_group:
             flash('Select a valid brand and item group.', 'danger')

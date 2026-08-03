@@ -4,10 +4,13 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from auth.models import User, Business, Role, AuditLog
 from sqlalchemy.orm import joinedload
 from auth.forms import RegistrationForm, ChangePasswordForm, UserForm
-from auth.decorators import permission_required
+from auth.decorators import permission_required, requires_feature
 from auth.permissions import ALL as ALL_PERMISSION_CODES, GROUP_ORDER, PERMISSIONS
 from products.models import Brand, ItemGroup
-from services import audit
+from services import audit, limits
+from billing.models import Plan, Subscription
+from billing.plans import TRIAL_DAYS
+from datetime import timedelta
 from extensions import db
 from sqlalchemy import func
 from datetime import datetime
@@ -106,14 +109,26 @@ def register():
         # the permission grid renders correctly for them.
         new_user.apply_role_preset('Owner')
 
-        # 4. Seed catalogue fallbacks. Product.brand_id and item_group_id are NOT NULL,
+        # 4. Start the free trial. Full features for TRIAL_DAYS, then the
+        # account downgrades to Free rather than locking - they keep their data
+        # and keep working at the free tier's limits.
+        trial_plan = Plan.query.filter_by(code='trial').first()
+        if trial_plan:
+            db.session.add(Subscription(
+                business_id=new_business.id,
+                plan_id=trial_plan.id,
+                status='trialing',
+                trial_ends_at=datetime.utcnow() + timedelta(days=TRIAL_DAYS),
+            ))
+
+        # 5. Seed catalogue fallbacks. Product.brand_id and item_group_id are NOT NULL,
         # so without these the business cannot save a single product.
         db.session.add(Brand(business_id=new_business.id, name='Generic'))
         db.session.add(ItemGroup(business_id=new_business.id, name='Uncategorized'))
 
         db.session.commit()
         
-        # 5. Log them in
+        # 6. Log them in
         login_user(new_user)
         flash('Registration successful! Welcome to TrackTrack.', 'success')
         return redirect(url_for('index'))
@@ -155,6 +170,12 @@ def add_user():
             return render_template('auth/add_user.html', form=form, roles=roles)
             
         if form.validate_on_submit():
+            allowed, message = limits.can_add_user()
+            if not allowed:
+                # A plan ceiling is a sales conversation, not a 403.
+                flash(message, 'warning')
+                return render_template('auth/add_user.html', form=form, roles=roles)
+
             existing_user = User.query.filter(
                 func.lower(User.email) == (form.email.data or '').strip().lower()
             ).first()
@@ -259,6 +280,7 @@ def apply_user_preset(user_id):
 @auth_bp.route('/audit')
 @login_required
 @permission_required('audit.view')
+@requires_feature('audit_log')
 def audit_log():
     """Who did what, and when. Filterable by person, kind of action and date."""
     page = request.args.get('page', 1, type=int)

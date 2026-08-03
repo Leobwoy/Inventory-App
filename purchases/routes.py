@@ -9,12 +9,13 @@ import pandas as pd
 from flask import send_file
 import io
 from flask_login import login_required, current_user
-from auth.decorators import permission_required
+from auth.decorators import permission_required, requires_feature
 from services import audit, stock
 
 @purchases_bp.route('/')
 @login_required
 @permission_required('purchase_orders.view')
+@requires_feature('purchase_orders')
 def list_purchases():
     page = request.args.get('page', 1, type=int)
     pagination = PurchaseOrder.query.filter_by(business_id=current_user.business_id).order_by(PurchaseOrder.order_date.desc()).paginate(page=page, per_page=15, error_out=False)
@@ -23,6 +24,7 @@ def list_purchases():
 @purchases_bp.route('/add', methods=['GET', 'POST'])
 @login_required
 @permission_required('purchase_orders.create')
+@requires_feature('purchase_orders')
 def add_purchase():
     form = PurchaseOrderForm()
     supplier_choices = [(0, 'No Supplier')] + [(s.id, s.name) for s in Supplier.query.filter_by(business_id=current_user.business_id).order_by(Supplier.name)]
@@ -80,6 +82,7 @@ def _parse_date(raw):
 @purchases_bp.route('/receive/<int:po_id>', methods=['GET', 'POST'])
 @login_required
 @permission_required('purchase_orders.receive')
+@requires_feature('purchase_orders')
 def receive_po(po_id):
     po = PurchaseOrder.query.filter_by(id=po_id, business_id=current_user.business_id).first_or_404()
     if po.status == 'received':
