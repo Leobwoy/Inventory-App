@@ -45,14 +45,18 @@ def features_for_tier(tier):
 # for POS/inventory tools. Annual is ten months for twelve - priced generously on
 # purpose, because mobile money cannot auto-renew and every annual sale removes
 # eleven chances for a manual renewal to be forgotten.
+# Display names use the ladder a Ghanaian trader already recognises, so a
+# customer can place themselves on it without reading the feature list. `code` is
+# what the application keys off everywhere; the name is presentation only, and
+# changing it again later touches no logic.
 PLANS = [
     # code, name, monthly, annual, max_users, max_products, tier, public, order
-    ('trial',    'Free trial',  0,   0,    15,   None, 'advanced', False, 0),
-    ('free',     'Free',        0,   0,    1,    50,   'free',     True,  1),
-    ('basic',    'Basic',       99,  990,  2,    200,  'basic',    True,  2),
-    ('standard', 'Standard',    199, 1990, 5,    1000, 'standard', True,  3),
-    ('advanced', 'Advanced',    349, 3490, 15,   None, 'advanced', True,  4),
-    ('custom',   'Custom',      None, None, None, None, 'custom',  True,  5),
+    ('trial',    'Full Access Trial', 0,   0,    15,   None, 'advanced', False, 0),
+    ('free',     'Kiosk',             0,   0,    1,    50,   'free',     True,  1),
+    ('basic',    'Shop',              99,  990,  2,    200,  'basic',    True,  2),
+    ('standard', 'Depot',             199, 1990, 5,    1000, 'standard', True,  3),
+    ('advanced', 'Distributor',       349, 3490, 15,   None, 'advanced', True,  4),
+    ('custom',   'Enterprise',        None, None, None, None, 'custom',  True,  5),
 ]
 
 TRIAL_DAYS = 14
