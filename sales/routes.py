@@ -11,6 +11,7 @@ import io
 from .models import SaleItem
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
+from sqlalchemy.orm import joinedload
 from services import audit, pricing, stock
 
 @sales_bp.route('/')
@@ -18,7 +19,15 @@ from services import audit, pricing, stock
 @permission_required('sales.view')
 def list_sales():
     page = request.args.get('page', 1, type=int)
-    pagination = Sale.query.filter_by(business_id=current_user.business_id).order_by(Sale.sale_date.desc()).paginate(page=page, per_page=15, error_out=False)
+    # The list shows each sale's lines and customer, so load them with the sales
+    # rather than firing a query per row.
+    pagination = (
+        Sale.query.filter_by(business_id=current_user.business_id)
+        .options(joinedload(Sale.items).joinedload(SaleItem.product),
+                 joinedload(Sale.customer))
+        .order_by(Sale.sale_date.desc())
+        .paginate(page=page, per_page=15, error_out=False)
+    )
     return render_template('sales/list.html', sales=pagination.items, pagination=pagination)
 
 @sales_bp.route('/add', methods=['GET', 'POST'])
@@ -168,7 +177,10 @@ def bulk_action():
         flash('You do not have permission to do that.', 'danger')
         return redirect(url_for('sales.list_sales'))
 
-    sales = Sale.query.filter(Sale.id.in_(ids), Sale.business_id == current_user.business_id).all()
+    sales = (Sale.query
+             .filter(Sale.id.in_(ids), Sale.business_id == current_user.business_id)
+             .options(joinedload(Sale.items).joinedload(SaleItem.product))
+             .all())
     if action == 'delete':
         try:
             for sale in sales:
@@ -242,7 +254,11 @@ def bulk_action():
 @login_required
 @permission_required('sales.view')
 def sale_invoice(sale_id):
-    sale = Sale.query.filter_by(id=sale_id, business_id=current_user.business_id).first_or_404()
+    sale = (Sale.query
+            .filter_by(id=sale_id, business_id=current_user.business_id)
+            .options(joinedload(Sale.items).joinedload(SaleItem.product),
+                     joinedload(Sale.customer))
+            .first_or_404())
     customer_name = request.args.get('customer_name')
     return render_template('sales/invoice.html', sale=sale, customer_name=customer_name)
 

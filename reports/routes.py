@@ -66,7 +66,14 @@ def sales_report():
     start_date = request.args.get('start_date')
     end_date = request.args.get('end_date')
     product_id = request.args.get('product_id', type=int)
-    query = Sale.query.filter_by(business_id=current_user.business_id)
+    # The template walks sale.items five times per row and reads item.product on
+    # each. Without eager loading that is two queries per sale plus one per line,
+    # and the report has no default date bound - so the default view is the worst
+    # case (F-15).
+    query = Sale.query.filter_by(business_id=current_user.business_id).options(
+        joinedload(Sale.items).joinedload(SaleItem.product),
+        joinedload(Sale.customer),
+    )
     if start_date:
         query = query.filter(Sale.sale_date >= start_date)
     if end_date:
