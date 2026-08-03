@@ -63,7 +63,10 @@
                         <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
                         {{ item.form.unit_cost(class_='form-control cost-input') }}
                     </div>
-                    <small class="text-muted line-hint"></small>
+                    <small class="text-muted line-hint d-block"></small>
+                    {% if has_feature('price_comparison') %}
+                    <small class="text-muted price-hint d-block"></small>
+                    {% endif %}
                 </div>
             </div>
         {% endfor %}
@@ -78,22 +81,48 @@
 
 {% block scripts %}
 <script type="application/json" id="product-uom-data">{{ product_uom|tojson }}</script>
+<script type="application/json" id="price-history-data">{{ price_history|tojson }}</script>
 <script>
 // Mirrors the server's conversion back to the buyer so they can see what a
 // carton price works out to per unit before committing. The server converts
 // independently - this is a preview, not the calculation.
 var PRODUCT_UOM = JSON.parse(document.getElementById('product-uom-data').textContent);
+var PRICE_HISTORY = JSON.parse(document.getElementById('price-history-data').textContent);
 
 function refreshLine(line) {
     var hint = line.querySelector('.line-hint');
+    var priceHint = line.querySelector('.price-hint');
     var select = line.querySelector('.unit-select');
-    if (!hint) return;
 
     var productId = line.querySelector('.product-select').value;
     var info = PRODUCT_UOM[productId];
     var qty = parseInt(line.querySelector('.qty-input').value || '0', 10) || 0;
     var cost = parseFloat(line.querySelector('.cost-input').value || '0') || 0;
 
+    // What this product has cost before, shown while they type rather than
+    // after the order is placed.
+    if (priceHint) {
+        var known = PRICE_HISTORY[productId];
+        if (!known) {
+            priceHint.textContent = '';
+        } else {
+            var perBase = (info && info.per > 1 && select && select.value === 'purchase')
+                          ? cost / info.per : cost;
+            var best = parseFloat(known.price);
+            var text = 'Best so far: ₵' + best.toFixed(2) + ' from ' + known.supplier;
+            priceHint.textContent = text;
+            priceHint.classList.remove('text-danger', 'text-success');
+            if (cost > 0) {
+                priceHint.classList.add(perBase > best ? 'text-danger' : 'text-success');
+                if (perBase > best) {
+                    priceHint.textContent = text + ' — this is ₵' +
+                        (perBase - best).toFixed(2) + ' more';
+                }
+            }
+        }
+    }
+
+    if (!hint) return;
     if (!info || info.per <= 1 || !select || select.value !== 'purchase' || !qty) {
         hint.textContent = '';
         return;

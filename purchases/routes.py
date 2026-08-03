@@ -10,7 +10,7 @@ from flask import send_file
 import io
 from flask_login import login_required, current_user
 from auth.decorators import permission_required, requires_feature
-from services import audit, stock, uom
+from services import audit, limits, sourcing, stock, uom
 
 @purchases_bp.route('/')
 @login_required
@@ -36,6 +36,19 @@ def add_purchase():
         item.form.product_id.choices = product_choices
         if uom.has_conversion_available(products):
             item.form.order_unit.choices = [('purchase', 'Purchase unit'), ('base', 'Stock unit')]
+
+    # What each product has cost before, so the buyer sees the going rate while
+    # they type rather than after the order is placed.
+    price_history = {}
+    if limits.has_feature('price_comparison'):
+        for product in products:
+            best = sourcing.best_price(current_user.business_id, product.id)
+            if best:
+                price_history[str(product.id)] = {
+                    'supplier': best['supplier'].name,
+                    'price': str(best['latest']),
+                    'times': best['times'],
+                }
 
     # Feeds the line preview: what a carton price works out to per unit.
     product_uom = {
@@ -92,7 +105,35 @@ def add_purchase():
             db.session.rollback()
             current_app.logger.exception('%s failed', request.endpoint)
             flash('Something went wrong and nothing was saved. Please try again.', 'danger')
-    return render_template('purchases/add.html', form=form, product_uom=product_uom)
+    return render_template('purchases/add.html', form=form, product_uom=product_uom,
+                           price_history=price_history)
+
+@purchases_bp.route('/compare')
+@login_required
+@permission_required('purchase_orders.view')
+@requires_feature('price_comparison')
+def compare_prices():
+    """Products bought from more than one supplier, biggest price gap first."""
+    rows = sourcing.products_with_alternatives(current_user.business_id)
+    return render_template('purchases/compare.html', rows=rows)
+
+
+@purchases_bp.route('/compare/<int:product_id>')
+@login_required
+@permission_required('purchase_orders.view')
+@requires_feature('price_comparison')
+def compare_product(product_id):
+    """Every supplier who has supplied one product, and what they charged."""
+    product = Product.query.filter_by(
+        id=product_id, business_id=current_user.business_id).first_or_404()
+    options = sourcing.suppliers_for(current_user.business_id, product_id)
+    return render_template(
+        'purchases/compare_product.html',
+        product=product,
+        options=options,
+        savings=sourcing.savings_against_latest(options),
+    )
+
 
 def _parse_date(raw):
     """Parse an ISO date from a form field, returning None for blank or malformed input."""

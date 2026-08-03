@@ -1,0 +1,104 @@
+{% extends 'base.html' %}
+{% block title %}{{ product.name }} — Supplier Prices | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>{{ product.name }}</h2>
+  <div class="page-header-actions">
+    <a href="{{ url_for('purchases.compare_prices') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i> All comparisons
+    </a>
+  </div>
+</div>
+
+{% if savings %}
+<div class="glass-card mb-4">
+  <div class="d-flex align-items-center gap-3">
+    <div class="stat-icon stat-success mb-0"><i class="bi bi-piggy-bank"></i></div>
+    <div>
+      <h5 class="mb-1">Switching supplier would save
+        ₵{{ '%.2f'|format(savings.per_unit) }} per {{ product.base_uom }}</h5>
+      <div class="text-muted">
+        You last ordered from {{ savings['from'].supplier.name }} at
+        ₵{{ '%.2f'|format(savings['from'].latest) }}.
+        {{ savings.to.supplier.name }} charges ₵{{ '%.2f'|format(savings.to.latest) }}.
+        {% if product.units_per_purchase_uom > 1 %}
+        That is ₵{{ '%.2f'|format(savings.per_unit * product.units_per_purchase_uom) }}
+        a {{ product.purchase_uom }}.
+        {% endif %}
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="glass-card">
+  <div class="card-toolbar">
+    <h5 class="mb-0">Who has supplied this</h5>
+    <div class="text-muted small">Cheapest current price first</div>
+  </div>
+
+  {% if options %}
+  <div class="table-responsive">
+    <table class="table table-hover table-cards align-middle">
+      <thead>
+        <tr>
+          <th>Supplier</th>
+          <th class="text-end">Latest price</th>
+          <th class="text-end">Best ever</th>
+          <th class="text-end">Average</th>
+          <th class="text-end">Times ordered</th>
+          <th class="text-end">Last order</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for option in options %}
+        <tr>
+          <td data-label="Supplier">
+            <div class="fw-medium">
+              {{ option.supplier.name }}
+              {% if loop.first %}<span class="badge bg-success ms-1">Cheapest</span>{% endif %}
+            </div>
+            {% if option.supplier.phone %}
+            <div class="text-muted" style="font-size: 0.75rem;">{{ option.supplier.phone }}</div>
+            {% endif %}
+          </td>
+          <td data-label="Latest" class="text-end">
+            <span class="fw-bold">₵{{ '%.2f'|format(option.latest) }}</span>
+            {% if option.trend == 'up' %}
+            <div class="text-danger" style="font-size: 0.75rem;">
+              <i class="bi bi-arrow-up"></i> was ₵{{ '%.2f'|format(option.previous) }}
+            </div>
+            {% elif option.trend == 'down' %}
+            <div class="text-success" style="font-size: 0.75rem;">
+              <i class="bi bi-arrow-down"></i> was ₵{{ '%.2f'|format(option.previous) }}
+            </div>
+            {% endif %}
+          </td>
+          <td data-label="Best" class="text-end text-muted">₵{{ '%.2f'|format(option.best) }}</td>
+          <td data-label="Average" class="text-end text-muted">₵{{ '%.2f'|format(option.average) }}</td>
+          <td data-label="Times" class="text-end text-muted">{{ option.times }}</td>
+          <td data-label="Last order" class="text-end text-muted">{{ option.last_ordered }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <p class="text-muted small mt-3 mb-0">
+    Prices are per {{ product.base_uom }}
+    {%- if product.units_per_purchase_uom > 1 %},
+    so a {{ product.purchase_uom }} of {{ product.units_per_purchase_uom }} at the cheapest
+    rate costs ₵{{ '%.2f'|format(options[0].latest * product.units_per_purchase_uom) }}
+    {%- endif %}. Comparing per-{{ product.purchase_uom }} prices across suppliers who pack
+    differently is exactly the mistake this avoids.
+  </p>
+  {% else %}
+  <div class="text-center py-5">
+    <i class="bi bi-truck fs-1 text-muted d-block mb-3"></i>
+    <h5>No purchase history for this product</h5>
+    <p class="text-muted">Record a purchase order and the prices will start appearing here.</p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

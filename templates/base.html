@@ -75,6 +75,9 @@
             {% if current_user.can('suppliers.view') %}
             <a class="nav-link" href="/products/suppliers" id="nav-suppliers"><i class="bi bi-buildings"></i> Suppliers</a>
             {% endif %}
+            {% if current_user.can('purchase_orders.view') and has_feature('price_comparison') %}
+            <a class="nav-link" href="/purchases/compare" id="nav-compare"><i class="bi bi-graph-up-arrow"></i> Supplier Prices</a>
+            {% endif %}
             {% endif %}
 
             {% if current_user.can('reports.view') %}

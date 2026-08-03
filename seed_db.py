@@ -78,6 +78,14 @@ CUSTOMERS = [
     ('Osu Mini Mart', '0243009988', 'osu@shops.gh', 'Oxford Street, Osu'),
 ]
 
+# Standing rate each supplier charges, as a multiple of the product's cost price.
+# Takoradi is dearest but ships to the west; Voltic is cheapest on its own brands.
+SUPPLIER_RATES = {
+    'Voltic Ghana Ltd': Decimal('0.94'),
+    'Accra Bulk Beverages': Decimal('1.00'),
+    'Takoradi Drinks Depot': Decimal('1.09'),
+}
+
 STAFF = [
     ('Ama Darko', 'ama@accrabev.com', 'Manager'),
     ('Kwesi Appiah', 'kwesi@accrabev.com', 'Inventory Staff'),
@@ -220,10 +228,16 @@ def seed(auto_yes=False):
             for product in random.sample(products, random.randint(6, 10)):
                 cartons = random.randint(15, 40)
                 qty = cartons * product.units_per_purchase_uom
+                # Each supplier has its own standing rate, drifting a little over
+                # time - otherwise every price is identical and the comparison
+                # page has nothing to say.
+                rate = SUPPLIER_RATES[supplier.name]
+                drift = Decimal(str(random.uniform(-0.04, 0.06))).quantize(Decimal('0.001'))
+                unit_cost = (product.cost_price * (rate + drift)).quantize(Decimal('0.01'))
                 item = PurchaseOrderItem(
                     po_id=po.id, product_id=product.id,
                     quantity_ordered=qty, quantity_received=0,
-                    unit_cost=product.cost_price,
+                    unit_cost=max(Decimal('0.01'), unit_cost),
                 )
                 db.session.add(item)
                 db.session.flush()
