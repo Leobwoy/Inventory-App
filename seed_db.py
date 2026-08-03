@@ -26,6 +26,8 @@ from app import create_app
 from extensions import db
 from auth.models import Business, Role, User
 from billing.models import Plan, Subscription
+from credit.models import Payment
+from services import credit as credit_service
 from products.models import Brand, Category, ItemGroup, Product, Supplier
 from purchases.models import PurchaseOrder, PurchaseOrderItem, StockBatch
 from sales.models import Customer, Sale, SaleItem
@@ -287,8 +289,40 @@ def seed(auto_yes=False):
                         batch.quantity_remaining -= take
                         remaining -= take
 
+        db.session.flush()
+
+        # --- payments, so the credit book shows something real -----------------
+        # Roughly how a wholesaler's book actually looks: most sales settled on
+        # the day, a few part-paid, and a tail of old debt to chase.
+        paid_count = partial_count = credit_count = 0
+        for sale in Sale.query.filter_by(business_id=business.id).all():
+            total = sum((i.price_at_sale * i.quantity for i in sale.items), Decimal('0'))
+            if total <= 0:
+                continue
+            roll = random.random()
+            if roll < 0.70:
+                amount, method = total, random.choice(['cash', 'momo', 'momo'])
+                paid_count += 1
+            elif roll < 0.88:
+                amount = (total * Decimal(random.choice(['0.25', '0.4', '0.5', '0.6']))
+                          ).quantize(Decimal('0.01'))
+                method = 'momo'
+                partial_count += 1
+            else:
+                credit_count += 1
+                continue
+
+            db.session.add(Payment(
+                business_id=business.id, sale_id=sale.id, customer_id=sale.customer_id,
+                amount=amount, method=method,
+                reference=f'MP{sale.sale_date.strftime("%y%m%d")}.{random.randint(1000, 9999)}'
+                          if method == 'momo' else None,
+                paid_on=sale.sale_date, recorded_by=owner.id,
+            ))
+
         db.session.commit()
 
+        outstanding = credit_service.total_outstanding(business.id)
         low_stock = sum(1 for p in products if p.quantity_in_stock <= p.min_stock_alert)
         expiring = StockBatch.query.filter(
             StockBatch.expiry_date.isnot(None),
@@ -303,6 +337,8 @@ Seeded {BUSINESS_NAME}
   {len(suppliers)} suppliers, {len(customers)} customers
   {po_count} purchase orders ({batch_count} received into stock batches, 1 left outstanding)
   {sale_count} sales / {item_count} line items over the last 30 days
+  {paid_count} paid in full, {partial_count} part-paid, {credit_count} still on credit
+  GHS {outstanding:,.2f} outstanding across the credit book
   {low_stock} products below their reorder threshold
   {expiring} stock batches expiring within 30 days
 

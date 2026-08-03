@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% block title %}Record Payment | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Record Payment</h2>
+  <div class="page-header-actions">
+    <a href="{{ url_for('credit.dashboard') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i> Back
+    </a>
+  </div>
+</div>
+
+<div class="glass-card mb-4" style="max-width: 720px;">
+  <div class="row g-4">
+    <div class="col-4">
+      <div class="text-muted small">Sale</div>
+      <div class="fw-bold">#{{ sale.id }} &middot; {{ sale.sale_date }}</div>
+      <div class="text-muted">{{ sale.customer.name if sale.customer else 'Walk-in' }}</div>
+    </div>
+    <div class="col-4 text-end">
+      <div class="text-muted small">Sale total</div>
+      <div class="fw-bold">₵{{ '%.2f'|format(total) }}</div>
+      <div class="text-muted small">Paid so far: ₵{{ '%.2f'|format(paid) }}</div>
+    </div>
+    <div class="col-4 text-end">
+      <div class="text-muted small">Still owed</div>
+      <div class="fw-bold fs-4 text-warning">₵{{ '%.2f'|format(balance) }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="glass-card" style="max-width: 720px;">
+  <form method="post">
+    {{ form.hidden_tag() }}
+
+    <div class="row g-4">
+      <div class="col-md-6">
+        <label class="form-label">{{ form.amount.label.text }}</label>
+        <div class="input-group">
+          <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
+          {{ form.amount(class_='form-control' + (' is-invalid' if form.amount.errors else '')) }}
+          {% for error in form.amount.errors %}
+          <div class="invalid-feedback">{{ error }}</div>
+          {% endfor %}
+        </div>
+        <small class="text-muted">Pre-filled with the full balance. Change it for a part-payment.</small>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">{{ form.method.label.text }}</label>
+        {{ form.method(class_='form-select') }}
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">{{ form.reference.label.text }}</label>
+        {{ form.reference(class_='form-control', placeholder='e.g. MoMo transaction ID') }}
+        <small class="text-muted">{{ form.reference.description }}</small>
+      </div>
+
+      <div class="col-md-6">
+        <label class="form-label">{{ form.paid_on.label.text }}</label>
+        {{ form.paid_on(class_='form-control' + (' is-invalid' if form.paid_on.errors else '')) }}
+        {% for error in form.paid_on.errors %}
+        <div class="invalid-feedback">{{ error }}</div>
+        {% endfor %}
+      </div>
+
+      <div class="col-12">
+        <label class="form-label">{{ form.notes.label.text }}</label>
+        {{ form.notes(class_='form-control', rows=2) }}
+      </div>
+    </div>
+
+    <div class="d-flex gap-2 border-top border-secondary pt-4 mt-4">
+      <button type="submit" class="btn btn-success px-4">
+        <i class="bi bi-cash me-1"></i> Record payment
+      </button>
+      <a href="{{ url_for('credit.dashboard') }}" class="btn btn-outline-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

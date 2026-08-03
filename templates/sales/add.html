@@ -99,6 +99,31 @@
             <h3 class="mb-0 text-success">₵<span id="sale-total">0.00</span></h3>
         </div>
 
+        {% if has_feature('credit_ledger') %}
+        <h5 class="mb-3 border-bottom border-secondary pb-2">Payment</h5>
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <label class="form-label">{{ form.settlement.label.text }}</label>
+                {{ form.settlement(class_='form-select', id='settlement') }}
+            </div>
+            <div class="col-md-3 settlement-detail">
+                <label class="form-label">{{ form.amount_paid.label.text }}</label>
+                <div class="input-group">
+                    <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
+                    {{ form.amount_paid(class_='form-control', id='amount-paid') }}
+                </div>
+            </div>
+            <div class="col-md-3 settlement-detail">
+                <label class="form-label">{{ form.payment_method.label.text }}</label>
+                {{ form.payment_method(class_='form-select') }}
+            </div>
+            <div class="col-md-3 settlement-detail">
+                <label class="form-label">{{ form.payment_reference.label.text }}</label>
+                {{ form.payment_reference(class_='form-control', placeholder='MoMo ID, optional') }}
+            </div>
+        </div>
+        {% endif %}
+
         <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check2-circle me-1"></i> Record Sale</button>
             <a href="{{ url_for('sales.list_sales') }}" class="btn btn-outline-secondary">Cancel</a>
@@ -214,6 +239,25 @@
       updateTotal();
     });
     updateTotal();
+
+    // Payment fields only matter once money has actually changed hands, and the
+    // amount is only editable for a part payment - the other two are implied by
+    // the total, so asking for them would just be a chance to mistype.
+    function syncSettlement() {
+      var choice = $('#settlement').val();
+      $('.settlement-detail').toggle(choice !== 'credit');
+      $('#amount-paid').prop('readonly', choice !== 'partial');
+      if (choice === 'paid') {
+        $('#amount-paid').val($('#sale-total').text());
+      } else if (choice === 'credit') {
+        $('#amount-paid').val('0');
+      }
+    }
+    if ($('#settlement').length) {
+      $('#settlement').on('change', syncSettlement);
+      $('#items-table').on('input change', 'input, select', syncSettlement);
+      syncSettlement();
+    }
   });
 </script>
 {% endblock %}

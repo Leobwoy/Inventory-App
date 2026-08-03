@@ -62,6 +62,9 @@
             {% if current_user.can('customers.view') %}
             <a class="nav-link" href="/sales/customers" id="nav-customers"><i class="bi bi-people"></i> Customers</a>
             {% endif %}
+            {% if current_user.can('credit.view') and has_feature('credit_ledger') %}
+            <a class="nav-link" href="/credit/" id="nav-credit"><i class="bi bi-cash-stack"></i> Money Owed</a>
+            {% endif %}
             {% endif %}
 
             {% if current_user.can('purchase_orders.view') or current_user.can('suppliers.view') %}

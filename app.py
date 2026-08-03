@@ -42,9 +42,11 @@ def create_app():
     from purchases.routes import purchases_bp
     from reports.routes import reports_bp
     from auth.routes import auth_bp
+    from credit.routes import credit_bp
     from auth import models as auth_models
     from products.models import Product
     from billing import models as billing_models
+    from credit import models as credit_models
     from sales.models import Sale
     from sqlalchemy import func
     import datetime
@@ -54,6 +56,7 @@ def create_app():
     app.register_blueprint(purchases_bp, url_prefix='/purchases')
     app.register_blueprint(reports_bp, url_prefix='/reports')
     app.register_blueprint(auth_bp, url_prefix='/auth')
+    app.register_blueprint(credit_bp, url_prefix='/credit')
 
     from auth.cli import create_owner_command, reconcile_stock_command
     app.cli.add_command(create_owner_command)

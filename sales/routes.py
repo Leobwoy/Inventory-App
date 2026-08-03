@@ -12,7 +12,8 @@ from .models import SaleItem
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
 from sqlalchemy.orm import joinedload
-from services import audit, pricing, stock
+from decimal import Decimal
+from services import audit, limits, pricing, stock
 
 @sales_bp.route('/')
 @login_required
@@ -29,6 +30,46 @@ def list_sales():
         .paginate(page=page, per_page=15, error_out=False)
     )
     return render_template('sales/list.html', sales=pagination.items, pagination=pagination)
+
+def _settle_sale(sale, form):
+    """Write the payment implied by the settlement choice. Returns what is owed.
+
+    Businesses without the credit feature always settle in full: without a way to
+    see or chase a balance, letting them create one would quietly lose them money.
+    """
+    from credit.models import Payment, sale_total
+
+    total = sale_total(sale)
+    if not limits.has_feature('credit_ledger'):
+        choice, received = 'paid', total
+    else:
+        choice = form.settlement.data or 'paid'
+        if choice == 'paid':
+            received = total
+        elif choice == 'partial':
+            received = min(Decimal(form.amount_paid.data or 0), total)
+        else:
+            received = Decimal('0')
+
+    if received > 0:
+        db.session.add(Payment(
+            business_id=sale.business_id,
+            sale_id=sale.id,
+            customer_id=sale.customer_id,
+            amount=received,
+            method=form.payment_method.data or 'cash',
+            reference=(form.payment_reference.data or '').strip() or None,
+            paid_on=sale.sale_date,
+            recorded_by=current_user.id,
+        ))
+
+    owing = total - received
+    if owing > 0:
+        audit.log('sale.on_credit', entity_type='sale', entity_id=sale.id,
+                  total=str(total), paid=str(received), owing=str(owing),
+                  customer=sale.customer.name if sale.customer else None)
+    return owing
+
 
 @sales_bp.route('/add', methods=['GET', 'POST'])
 @login_required
@@ -84,8 +125,13 @@ def add_sale():
             for product, deviation in deviations:
                 pricing.record_deviation(sale, product, deviation)
 
+            owing = _settle_sale(sale, form)
+
             db.session.commit()
-            flash('Sale recorded!', 'success')
+            if owing > 0:
+                flash(f'Sale recorded. ₵{owing:.2f} outstanding.', 'success')
+            else:
+                flash('Sale recorded and paid in full.', 'success')
             return redirect(url_for('sales.sale_invoice', sale_id=sale.id, customer_name=customer_name))
         except pricing.PriceRejected as e:
             db.session.rollback()

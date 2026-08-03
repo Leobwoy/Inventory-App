@@ -1,0 +1,101 @@
+{% extends 'base.html' %}
+{% block title %}Money Owed | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Money Owed</h2>
+  <div class="page-header-actions">
+    <a href="{{ url_for('sales.list_sales') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-cart3 me-1"></i> Sales
+    </a>
+  </div>
+</div>
+
+<div class="row g-4 mb-4">
+  <div class="col-md-4">
+    <div class="glass-card h-100">
+      <div class="stat-icon stat-warning"><i class="bi bi-cash-stack"></i></div>
+      <h5 class="text-muted mb-1">Total outstanding</h5>
+      <h3 class="mb-0 text-white">₵{{ '%.2f'|format(total) }}</h3>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="glass-card h-100">
+      <div class="stat-icon stat-primary"><i class="bi bi-people"></i></div>
+      <h5 class="text-muted mb-1">Customers owing</h5>
+      <h3 class="mb-0 text-white">{{ rows|length }}</h3>
+    </div>
+  </div>
+  <div class="col-md-4">
+    <div class="glass-card h-100">
+      <div class="stat-icon stat-danger"><i class="bi bi-exclamation-triangle"></i></div>
+      <h5 class="text-muted mb-1">Over 90 days</h5>
+      <h3 class="mb-0 text-white">₵{{ '%.2f'|format(bucket_totals['Over 90 days']) }}</h3>
+    </div>
+  </div>
+</div>
+
+<div class="glass-card">
+  <div class="card-toolbar">
+    <h5 class="mb-0">Who owes what</h5>
+    <div class="text-muted small">Largest debt first</div>
+  </div>
+
+  {% if rows %}
+  <div class="table-responsive">
+    <table class="table table-hover table-cards align-middle">
+      <thead>
+        <tr>
+          <th>Customer</th>
+          {% for bucket in buckets %}<th class="text-end">{{ bucket }}</th>{% endfor %}
+          <th class="text-end">Total owed</th>
+          <th class="text-end">Oldest</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td data-label="Customer" class="fw-medium">
+            {% if row.customer %}
+            <a href="{{ url_for('credit.customer_statement', customer_id=row.customer.id) }}"
+               class="text-decoration-none">{{ row.customer.name }}</a>
+            {% if row.customer.phone %}
+            <div class="text-muted" style="font-size: 0.75rem;">{{ row.customer.phone }}</div>
+            {% endif %}
+            {% else %}
+            <span class="text-muted">Walk-in sales</span>
+            {% endif %}
+          </td>
+          {% for bucket in buckets %}
+          <td data-label="{{ bucket }}" class="text-end {{ 'text-danger' if bucket == 'Over 90 days' and row.buckets[bucket] > 0 }}">
+            {% if row.buckets[bucket] > 0 %}₵{{ '%.2f'|format(row.buckets[bucket]) }}{% else %}—{% endif %}
+          </td>
+          {% endfor %}
+          <td data-label="Total" class="text-end fw-bold text-warning">₵{{ '%.2f'|format(row.total) }}</td>
+          <td data-label="Oldest" class="text-end text-muted">{{ row.oldest_days }} days</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr class="bg-dark">
+          <td class="fw-bold border-0">TOTAL</td>
+          {% for bucket in buckets %}
+          <td class="text-end fw-bold border-0">₵{{ '%.2f'|format(bucket_totals[bucket]) }}</td>
+          {% endfor %}
+          <td class="text-end fw-bold text-warning border-0 fs-5">₵{{ '%.2f'|format(total) }}</td>
+          <td class="border-0"></td>
+        </tr>
+      </tfoot>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center py-5">
+    <i class="bi bi-check-circle fs-1 text-success d-block mb-3"></i>
+    <h5>Nobody owes you anything</h5>
+    <p class="text-muted">
+      When you record a sale that is not paid in full, it appears here until it is settled.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
