@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, send_from_directory
 from flask_bootstrap import Bootstrap
 from flask_wtf.csrf import CSRFProtect
 import os
@@ -78,6 +78,38 @@ def create_app():
             return limits.has_feature(code)
 
         return {'has_feature': has_feature, 'uom': uom}
+
+    @app.route('/sw.js')
+    def service_worker():
+        """Serve the worker from the site root.
+
+        A service worker can only control URLs beneath its own path, so one
+        served from /static/sw.js would see nothing but /static - not a single
+        page of the app. Serving the same file from / gives it the whole origin.
+
+        No-cache: the browser re-checks this file to discover a new worker, and
+        a stale copy pins users to an old one until it expires.
+        """
+        response = send_from_directory(app.static_folder, 'sw.js',
+                                       mimetype='application/javascript')
+        response.headers['Cache-Control'] = 'no-cache'
+        response.headers['Service-Worker-Allowed'] = '/'
+        return response
+
+    @app.route('/manifest.json')
+    def manifest():
+        return send_from_directory(app.static_folder, 'manifest.json',
+                                   mimetype='application/manifest+json')
+
+    @app.route('/offline')
+    def offline():
+        """The page shown when the network is gone.
+
+        Deliberately outside @login_required: it is served from the cache with
+        no session to check, and redirecting to a login screen that also cannot
+        load would be a worse answer than saying plainly what happened.
+        """
+        return render_template('offline.html')
 
     @app.route('/')
     @login_required
@@ -190,4 +222,7 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True) 
+    # PORT from the environment, because that is how every host tells a process
+    # where to listen - and it lets a second instance start when the first has
+    # left a socket behind.
+    app.run(debug=True, port=int(os.environ.get('PORT', 5000)))

@@ -10,6 +10,16 @@
     <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+
+    {# Installable: the manifest names the app, the theme colour paints the
+       Android status bar, and iOS ignores both and reads its own tags. #}
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TrackTrack">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
     {% block head %}{% endblock %}
 </head>
 <body>
@@ -171,5 +181,16 @@
     });
 </script>
 {% block scripts %}{% endblock %}
+<script>
+    // Registered after load so it never competes with the page for bandwidth on
+    // a slow connection. An unsupported browser just carries on as a website.
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/sw.js').catch(function (error) {
+                console.warn('Service worker registration failed:', error);
+            });
+        });
+    }
+</script>
 </body>
 </html>

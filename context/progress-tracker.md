@@ -109,16 +109,31 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   entirely in the URL, so a filtered list can be bookmarked or shared, and paging keeps
   it. Counts report matches, not page length. Brands, categories, item groups and staff
   are deliberately left alone: they are bounded lists that fit on one screen.
+- **2.4b** Installable shell. `manifest.json`, generated icon set (including maskable, or
+  Android crops the mark), `static/sw.js`, and an offline fallback page.
+  The worker is served from **`/sw.js`, not `/static/sw.js`** — a worker only controls URLs
+  beneath its own path, so from `/static` it would see no page of the app.
+  **Pages are never cached.** Every page is behind a login and full of one business's
+  money; caching would leave those figures on the device after logout, readable on a
+  shared phone, and returning hours stale as though current. Static assets are cache-first
+  (public, identical for everyone, unchanged until deploy) — only possible because 2.4a
+  moved them off the CDN. Non-GET and cross-origin requests are ignored entirely.
+  `templates/offline.html` deliberately does **not** extend `base.html`: that template
+  branches on whether there is a session, and the first version rendered a full sidebar
+  and no content at all for a logged-in reader — which is the case that actually happens.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**266 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+**284 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 
-- **Stage 2.4b** — installable shell: `manifest.json`, `static/sw.js`, offline fallback.
+- **Stage 2.4c** — offline sale capture: cache the catalogue in IndexedDB, queue a sale
+  recorded without a signal, show it as unmistakably pending. Then 2.4d syncs it via a new
+  `/api/v1/sales` that reuses `services/stock.py` and `services/pricing.py` rather than
+  duplicating the rules, returning per-sale accept/conflict.
 
 ## Next Up
 
