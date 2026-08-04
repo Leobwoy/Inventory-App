@@ -99,12 +99,22 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   PowerShell's ANSI default during 2.4a, turning every `₵` into `â‚µ`. Repaired, with a
   test asserting the sign renders. **Never round-trip a file through `Get-Content` /
   `Set-Content`** — use `[System.IO.File]::ReadAllText/WriteAllText`, which are UTF-8.
+- **F-39 Search, sort and filter on every record list.** Sales had a bulk-action dropdown
+  and pagination but no way to find anything — 60 sales a day fills fifteen pages in a
+  week. Products had a search box, the audit log had filters, nothing else had either.
+  `services/listing.py` plus `templates/_partials/list_toolbar.html` give one shared
+  pattern, now on Sales, Products, Purchase Orders, Customers and Suppliers.
+  Sort keys are **whitelisted** — a key from the query string is user input and an
+  unrecognised one becomes the default rather than reaching the database. State lives
+  entirely in the URL, so a filtered list can be bookmarked or shared, and paging keeps
+  it. Counts report matches, not page length. Brands, categories, item groups and staff
+  are deliberately left alone: they are bounded lists that fit on one screen.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**248 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+**266 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 

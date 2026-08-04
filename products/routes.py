@@ -14,26 +14,74 @@ from flask import send_file
 import io
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
-from services import audit, limits
+from datetime import date, timedelta
+from purchases.models import StockBatch
+from services import audit, limits, listing
+
+PRODUCT_SORTS = {
+    'name':     [Product.name.asc()],
+    'newest':   [Product.id.desc()],
+    'stock_low': [Product.quantity_in_stock.asc(), Product.name.asc()],
+    'stock_high': [Product.quantity_in_stock.desc(), Product.name.asc()],
+    'price_low': [Product.unit_price.asc(), Product.name.asc()],
+    'price_high': [Product.unit_price.desc(), Product.name.asc()],
+}
+PRODUCT_SORT_LABELS = [
+    ('name', 'Name (A–Z)'), ('newest', 'Recently added'),
+    ('stock_low', 'Stock: lowest'), ('stock_high', 'Stock: highest'),
+    ('price_low', 'Price: lowest'), ('price_high', 'Price: highest'),
+]
+
+SUPPLIER_SORTS = {
+    'name':   [Supplier.name.asc()],
+    'newest': [Supplier.id.desc()],
+}
+SUPPLIER_SORT_LABELS = [('name', 'Name (A-Z)'), ('newest', 'Recently added')]
+
 
 @products_bp.route('/')
 @login_required
 @permission_required('products.view')
 def list_products():
     page = request.args.get('page', 1, type=int)
-    search_query = request.args.get('q', '').strip()
-    
-    query = Product.query.filter_by(business_id=current_user.business_id)
-    if search_query:
-        query = query.filter(db.or_(
-            Product.name.ilike(f'%{search_query}%'),
-            Product.sku.ilike(f'%{search_query}%'),
-            Product.barcode.ilike(f'%{search_query}%'),
-            Product.variant_label.ilike(f'%{search_query}%')
-        ))
-        
-    pagination = query.order_by(Product.name).paginate(page=page, per_page=15, error_out=False)
-    return render_template('products/list.html', products=pagination.items, pagination=pagination, search_query=search_query)
+    business_id = current_user.business_id
+    term = listing.search_term()
+    stock_filter = listing.filter_value('stock', ['low', 'out', 'expiring'])
+    status = listing.filter_value('status', ['active', 'inactive'])
+    sort = listing.sort_key(PRODUCT_SORTS, 'name')
+
+    query = Product.query.filter_by(business_id=business_id)
+    query = listing.apply_search(query, term, [
+        Product.name, Product.sku, Product.barcode, Product.variant_label,
+    ])
+
+    if status == 'active':
+        query = query.filter(Product.is_active.is_(True))
+    elif status == 'inactive':
+        query = query.filter(Product.is_active.is_(False))
+
+    if stock_filter == 'out':
+        query = query.filter(Product.quantity_in_stock <= 0)
+    elif stock_filter == 'low':
+        # At or below the threshold is what the owner needs to reorder, and a
+        # product already at zero is the most urgent case of that.
+        query = query.filter(Product.quantity_in_stock <= Product.min_stock_alert)
+    elif stock_filter == 'expiring':
+        horizon = date.today() + timedelta(days=current_user.business.expiry_alert_days or 30)
+        expiring = (db.session.query(StockBatch.product_id)
+                    .filter(StockBatch.business_id == business_id,
+                            StockBatch.quantity_remaining > 0,
+                            StockBatch.expiry_date.isnot(None),
+                            StockBatch.expiry_date <= horizon))
+        query = query.filter(Product.id.in_(expiring))
+
+    query = listing.apply_sort(query, PRODUCT_SORTS, sort)
+    pagination = query.paginate(page=page, per_page=15, error_out=False)
+    return render_template(
+        'products/list.html', products=pagination.items, pagination=pagination,
+        search_query=term, q=term, sort=sort, sort_options=PRODUCT_SORT_LABELS,
+        stock=stock_filter, status=status,
+        is_filtered=listing.is_filtered('q', 'stock', 'status'))
 
 def _sku_token(text, length=4):
     """Uppercase alphanumeric fragment of `text`, for building a readable SKU."""
@@ -627,8 +675,15 @@ def delete_item_group(item_group_id):
 @login_required
 @permission_required('suppliers.view')
 def list_suppliers():
-    suppliers = Supplier.query.filter_by(business_id=current_user.business_id).order_by(Supplier.name).all()
-    return render_template('products/suppliers.html', suppliers=suppliers)
+    term = listing.search_term()
+    sort = listing.sort_key(SUPPLIER_SORTS, 'name')
+    query = listing.apply_search(
+        Supplier.query.filter_by(business_id=current_user.business_id), term,
+        [Supplier.name, Supplier.contact, Supplier.phone, Supplier.email])
+    suppliers = listing.apply_sort(query, SUPPLIER_SORTS, sort).all()
+    return render_template('products/suppliers.html', suppliers=suppliers,
+                           q=term, sort=sort, sort_options=SUPPLIER_SORT_LABELS,
+                           is_filtered=listing.is_filtered('q'))
 
 @products_bp.route('/suppliers/add', methods=['GET', 'POST'])
 @login_required

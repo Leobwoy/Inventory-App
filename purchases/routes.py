@@ -10,7 +10,20 @@ from flask import send_file
 import io
 from flask_login import login_required, current_user
 from auth.decorators import permission_required, requires_feature
-from services import audit, limits, sourcing, stock, uom
+from sqlalchemy.orm import joinedload
+from services import audit, limits, listing, sourcing, stock, uom
+
+PO_SORTS = {
+    'newest': [PurchaseOrder.order_date.desc(), PurchaseOrder.id.desc()],
+    'oldest': [PurchaseOrder.order_date.asc(), PurchaseOrder.id.asc()],
+    'supplier': [Supplier.name.asc().nullslast(), PurchaseOrder.id.desc()],
+    'status': [PurchaseOrder.status.asc(), PurchaseOrder.order_date.desc()],
+}
+PO_SORT_LABELS = [
+    ('newest', 'Newest first'), ('oldest', 'Oldest first'),
+    ('supplier', 'Supplier name'), ('status', 'Status'),
+]
+
 
 @purchases_bp.route('/')
 @login_required
@@ -18,8 +31,37 @@ from services import audit, limits, sourcing, stock, uom
 @requires_feature('purchase_orders')
 def list_purchases():
     page = request.args.get('page', 1, type=int)
-    pagination = PurchaseOrder.query.filter_by(business_id=current_user.business_id).order_by(PurchaseOrder.order_date.desc()).paginate(page=page, per_page=15, error_out=False)
-    return render_template('purchases/list.html', purchase_orders=pagination.items, pagination=pagination)
+    business_id = current_user.business_id
+    term = listing.search_term()
+    sort = listing.sort_key(PO_SORTS, 'newest')
+    statuses = [s[0] for s in db.session.query(PurchaseOrder.status)
+                .filter(PurchaseOrder.business_id == business_id)
+                .distinct().order_by(PurchaseOrder.status).all() if s[0]]
+    status = listing.filter_value('status', statuses)
+
+    # Outer join, not inner: a purchase order may have no supplier, and an inner
+    # join would quietly drop those rows the moment anyone sorted or searched.
+    query = (PurchaseOrder.query
+             .filter(PurchaseOrder.business_id == business_id)
+             .outerjoin(Supplier, PurchaseOrder.supplier_id == Supplier.id)
+             .options(joinedload(PurchaseOrder.supplier)))
+
+    if term:
+        conditions = [Supplier.name.ilike(f'%{term}%')]
+        if term.lstrip('#').isdigit():
+            conditions.append(PurchaseOrder.id == int(term.lstrip('#')))
+        query = query.filter(db.or_(*conditions))
+    if status:
+        query = query.filter(PurchaseOrder.status == status)
+
+    pagination = (listing.apply_sort(query, PO_SORTS, sort)
+                  .paginate(page=page, per_page=15, error_out=False))
+    return render_template(
+        'purchases/list.html', purchase_orders=pagination.items,
+        pagination=pagination, q=term, sort=sort, sort_options=PO_SORT_LABELS,
+        status=status,
+        status_options=[('', 'Any')] + [(s, s.replace('_', ' ').title()) for s in statuses],
+        is_filtered=listing.is_filtered('q', 'status'))
 
 @purchases_bp.route('/add', methods=['GET', 'POST'])
 @login_required

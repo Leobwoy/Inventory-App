@@ -29,6 +29,16 @@ AGEING_BUCKETS = [
 ]
 
 
+def sale_value_subquery(business_id):
+    """Public alias: the sales list joins this to sort and filter by value."""
+    return _sale_totals_subquery(business_id)
+
+
+def sale_paid_subquery(business_id):
+    """Public alias: the sales list joins this to filter by settlement."""
+    return _sale_payments_subquery(business_id)
+
+
 def _sale_totals_subquery(business_id):
     """Per-sale value, as a subquery so balances are one query rather than N."""
     return (

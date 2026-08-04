@@ -10,6 +10,9 @@
 </div>
 
 <div class="glass-card">
+    {% set search_placeholder = 'Name, contact, phone or email' %}
+    {% include '_partials/list_toolbar.html' with context %}
+
     <div class="table-responsive">
         <table class="table table-hover table-cards">
             <thead>

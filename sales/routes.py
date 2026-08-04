@@ -11,25 +11,88 @@ import io
 from .models import SaleItem
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
+from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from decimal import Decimal
-from services import audit, limits, pricing, stock
+from services import audit, credit as credit_service, limits, listing, pricing, stock
+
+# Sorting by value needs the totals subquery, so it is applied in the view
+# rather than here; it still has to be in the whitelist to be accepted.
+SALE_SORTS = {
+    'newest':  [Sale.sale_date.desc(), Sale.id.desc()],
+    'oldest':  [Sale.sale_date.asc(), Sale.id.asc()],
+    'largest': None,
+    'buyer':   [Sale.customer_name.asc().nullslast(), Sale.id.desc()],
+}
+SALE_SORT_LABELS = [
+    ('newest', 'Newest first'), ('oldest', 'Oldest first'),
+    ('largest', 'Largest value'), ('buyer', 'Buyer name'),
+]
+SETTLEMENT_FILTERS = ['paid', 'partial', 'credit']
+
+CUSTOMER_SORTS = {
+    'name':   [Customer.name.asc()],
+    'newest': [Customer.id.desc()],
+}
+CUSTOMER_SORT_LABELS = [('name', 'Name (A-Z)'), ('newest', 'Recently added')]
+
 
 @sales_bp.route('/')
 @login_required
 @permission_required('sales.view')
 def list_sales():
     page = request.args.get('page', 1, type=int)
+    business_id = current_user.business_id
+    term = listing.search_term()
+    settlement = listing.filter_value('settlement', SETTLEMENT_FILTERS)
+    sort = listing.sort_key(SALE_SORTS, 'newest')
+
     # The list shows each sale's lines and customer, so load them with the sales
     # rather than firing a query per row.
-    pagination = (
-        Sale.query.filter_by(business_id=current_user.business_id)
+    query = (
+        Sale.query.filter_by(business_id=business_id)
         .options(joinedload(Sale.items).joinedload(SaleItem.product),
                  joinedload(Sale.customer))
-        .order_by(Sale.sale_date.desc())
-        .paginate(page=page, per_page=15, error_out=False)
     )
-    return render_template('sales/list.html', sales=pagination.items, pagination=pagination)
+
+    if term:
+        # Searching a sale means searching who bought it, which lives in two
+        # places, plus the invoice number people read off a printed copy.
+        query = query.outerjoin(Customer, Sale.customer_id == Customer.id)
+        conditions = [Customer.name.ilike(f'%{term}%'),
+                      Sale.customer_name.ilike(f'%{term}%'),
+                      Sale.customer_phone.ilike(f'%{term}%')]
+        if term.lstrip('#').isdigit():
+            conditions.append(Sale.id == int(term.lstrip('#')))
+        query = query.filter(db.or_(*conditions))
+
+    totals = credit_service.sale_value_subquery(business_id)
+    paid = credit_service.sale_paid_subquery(business_id)
+    if settlement or sort == 'largest':
+        query = (query.outerjoin(totals, totals.c.sale_id == Sale.id)
+                      .outerjoin(paid, paid.c.sale_id == Sale.id))
+    if settlement:
+        value = func.coalesce(totals.c.total, 0)
+        received = func.coalesce(paid.c.paid, 0)
+        if settlement == 'paid':
+            query = query.filter(received >= value, value > 0)
+        elif settlement == 'partial':
+            query = query.filter(received > 0, received < value)
+        else:
+            query = query.filter(received == 0, value > 0)
+
+    if sort == 'largest':
+        query = query.order_by(func.coalesce(totals.c.total, 0).desc(), Sale.id.desc())
+    else:
+        query = listing.apply_sort(query, SALE_SORTS, sort)
+
+    pagination = query.paginate(page=page, per_page=15, error_out=False)
+    return render_template(
+        'sales/list.html', sales=pagination.items, pagination=pagination,
+        q=term, sort=sort, sort_options=SALE_SORT_LABELS,
+        settlement=settlement,
+        is_filtered=listing.is_filtered('q', 'settlement'),
+    )
 
 def _settle_sale(sale, form):
     """Write the payment implied by the settlement choice. Returns what is owed.
@@ -169,8 +232,15 @@ def add_sale():
 @login_required
 @permission_required('customers.view')
 def list_customers():
-    customers = Customer.query.filter_by(business_id=current_user.business_id).order_by(Customer.name).all()
-    return render_template('sales/customers.html', customers=customers)
+    term = listing.search_term()
+    sort = listing.sort_key(CUSTOMER_SORTS, 'name')
+    query = listing.apply_search(
+        Customer.query.filter_by(business_id=current_user.business_id), term,
+        [Customer.name, Customer.phone, Customer.email, Customer.address])
+    customers = listing.apply_sort(query, CUSTOMER_SORTS, sort).all()
+    return render_template('sales/customers.html', customers=customers,
+                           q=term, sort=sort, sort_options=CUSTOMER_SORT_LABELS,
+                           is_filtered=listing.is_filtered('q'))
 
 @sales_bp.route('/customers/add', methods=['GET', 'POST'])
 @login_required
