@@ -21,6 +21,9 @@ class SaleForm(FlaskForm):
     sale_date = DateField('Sale Date', validators=[DataRequired()])
     customer_id = SelectField('Customer', coerce=str, validators=[Optional()])
     customer_name = StringField('Customer Name (optional)', validators=[Optional(), Length(max=100)])
+    # A walk-in buying on credit has no customer record to hold a number, and a
+    # debt you cannot phone is a debt you do not collect.
+    customer_phone = StringField('Phone (optional)', validators=[Optional(), Length(max=50)])
 
     # Wholesale runs on credit, so how the sale was settled is part of recording
     # it. 'paid' writes a payment for the full amount; 'partial' writes whatever

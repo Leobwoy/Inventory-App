@@ -201,7 +201,7 @@ def statement(business_id, customer_id, as_of=None):
             'date': s.sale_date, 'kind': 'sale', 'description': f'Sale #{s.id}',
             'charged': total, 'paid': Decimal('0'), 'ref': None,
             'sale_id': s.id, 'settled': paid, 'outstanding': total - paid,
-            'status': settlement_of(total, settled[s.id]),
+            'status': settlement_of(total, settled[s.id]), 'notes': None,
         })
     for p in payments:
         events.append({
@@ -210,6 +210,9 @@ def statement(business_id, customer_id, as_of=None):
             'charged': Decimal('0'), 'paid': p.amount, 'ref': p.reference,
             'sale_id': p.sale_id, 'settled': None, 'outstanding': None,
             'status': None,
+            # The payment form asks for notes and nothing ever showed them
+            # again, which makes the field worse than not having one.
+            'notes': p.notes,
         })
 
     # A payment recorded the same day as a sale settles that sale, so sales sort

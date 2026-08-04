@@ -82,12 +82,29 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   until now discounting was finished, tested code that no business could switch on.
   Logo bytes live in the row, not on disk — Koyeb rebuilds the container on every deploy,
   and there is no object store. `logo_path` dropped; nothing ever wrote to it.
+- **F-35 Discounts are visible, not just enforced.** `SaleItem.list_price` records what the
+  product listed for on the day, so a discount survives later repricing — it cannot be
+  recomputed by comparing an old sale against today's price without inventing discounts
+  that never happened. The sale form shows the reduction per line and a total as it is
+  typed, and warns before the ceiling is breached rather than after the server refuses it.
+  The invoice shows the struck-through list price and the total given.
+- **F-36 Invoice carries the business's identity.** It printed "TrackTrack" and our logo
+  regardless of whose business it was. Now the business name, address and contact, with
+  their logo when uploaded and ours as fallback. A small "Made by TrackTrack" credit stays
+  at the foot regardless of branding.
+- **F-37 Walk-in phone; payment notes readable.** `Sale.customer_phone` — a debt you cannot
+  phone is a debt you do not collect. Payment notes were captured by the form and never
+  displayed again; they now appear on the statement.
+- **F-38 Corrupted currency symbol.** `templates/sales/add.html` was re-encoded through
+  PowerShell's ANSI default during 2.4a, turning every `₵` into `â‚µ`. Repaired, with a
+  test asserting the sign renders. **Never round-trip a file through `Get-Content` /
+  `Set-Content`** — use `[System.IO.File]::ReadAllText/WriteAllText`, which are UTF-8.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**239 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+**248 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 

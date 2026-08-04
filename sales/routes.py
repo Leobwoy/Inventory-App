@@ -84,6 +84,7 @@ def add_sale():
     if form.validate_on_submit():
         customer_id = int(form.customer_id.data) if form.customer_id.data and form.customer_id.data != '0' else None
         customer_name = form.customer_name.data.strip() if form.customer_name.data else None
+        customer_phone = form.customer_phone.data.strip() if form.customer_phone.data else None
         try:
             sale = Sale()
             sale.business_id = current_user.business_id
@@ -92,6 +93,7 @@ def add_sale():
             # Only meaningful for a walk-in; a registered customer carries their
             # own name and storing a second copy would let the two disagree.
             sale.customer_name = None if customer_id else customer_name
+            sale.customer_phone = None if customer_id else customer_phone
             db.session.add(sale)
             deviations = []
             # Save all sale items
@@ -117,6 +119,9 @@ def add_sale():
                 sale_item.product_id = product.id
                 sale_item.quantity = item_form.quantity.data
                 sale_item.price_at_sale = charged
+                # Keep what it listed for, so a discount is still visible on the
+                # invoice and in reports long after the product is repriced.
+                sale_item.list_price = Decimal(product.unit_price or 0)
                 sale.items.append(sale_item)
                 deviations.append((product, deviation))
 

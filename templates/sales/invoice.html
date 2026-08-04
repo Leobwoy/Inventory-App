@@ -6,13 +6,24 @@
     <div class="col-lg-8 col-md-10 col-12">
       <div class="card shadow">
         <div class="card-body p-4 p-md-4 p-2">
-          <div class="invoice-header d-flex justify-content-between align-items-center mb-4">
+          {% set business = current_user.business %}
+          <div class="invoice-header d-flex justify-content-between align-items-start mb-4">
             <div>
-              <h2 class="mb-0 fs-4 fs-md-2">TrackTrack</h2>
+              <h2 class="mb-0 fs-4 fs-md-2">{{ business.name }}</h2>
               <div class="text-muted">INVOICE</div>
+              {% if business.address or business.contact_number %}
+              <div class="text-muted small mt-1">
+                {% if business.address %}{{ business.address }}<br>{% endif %}
+                {% if business.contact_number %}{{ business.contact_number }}{% endif %}
+              </div>
+              {% endif %}
             </div>
             <div>
-              <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" class="invoice-logo">
+              {# The business's own logo when they have uploaded one; ours until then,
+                 so an invoice never goes out with an empty space where a mark belongs. #}
+              <img src="{{ url_for('auth.business_logo') if business.has_logo
+                          else url_for('static', filename='logo.png') }}"
+                   alt="{{ business.name }}" class="invoice-logo">
             </div>
           </div>
           <div class="row mb-3">
@@ -21,12 +32,14 @@
               <strong>Date:</strong> {{ sale.sale_date }}<br>
             </div>
             <div class="col-sm-6 text-sm-end">
-              <strong>Customer:</strong> {% if customer_name %}{{ customer_name }}{% elif sale.customer %}{{
-              sale.customer.name }}{% else %}N/A{% endif %}<br>
-              {% if sale.customer and not customer_name %}
-              <span class="text-muted">{{ sale.customer.phone }}<br>{{ sale.customer.email }}<br>{{
-                sale.customer.address }}</span>
-              {% endif %}
+              <strong>Customer:</strong> {{ sale.buyer_name }}<br>
+              <span class="text-muted">
+                {% if sale.customer %}
+                {{ sale.customer.phone }}<br>{{ sale.customer.email }}<br>{{ sale.customer.address }}
+                {% elif sale.customer_phone %}
+                {{ sale.customer_phone }}
+                {% endif %}
+              </span>
             </div>
           </div>
           <div class="table-responsive">
@@ -44,9 +57,17 @@
                 {% for item in sale.items %}
                 <tr>
                   <td data-label="Item">{{ item.product.name }}</td>
-                  <td data-label="Unit Price">₵{{ item.price_at_sale }}</td>
+                  <td data-label="Unit Price">
+                    ₵{{ '%.2f'|format(item.price_at_sale) }}
+                    {% if item.was_discounted %}
+                    <div class="text-muted small">
+                      <s>₵{{ '%.2f'|format(item.list_price) }}</s>
+                      &minus;{{ item.discount_percent }}%
+                    </div>
+                    {% endif %}
+                  </td>
                   <td data-label="Quantity">{{ item.quantity }}</td>
-                  <td data-label="Total">₵{{ item.price_at_sale * item.quantity }}</td>
+                  <td data-label="Total">₵{{ '%.2f'|format(item.price_at_sale * item.quantity) }}</td>
                 </tr>
                 {% set ns.grand_total = ns.grand_total + (item.price_at_sale * item.quantity) %}
                 {% endfor %}
@@ -55,11 +76,23 @@
           </div>
           <div class="d-flex justify-content-end">
             <div class="text-end">
-              <h4 class="mb-0">Grand Total: <span class="text-success">₵{{ ns.grand_total }}</span></h4>
+              {% if sale.was_discounted %}
+              <div class="mb-1">
+                Discount given:
+                <span class="text-warning">&minus;₵{{ '%.2f'|format(sale.total_discount) }}</span>
+              </div>
+              {% endif %}
+              <h4 class="mb-0">Grand Total:
+                <span class="text-success">₵{{ '%.2f'|format(ns.grand_total) }}</span>
+              </h4>
             </div>
           </div>
           <hr>
           <div class="text-center text-muted small">Thank you for your business!</div>
+          {# Stays whatever the business brands the rest of the page as. #}
+          <div class="text-center text-muted mt-2" style="font-size: 0.7rem; opacity: 0.7;">
+            Made by TrackTrack
+          </div>
         </div>
       </div>
       <div class="text-center mt-3">

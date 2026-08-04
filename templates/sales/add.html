@@ -32,10 +32,17 @@
                 <div class="invalid-feedback">{{ error }}</div>
                 {% endfor %}
             </div>
-            <div class="col-md-4">
+            <div class="col-md-2">
                 <label class="form-label">{{ form.customer_name.label.text }} <span class="text-muted small">(If walk-in)</span></label>
                 {{ form.customer_name(class_='form-control' + (' is-invalid' if form.customer_name.errors else ''), placeholder='Optional') }}
                 {% for error in form.customer_name.errors %}
+                <div class="invalid-feedback">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Phone <span class="text-muted small">(If walk-in)</span></label>
+                {{ form.customer_phone(class_='form-control' + (' is-invalid' if form.customer_phone.errors else ''), placeholder='Optional') }}
+                {% for error in form.customer_phone.errors %}
                 <div class="invalid-feedback">{{ error }}</div>
                 {% endfor %}
             </div>
@@ -52,12 +59,13 @@
         {% endif %}
         
         <div class="table-responsive mb-4">
-            <table class="table table-bordered table-hover align-middle table-cards table-sale-items" id="items-table">
+            <table class="table table-bordered table-hover align-middle table-cards table-sale-items"
+                   id="items-table" data-max-discount="{{ max_discount or 0 }}">
                 <thead>
                     <tr>
                         <th>Product</th>
                         <th>Quantity</th>
-                        <th>Unit Price (â‚µ)</th>
+                        <th>Unit Price (₵)</th>
                         <th class="text-center">Action</th>
                     </tr>
                 </thead>
@@ -78,7 +86,7 @@
                         </td>
                         <td data-label="Unit Price">
                             <div class="input-group">
-                                <span class="input-group-text border-secondary bg-transparent text-muted">â‚µ</span>
+                                <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
                                 {# Editable only for staff who may discount. Either way the
                                    server re-resolves the price - readonly is not a control. #}
                                 {% if can_discount %}
@@ -87,6 +95,10 @@
                                 {{ subform.price_at_sale(class_='form-control price-input', readonly=True) }}
                                 {% endif %}
                             </div>
+                            {# Filled in by JavaScript as the price is typed. The server
+                               re-checks the same rule; this only makes it visible before
+                               you commit, instead of after it is rejected. #}
+                            <div class="line-discount small mt-1" hidden></div>
                         </td>
                         <td data-label="" class="cell-actions text-center">
                             <button type="button" class="btn btn-outline-danger btn-sm remove-item" title="Remove Item"><i class="bi bi-trash"></i></button>
@@ -98,9 +110,18 @@
             <button type="button" class="btn btn-outline-primary btn-sm" id="add-item"><i class="bi bi-plus-lg"></i> Add Item</button>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center bg-dark p-3 rounded border border-secondary mb-4">
-            <div class="text-muted">Total Amount</div>
-            <h3 class="mb-0 text-success">â‚µ<span id="sale-total">0.00</span></h3>
+        <div class="bg-dark p-3 rounded border border-secondary mb-4">
+            <div id="discount-summary" class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary" hidden>
+                <div class="text-warning">
+                    <i class="bi bi-tag-fill me-1"></i> Discount applied
+                    <span class="text-muted small ms-1" id="discount-detail"></span>
+                </div>
+                <div class="fs-5 fw-bold text-warning">&minus;₵<span id="discount-total">0.00</span></div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="text-muted">Total Amount</div>
+                <h3 class="mb-0 text-success">₵<span id="sale-total">0.00</span></h3>
+            </div>
         </div>
 
         {% if has_feature('credit_ledger') %}
@@ -113,7 +134,7 @@
             <div class="col-md-3 settlement-detail">
                 <label class="form-label">{{ form.amount_paid.label.text }}</label>
                 <div class="input-group">
-                    <span class="input-group-text border-secondary bg-transparent text-muted">â‚µ</span>
+                    <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
                     {{ form.amount_paid(class_='form-control', id='amount-paid') }}
                 </div>
             </div>
@@ -156,6 +177,10 @@
   var totalEl = document.getElementById('sale-total');
   var settlement = document.getElementById('settlement');
   var amountPaid = document.getElementById('amount-paid');
+  var discountSummary = document.getElementById('discount-summary');
+  var discountTotal = document.getElementById('discount-total');
+  var discountDetail = document.getElementById('discount-detail');
+  var maxDiscount = parseFloat(table.dataset.maxDiscount || '0') || 0;
 
   // Clean server-rendered markup, so an added row inherits the server's own
   // decision about whether price is editable instead of assuming readonly.
@@ -174,16 +199,65 @@
     price.value = productPrices[select.value] !== undefined ? productPrices[select.value] : '';
   }
 
+  // Show a discount while it is being typed rather than only after the server
+  // rejects it. The server still decides - this is the same rule, said earlier.
+  function updateLineDiscount(row) {
+    var select = row.querySelector('.product-select');
+    var priceField = row.querySelector('.price-input');
+    var note = row.querySelector('.line-discount');
+    if (!select || !priceField || !note) {
+      return 0;
+    }
+    var listPrice = productPrices[select.value];
+    var charged = parseFloat(priceField.value);
+    var qty = parseFloat((row.querySelector('[name$="quantity"]') || {}).value) || 0;
+
+    if (listPrice === undefined || isNaN(charged) || charged >= listPrice) {
+      note.hidden = true;
+      priceField.classList.remove('border-warning', 'border-danger');
+      return 0;
+    }
+
+    var off = listPrice - charged;
+    var percent = listPrice > 0 ? (off / listPrice) * 100 : 0;
+    var overCeiling = percent > maxDiscount + 0.001;
+
+    note.hidden = false;
+    note.className = 'line-discount small mt-1 ' + (overCeiling ? 'text-danger' : 'text-warning');
+    note.textContent = overCeiling
+      ? '₵' + off.toFixed(2) + ' off (' + percent.toFixed(1) + '%) — over the '
+        + maxDiscount + '% limit, this will be refused'
+      : '₵' + off.toFixed(2) + ' off list ₵' + listPrice.toFixed(2)
+        + ' (' + percent.toFixed(1) + '%)';
+    priceField.classList.toggle('border-danger', overCeiling);
+    priceField.classList.toggle('border-warning', !overCeiling);
+    return off * qty;
+  }
+
   function updateTotal() {
     var total = 0;
+    var discount = 0;
+    var discountedLines = 0;
     rows().forEach(function (row) {
       var qtyField = row.querySelector('[name$="quantity"]');
       var priceField = row.querySelector('[name$="price_at_sale"]');
       var qty = qtyField ? parseFloat(qtyField.value) || 0 : 0;
       var price = priceField ? parseFloat(priceField.value) || 0 : 0;
       total += qty * price;
+      var off = updateLineDiscount(row);
+      if (off > 0) {
+        discount += off;
+        discountedLines += 1;
+      }
     });
     totalEl.textContent = total.toFixed(2);
+
+    if (discountSummary) {
+      discountSummary.hidden = discount <= 0;
+      discountTotal.textContent = discount.toFixed(2);
+      discountDetail.textContent = discountedLines === 1
+        ? 'on 1 line' : 'on ' + discountedLines + ' lines';
+    }
   }
 
   // Payment fields only matter once money has actually changed hands, and the
