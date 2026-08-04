@@ -7,11 +7,13 @@ took ownership of it (F-12). Here the sums are small and indexed, so deriving
 them is cheap and always right.
 """
 import datetime
+from collections import defaultdict
 from decimal import Decimal
 
 from sqlalchemy import func
+from sqlalchemy.orm import selectinload
 
-from credit.models import PAYMENT_METHODS, Payment, sale_total
+from credit.models import PAYMENT_METHODS, Payment, sale_total, settlement_of
 from extensions import db
 from sales.models import Sale, SaleItem
 
@@ -140,13 +142,23 @@ def bucket_totals(rows):
 def statement(business_id, customer_id, as_of=None):
     """Every sale and payment for one customer, oldest first.
 
-    Returns [{date, kind, description, charged, paid, balance}] with a running
-    balance - the shape a customer expects to see when they query what they owe.
+    Returns [{date, kind, description, charged, paid, balance, ...}] with a
+    running balance - the shape a customer expects to see when they query what
+    they owe.
+
+    A sale row also carries its own settlement (`settled`, `outstanding`,
+    `status`) and a payment row names the sale it cleared. Without that, paying
+    a sale in full leaves its row looking untouched: `paid` on a sale row is
+    always zero because the money arrives as a separate row, sorted by its own
+    date and possibly far down the page. Users read that as the payment having
+    not registered.
     """
     as_of = as_of or datetime.date.today()
 
     sales = (
-        Sale.query.filter(
+        Sale.query
+        .options(selectinload(Sale.items))
+        .filter(
             Sale.business_id == business_id,
             Sale.customer_id == customer_id,
             Sale.sale_date <= as_of,
@@ -160,16 +172,32 @@ def statement(business_id, customer_id, as_of=None):
         ).all()
     )
 
-    events = [
-        {'date': s.sale_date, 'kind': 'sale', 'description': f'Sale #{s.id}',
-         'charged': sale_total(s), 'paid': Decimal('0'), 'ref': None}
-        for s in sales
-    ] + [
-        {'date': p.paid_on, 'kind': 'payment',
-         'description': METHOD_LABELS.get(p.method, p.method),
-         'charged': Decimal('0'), 'paid': p.amount, 'ref': p.reference}
-        for p in payments
-    ]
+    # Summed from the same as-of window rather than from sale.payments, so a
+    # statement run for an earlier date does not credit a sale with money that
+    # had not arrived yet.
+    settled = defaultdict(Decimal)
+    for payment in payments:
+        settled[payment.sale_id] += payment.amount
+
+    events = []
+    for s in sales:
+        total = sale_total(s)
+        # An overpayment reads as settled, never as negative outstanding.
+        paid = min(settled[s.id], total)
+        events.append({
+            'date': s.sale_date, 'kind': 'sale', 'description': f'Sale #{s.id}',
+            'charged': total, 'paid': Decimal('0'), 'ref': None,
+            'sale_id': s.id, 'settled': paid, 'outstanding': total - paid,
+            'status': settlement_of(total, settled[s.id]),
+        })
+    for p in payments:
+        events.append({
+            'date': p.paid_on, 'kind': 'payment',
+            'description': METHOD_LABELS.get(p.method, p.method),
+            'charged': Decimal('0'), 'paid': p.amount, 'ref': p.reference,
+            'sale_id': p.sale_id, 'settled': None, 'outstanding': None,
+            'status': None,
+        })
 
     # A payment recorded the same day as a sale settles that sale, so sales sort
     # first within a date.

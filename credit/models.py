@@ -70,11 +70,20 @@ def sale_balance(sale):
     return max(Decimal('0'), sale_total(sale) - sale_paid(sale))
 
 
-def settlement_status(sale):
-    """paid, partial or credit, derived rather than stored."""
-    total, paid = sale_total(sale), sale_paid(sale)
+def settlement_of(total, paid):
+    """paid, partial or credit for an already-known pair of amounts.
+
+    Separate from settlement_status so a caller that has summed payments over a
+    date window - an as-of statement - can classify with those figures instead
+    of the sale's full payment history.
+    """
     if paid >= total and total > 0:
         return SETTLEMENT_PAID
     if paid > 0:
         return SETTLEMENT_PARTIAL
     return SETTLEMENT_CREDIT
+
+
+def settlement_status(sale):
+    """paid, partial or credit, derived rather than stored."""
+    return settlement_of(sale_total(sale), sale_paid(sale))

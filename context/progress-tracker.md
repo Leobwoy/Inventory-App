@@ -61,12 +61,19 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
 - **2.3** Multi-supplier price comparison. Pure read over purchase history — latest,
   best-ever, average, trend, and what switching would save.
 
+- **2.2 fix (F-32)** The statement's sale rows never showed their own settlement, and
+  payment rows did not name the sale they cleared. Paying a sale in full left its row
+  looking untouched — `paid` on a sale row is structurally always zero, since the money
+  arrives as a separate row sorted by its own date, often pages away. Users read that as
+  the payment having failed. Sale rows now carry `settled`/`outstanding`/`status`,
+  computed within the as-of window so a back-dated statement is not credited with money
+  that had not arrived; payment rows carry `sale_id`. Found by the user testing the demo.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**220 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+**224 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 
@@ -85,6 +92,14 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
 
 ## Open Questions
 
+- **No Business Settings page exists (F-33).** `Business` carries `name`, `address`,
+  `contact_number`, `logo_path`, `expiry_alert_days` and `max_discount_percent`, and **not
+  one of them can be changed from inside the app**. Name, address and contact are captured
+  at registration and never again; `logo_path` is written by nothing. Worst is
+  `max_discount_percent`, which defaults to `0`: the entire Stage 1.5 discount system —
+  the `sales.discount` permission, the ceiling, the never-below-cost floor, the deviation
+  audit trail — is finished, tested and **unreachable**, because no screen can raise the
+  ceiling above zero. Needs one route, one form, one template. Sequencing not yet decided.
 - **Paystack merchant registration.** Requires a registered Ghanaian business and a
   corporate bank account. Long lead time; gates Stage 2B regardless of code readiness.
 - **Deployment.** Neon + Koyeb accounts not yet provisioned — blocked on the user.

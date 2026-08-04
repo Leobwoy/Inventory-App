@@ -321,3 +321,84 @@ def test_sales_staff_can_take_payments_but_not_all_staff_can(shop, make_staff, b
     inventory = make_staff(business_id, 'Inventory Staff', 'inv@x.example.com')
     assert inventory.get('/credit/').status_code == 403
     assert inventory.get(f'/credit/sale/{sale.id}/pay').status_code == 403
+
+
+def test_a_settled_sale_says_so_on_its_own_statement_row(shop):
+    """The Paid column on a sale row is always blank - the money arrives as its
+    own row, sorted by its own date, which can be pages away. Without a
+    settlement marker on the sale itself, a customer who has paid in full still
+    reads as owing, and users conclude the payment was never recorded."""
+    client, business_id, product, customer = shop
+    sale = sell(client, product, customer, quantity=8)        # 800 on credit
+
+    client.post(f'/credit/sale/{sale.id}/pay', data={
+        'amount': '800.00', 'method': 'momo', 'reference': 'MP260804.7788',
+        'paid_on': TODAY.isoformat(), 'notes': '',
+    }, follow_redirects=True)
+
+    events = credit.statement(business_id, customer.id)
+    sale_row = next(e for e in events if e['kind'] == 'sale')
+    payment_row = next(e for e in events if e['kind'] == 'payment')
+
+    assert sale_row['status'] == 'paid'
+    assert sale_row['settled'] == Decimal('800.00')
+    assert sale_row['outstanding'] == Decimal('0')
+    # The payment has to name what it cleared, or the two rows stay unconnected.
+    assert payment_row['sale_id'] == sale.id
+    # The ledger arithmetic is unchanged: charged less paid still nets to zero.
+    assert events[-1]['balance'] == Decimal('0')
+
+
+def test_a_part_paid_sale_shows_what_is_still_owed(shop):
+    client, business_id, product, customer = shop
+    sale = sell(client, product, customer, quantity=8)        # 800 on credit
+
+    client.post(f'/credit/sale/{sale.id}/pay', data={
+        'amount': '300.00', 'method': 'cash', 'reference': '',
+        'paid_on': TODAY.isoformat(), 'notes': '',
+    }, follow_redirects=True)
+
+    sale_row = next(e for e in credit.statement(business_id, customer.id)
+                    if e['kind'] == 'sale')
+    assert sale_row['status'] == 'partial'
+    assert sale_row['settled'] == Decimal('300.00')
+    assert sale_row['outstanding'] == Decimal('500.00')
+
+
+def test_settlement_reflects_the_as_of_date_not_todays_payments(shop):
+    """An historical statement must not credit a sale with money that had not
+    arrived by the date it was run - otherwise a statement printed for a
+    customer contradicts the balance printed beside it."""
+    client, business_id, product, customer = shop
+    five_days_ago = TODAY - datetime.timedelta(days=5)
+    sale = sell(client, product, customer, quantity=8, when=five_days_ago)
+
+    client.post(f'/credit/sale/{sale.id}/pay', data={
+        'amount': '800.00', 'method': 'cash', 'reference': '',
+        'paid_on': TODAY.isoformat(), 'notes': '',
+    }, follow_redirects=True)
+
+    as_of = TODAY - datetime.timedelta(days=3)
+    earlier = next(e for e in credit.statement(business_id, customer.id, as_of=as_of)
+                   if e['kind'] == 'sale')
+    assert earlier['status'] == 'credit'
+    assert earlier['outstanding'] == Decimal('800.00')
+
+    now = next(e for e in credit.statement(business_id, customer.id)
+               if e['kind'] == 'sale')
+    assert now['status'] == 'paid'
+
+
+def test_the_statement_page_shows_the_settlement_marker(shop):
+    """A route-level test because the service returning the right dict is only
+    half of it - the template has to render it."""
+    client, _business_id, product, customer = shop
+    sale = sell(client, product, customer, quantity=8)
+    client.post(f'/credit/sale/{sale.id}/pay', data={
+        'amount': '800.00', 'method': 'cash', 'reference': '',
+        'paid_on': TODAY.isoformat(), 'notes': '',
+    }, follow_redirects=True)
+
+    body = client.get(f'/credit/customer/{customer.id}').get_data(as_text=True)
+    assert 'Settled' in body
+    assert f'against Sale #{sale.id}' in body

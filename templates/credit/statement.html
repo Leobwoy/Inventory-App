@@ -89,11 +89,22 @@
             <td data-label="Date" class="text-muted">{{ event.date }}</td>
             <td data-label="Detail">
               {% if event.kind == 'sale' %}
-              <i class="bi bi-cart3 text-muted me-1"></i>
+              <i class="bi bi-cart3 text-muted me-1"></i>{{ event.description }}
+              {# The Paid column is always blank on a sale row - the money is a
+                 separate row further down. Say here whether it ever arrived. #}
+              {% if event.status == 'paid' %}
+              <span class="badge bg-success ms-1">Settled</span>
+              {% elif event.status == 'partial' %}
+              <span class="badge bg-warning text-dark ms-1">₵{{ '%.2f'|format(event.outstanding) }} still owing</span>
               {% else %}
-              <i class="bi bi-cash text-success me-1"></i>
+              <span class="badge bg-secondary ms-1">Unpaid</span>
               {% endif %}
-              {{ event.description }}
+              {% else %}
+              <i class="bi bi-cash text-success me-1"></i>{{ event.description }}
+              {% if event.sale_id %}
+              <span class="text-muted small ms-1">against Sale #{{ event.sale_id }}</span>
+              {% endif %}
+              {% endif %}
             </td>
             <td data-label="Reference" class="text-muted font-monospace" style="font-size: 0.8rem;">
               {{ event.ref or '—' }}
