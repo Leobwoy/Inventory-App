@@ -47,16 +47,19 @@ Bootstrap defaults (`rounded`, `rounded-3`). Cards use `0.75rem` via `.glass-car
 
 ## Component Library
 
-Bootstrap 5.3 from CDN, plus `static/css/style.css`.
+Bootstrap 5.3.0 and Bootstrap Icons 1.11.3, **vendored under `static/vendor/`** with
+Chart.js 4.4.1, plus `static/css/style.css`. Nothing loads from another origin — a service
+worker cannot reliably cache cross-origin responses, and `tests/test_assets.py` fails if a
+CDN link reappears.
+
+Searchable dropdowns use `static/js/combobox.js` (with `static/css/combobox.css`), applied
+by putting `data-combobox` on a `<select>`. The native `<select>` stays in the DOM and
+still posts its value, so the page works with JavaScript off.
 
 **Known debt, to be resolved in Stage 3.2 / 3.3:**
 - 29 `!important` declarations, mostly overriding Bootstrap's white table and card
   defaults. Target zero — either configure Bootstrap through its variables or replace it
   with a small hand-written layer.
-- Seven CDN dependencies with no SRI hashes; `chart.js` unpinned. **A service worker
-  cannot reliably cache cross-origin responses, so Stage 2.4 must self-host these first.**
-- jQuery and Select2 (~150KB) exist to power one dropdown on the sale form. Replace with
-  a native searchable combobox.
 - Three mobile breakpoints (991px, 767px, 400px) maintain a second card-shaped copy of
   every table layout.
 

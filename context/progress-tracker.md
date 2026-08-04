@@ -61,11 +61,16 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
 - **2.3** Multi-supplier price comparison. Pure read over purchase history — latest,
   best-ever, average, trend, and what switching would save.
 
-**237 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+- **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
+  `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
+  `static/js/combobox.js`. No template loads anything from another origin, which is a
+  precondition for the service worker in 2.4b.
+
+**220 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 
-- Nothing. Stage 2.3 is committed; Stage 2.4 has not started.
+- **Stage 2.4b** — installable shell: `manifest.json`, `static/sw.js`, offline fallback.
 
 ## Next Up
 

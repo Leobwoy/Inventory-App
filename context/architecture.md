@@ -14,7 +14,7 @@
 | Reports | ReportLab, pandas, openpyxl, XlsxWriter | PDF / Excel / CSV export |
 | Hosting | Koyeb (app) + Neon (Postgres), Frankfurt | Free tier, no expiry clock |
 | Server | Gunicorn, via the repo `Dockerfile` | Runs `flask db upgrade` on start |
-| Tests | pytest against real PostgreSQL | 237 tests; migrations, not `create_all()` |
+| Tests | pytest against real PostgreSQL | 220 tests; migrations, not `create_all()` |
 
 Frankfurt is chosen over US or Cape Town regions because West African undersea cables
 route north to Europe, so Ghana reaches Frankfurt faster than Johannesburg.
