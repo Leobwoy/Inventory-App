@@ -87,8 +87,11 @@
             {% endif %}
 
             {% if current_user.can('users.manage') or current_user.can('backup.run')
-                  or current_user.can('audit.view') %}
+                  or current_user.can('audit.view') or current_user.can('settings.manage') %}
             <div class="nav-section-label">Administration</div>
+            {% if current_user.can('settings.manage') %}
+            <a class="nav-link" href="/auth/settings" id="nav-settings"><i class="bi bi-gear-fill"></i> Settings</a>
+            {% endif %}
             {% if current_user.can('users.manage') %}
             <a class="nav-link" href="/auth/users" id="nav-users"><i class="bi bi-people-fill"></i> Staff</a>
             {% endif %}

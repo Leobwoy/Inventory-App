@@ -130,6 +130,19 @@ def ageing(business_id, as_of=None):
     return sorted(per_customer.values(), key=lambda e: e['total'], reverse=True)
 
 
+def walk_in_sales(business_id, as_of=None):
+    """Outstanding sales with no registered customer, oldest first.
+
+    The ageing report groups by customer, which collapses every walk-in into one
+    anonymous row with nothing to click. The money is still owed and still has to
+    be collectable, so for walk-ins the unit is the sale rather than the person.
+
+    Returns [(Sale, total, paid, balance)].
+    """
+    return [row for row in outstanding_sales(business_id, as_of=as_of)
+            if row[0].customer_id is None]
+
+
 def bucket_totals(rows):
     """Column totals for the ageing table."""
     totals = {label: Decimal('0') for _l, _h, label in AGEING_BUCKETS}

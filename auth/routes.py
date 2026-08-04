@@ -1,9 +1,11 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import (Blueprint, Response, abort, current_app, flash, redirect,
+                   render_template, request, url_for)
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from auth.models import User, Business, Role, AuditLog
 from sqlalchemy.orm import joinedload
-from auth.forms import RegistrationForm, ChangePasswordForm, UserForm
+from auth.forms import (BusinessSettingsForm, RegistrationForm, ChangePasswordForm,
+                        UserForm)
 from auth.decorators import permission_required, requires_feature
 from auth.permissions import ALL as ALL_PERMISSION_CODES, GROUP_ORDER, PERMISSIONS
 from products.models import Brand, ItemGroup
@@ -333,3 +335,82 @@ def toggle_user_active(user_id):
         db.session.commit()
         flash(f"{user.name} {'reinstated' if user.is_active else 'suspended'}.", 'success')
     return redirect(url_for('auth.users_list'))
+
+
+MAX_LOGO_BYTES = 512 * 1024
+
+
+@auth_bp.route('/settings', methods=['GET', 'POST'])
+@login_required
+@permission_required('settings.manage')
+def business_settings():
+    """Business-level configuration.
+
+    Every field here already existed on the Business row with no way to change
+    it. max_discount_percent matters most: it defaults to 0, so until this page
+    existed the whole discount system - the sales.discount permission, the
+    ceiling, the never-below-cost floor - was finished code no business could
+    switch on.
+    """
+    business = Business.query.get_or_404(current_user.business_id)
+    form = BusinessSettingsForm(obj=business)
+
+    if form.validate_on_submit():
+        before = {
+            'name': business.name,
+            'max_discount_percent': str(business.max_discount_percent),
+            'expiry_alert_days': business.expiry_alert_days,
+        }
+        business.name = form.name.data.strip()
+        business.address = (form.address.data or '').strip() or None
+        business.contact_number = (form.contact_number.data or '').strip() or None
+        business.expiry_alert_days = form.expiry_alert_days.data
+        business.max_discount_percent = form.max_discount_percent.data
+
+        upload = form.logo.data
+        if form.remove_logo.data:
+            business.logo_data = None
+            business.logo_mimetype = None
+        elif upload:
+            blob = upload.read()
+            if len(blob) > MAX_LOGO_BYTES:
+                flash(f'That logo is {len(blob) // 1024}KB. Keep it under '
+                      f'{MAX_LOGO_BYTES // 1024}KB so pages stay quick on mobile data.',
+                      'danger')
+                return render_template('auth/settings.html', form=form, business=business)
+            business.logo_data = blob
+            business.logo_mimetype = upload.mimetype
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('saving business settings failed')
+            flash('Something went wrong and the settings were not saved.', 'danger')
+            return render_template('auth/settings.html', form=form, business=business)
+
+        # The discount ceiling is a money control, so a change to it is worth
+        # being able to find later.
+        audit.log('settings.update', entity_type='business', entity_id=business.id,
+                  before=before,
+                  after={'name': business.name,
+                         'max_discount_percent': str(business.max_discount_percent),
+                         'expiry_alert_days': business.expiry_alert_days})
+        db.session.commit()
+        flash('Settings saved.', 'success')
+        return redirect(url_for('auth.business_settings'))
+
+    return render_template('auth/settings.html', form=form, business=business)
+
+
+@auth_bp.route('/business/logo')
+@login_required
+def business_logo():
+    """Serve this business's logo. Scoped to the caller, so an id cannot be
+    tampered with to read another tenant's branding."""
+    business = Business.query.get_or_404(current_user.business_id)
+    if not business.has_logo:
+        abort(404)
+    return Response(business.logo_data,
+                    mimetype=business.logo_mimetype or 'image/png',
+                    headers={'Cache-Control': 'private, max-age=300'})

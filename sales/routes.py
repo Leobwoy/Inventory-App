@@ -89,6 +89,9 @@ def add_sale():
             sale.business_id = current_user.business_id
             sale.sale_date = form.sale_date.data or date.today()
             sale.customer_id = customer_id
+            # Only meaningful for a walk-in; a registered customer carries their
+            # own name and storing a second copy would let the two disagree.
+            sale.customer_name = None if customer_id else customer_name
             db.session.add(sale)
             deviations = []
             # Save all sale items
@@ -132,7 +135,7 @@ def add_sale():
                 flash(f'Sale recorded. ₵{owing:.2f} outstanding.', 'success')
             else:
                 flash('Sale recorded and paid in full.', 'success')
-            return redirect(url_for('sales.sale_invoice', sale_id=sale.id, customer_name=customer_name))
+            return redirect(url_for('sales.sale_invoice', sale_id=sale.id))
         except pricing.PriceRejected as e:
             db.session.rollback()
             flash(str(e), 'danger')
@@ -305,8 +308,10 @@ def sale_invoice(sale_id):
             .options(joinedload(Sale.items).joinedload(SaleItem.product),
                      joinedload(Sale.customer))
             .first_or_404())
-    customer_name = request.args.get('customer_name')
-    return render_template('sales/invoice.html', sale=sale, customer_name=customer_name)
+    # Read from the sale, not the query string: a name in a URL survives one
+    # redirect, leaks into logs and browser history, and is gone on reload.
+    return render_template('sales/invoice.html', sale=sale,
+                           customer_name=sale.customer_name)
 
 @sales_bp.route('/bulk_print_invoices')
 @login_required

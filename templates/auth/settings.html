@@ -1,0 +1,97 @@
+{% extends 'base.html' %}
+{% block title %}Business Settings | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Business Settings</h2>
+</div>
+
+<form method="post" enctype="multipart/form-data">
+  {{ form.hidden_tag() }}
+
+  <div class="glass-card mb-4">
+    <div class="card-toolbar">
+      <h5 class="mb-0">Your business</h5>
+      <div class="text-muted small">Appears on invoices and statements</div>
+    </div>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <label class="form-label">{{ form.name.label.text }}</label>
+        {{ form.name(class_='form-control' + (' is-invalid' if form.name.errors else '')) }}
+        {% for error in form.name.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">{{ form.contact_number.label.text }}</label>
+        {{ form.contact_number(class_='form-control' + (' is-invalid' if form.contact_number.errors else '')) }}
+        {% for error in form.contact_number.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+      </div>
+      <div class="col-12">
+        <label class="form-label">{{ form.address.label.text }}</label>
+        {{ form.address(class_='form-control' + (' is-invalid' if form.address.errors else '')) }}
+        {% for error in form.address.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+      </div>
+    </div>
+  </div>
+
+  <div class="glass-card mb-4">
+    <div class="card-toolbar">
+      <h5 class="mb-0">Logo</h5>
+    </div>
+    <div class="d-flex align-items-center gap-4 flex-wrap">
+      {% if business.has_logo %}
+      <img src="{{ url_for('auth.business_logo') }}" alt="Current logo"
+           style="height: 64px; width: auto; max-width: 200px; object-fit: contain;
+                  background: rgba(255,255,255,0.06); border-radius: 0.5rem; padding: 0.5rem;">
+      {% else %}
+      <div class="text-muted"><i class="bi bi-image fs-1"></i></div>
+      {% endif %}
+      <div class="flex-grow-1" style="min-width: 240px;">
+        {{ form.logo(class_='form-control' + (' is-invalid' if form.logo.errors else '')) }}
+        {% for error in form.logo.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        <div class="form-text">PNG or JPG, up to 512KB.</div>
+        {% if business.has_logo %}
+        <div class="form-check mt-2">
+          {{ form.remove_logo(class_='form-check-input') }}
+          <label class="form-check-label" for="{{ form.remove_logo.id }}">
+            {{ form.remove_logo.label.text }}
+          </label>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <div class="glass-card mb-4">
+    <div class="card-toolbar">
+      <h5 class="mb-0">Selling rules</h5>
+    </div>
+    <div class="row g-4">
+      <div class="col-md-6">
+        <label class="form-label">{{ form.max_discount_percent.label.text }}</label>
+        <div class="input-group">
+          {{ form.max_discount_percent(class_='form-control' + (' is-invalid' if form.max_discount_percent.errors else '')) }}
+          <span class="input-group-text border-secondary bg-transparent text-muted">%</span>
+          {% for error in form.max_discount_percent.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="form-text">
+          Leave at 0 to switch discounting off entirely. Above 0, staff who hold
+          <span class="font-monospace">sales.discount</span> may sell that far below
+          the listed price &mdash; never below cost, and every reduction is recorded
+          against their name.
+        </div>
+      </div>
+      <div class="col-md-6">
+        <label class="form-label">{{ form.expiry_alert_days.label.text }}</label>
+        <div class="input-group">
+          {{ form.expiry_alert_days(class_='form-control' + (' is-invalid' if form.expiry_alert_days.errors else '')) }}
+          <span class="input-group-text border-secondary bg-transparent text-muted">days</span>
+          {% for error in form.expiry_alert_days.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+        </div>
+        <div class="form-text">How far ahead to warn you about stock nearing expiry.</div>
+      </div>
+    </div>
+  </div>
+
+  {{ form.submit(class_='btn btn-primary px-4') }}
+</form>
+{% endblock %}

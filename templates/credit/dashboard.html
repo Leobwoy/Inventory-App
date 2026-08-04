@@ -63,7 +63,12 @@
             <div class="text-muted" style="font-size: 0.75rem;">{{ row.customer.phone }}</div>
             {% endif %}
             {% else %}
-            <span class="text-muted">Walk-in sales</span>
+            {# Walk-ins have no customer record to hang a balance on, so they are
+               settled sale by sale on their own page rather than being a dead row. #}
+            <a href="{{ url_for('credit.walk_in_sales') }}" class="text-decoration-none">
+              Walk-in sales
+            </a>
+            <div class="text-muted" style="font-size: 0.75rem;">Settled per sale</div>
             {% endif %}
           </td>
           {% for bucket in buckets %}

@@ -47,6 +47,25 @@ def customer_statement(customer_id):
     )
 
 
+@credit_bp.route('/walk-ins')
+@login_required
+@permission_required('credit.view')
+@requires_feature('credit_ledger')
+def walk_in_sales():
+    """Outstanding walk-in sales, one row each.
+
+    The ageing table groups by customer, so walk-ins collapse into a single row
+    with no customer to link to - leaving money that is owed with no way to open
+    it or settle it.
+    """
+    rows = credit.walk_in_sales(current_user.business_id)
+    return render_template(
+        'credit/walk_ins.html',
+        rows=rows,
+        total=sum((balance for _s, _t, _p, balance in rows), credit.Decimal('0')),
+    )
+
+
 @credit_bp.route('/sale/<int:sale_id>/pay', methods=['GET', 'POST'])
 @login_required
 @permission_required('credit.record_payment')

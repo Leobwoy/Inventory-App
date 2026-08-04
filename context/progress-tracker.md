@@ -68,12 +68,26 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   the payment having failed. Sale rows now carry `settled`/`outstanding`/`status`,
   computed within the as-of window so a back-dated statement is not credited with money
   that had not arrived; payment rows carry `sale_id`. Found by the user testing the demo.
+- **2.2 fix (F-34)** Walk-in customers were a dead end in the credit book. The name typed
+  on the sale form was never stored — it rode to the invoice as a URL query parameter and
+  was gone on reload — and the ageing report groups by customer, so every walk-in
+  collapsed into one anonymous, unclickable row with no way to open or settle it.
+  `Sale.customer_name` now persists it, and `/credit/walk-ins` lists the debts one sale at
+  a time, each with a Record payment button. For a walk-in the unit is the sale, not the
+  person: there is no customer record to hold a running balance.
+- **F-33 Business Settings.** `/auth/settings`, gated on `settings.manage` — a permission
+  that was already in the catalogue and seeded, but which no route had ever used. Business
+  name, address, contact, logo, expiry alert window and the discount ceiling. This is what
+  makes the Stage 1.5 discount system reachable: `max_discount_percent` defaults to 0, so
+  until now discounting was finished, tested code that no business could switch on.
+  Logo bytes live in the row, not on disk — Koyeb rebuilds the container on every deploy,
+  and there is no object store. `logo_path` dropped; nothing ever wrote to it.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**224 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+**239 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 
@@ -92,14 +106,12 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
 
 ## Open Questions
 
-- **No Business Settings page exists (F-33).** `Business` carries `name`, `address`,
-  `contact_number`, `logo_path`, `expiry_alert_days` and `max_discount_percent`, and **not
-  one of them can be changed from inside the app**. Name, address and contact are captured
-  at registration and never again; `logo_path` is written by nothing. Worst is
-  `max_discount_percent`, which defaults to `0`: the entire Stage 1.5 discount system —
-  the `sales.discount` permission, the ceiling, the never-below-cost floor, the deviation
-  audit trail — is finished, tested and **unreachable**, because no screen can raise the
-  ceiling above zero. Needs one route, one form, one template. Sequencing not yet decided.
+- **Promotional discounts do not exist.** Point-of-sale discounting works (a per-line
+  price reduction, permission-gated, capped, audited) now that the ceiling is settable.
+  What has never been built is a *scheduled* discount attached to goods — "10% off this
+  brand until Friday", or a customer price tier. That is a distinct feature: it needs a
+  price-rule model, a date window, and a resolution order when rules overlap. Raised by
+  the user; not scoped or scheduled yet.
 - **Paystack merchant registration.** Requires a registered Ghanaian business and a
   corporate bank account. Long lead time; gates Stage 2B regardless of code readiness.
 - **Deployment.** Neon + Koyeb accounts not yet provisioned — blocked on the user.

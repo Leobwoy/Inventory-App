@@ -17,7 +17,18 @@ class Sale(db.Model):
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     sale_date = db.Column(db.Date, nullable=False)
     customer_id = db.Column(db.Integer, db.ForeignKey('customer.id'))
+    # Who bought it when they are not in the customer list. Without this a
+    # walk-in who buys on credit is anonymous, and the credit book cannot tell
+    # one of them from another.
+    customer_name = db.Column(db.String(100))
     items = db.relationship('SaleItem', backref='sale', lazy=True, cascade='all, delete-orphan')
+
+    @property
+    def buyer_name(self):
+        """Who to chase for the money, registered customer or walk-in."""
+        if self.customer:
+            return self.customer.name
+        return self.customer_name or 'Walk-in customer'
 
     def __repr__(self):
         return f'<Sale {self.id}>'
