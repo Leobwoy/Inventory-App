@@ -279,6 +279,14 @@ def apply_user_preset(user_id):
     return redirect(url_for('auth.edit_user_permissions', user_id=user.id))
 
 
+def _as_date(value):
+    """A yyyy-mm-dd filter value, or None. A bad one must not take the page down."""
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date() if value else None
+    except (TypeError, ValueError):
+        return None
+
+
 @auth_bp.route('/audit')
 @login_required
 @permission_required('audit.view')
@@ -296,11 +304,15 @@ def audit_log():
         query = query.filter(AuditLog.action == action)
     if user_id:
         query = query.filter(AuditLog.user_id == user_id)
-    if start:
-        query = query.filter(AuditLog.timestamp >= start)
-    if end:
-        # end is a date; include everything on that day
-        query = query.filter(AuditLog.timestamp < f'{end} 23:59:59')
+    # Parsed, not passed through. These are raw query strings compared against a
+    # timestamp column: on PostgreSQL `?start_date=abc` raises a DataError and
+    # returns 500, which anyone holding audit.view can trigger from the URL bar.
+    start_on, end_on = _as_date(start), _as_date(end)
+    if start_on:
+        query = query.filter(AuditLog.timestamp >= start_on)
+    if end_on:
+        # Whole day inclusive, built from a real date rather than string-glued.
+        query = query.filter(AuditLog.timestamp < end_on + timedelta(days=1))
 
     pagination = query.order_by(AuditLog.timestamp.desc()).paginate(
         page=page, per_page=50, error_out=False)

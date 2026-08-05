@@ -226,14 +226,44 @@ def test_the_selector_is_a_paid_feature(crate_product, app):
     assert 'order_unit' not in body
 
 
-def test_without_the_feature_a_posted_unit_is_still_honoured_server_side(crate_product):
-    """The selector is hidden, not the conversion - a Shop customer who posts a
-    unit by hand gets the same arithmetic, because the server is the authority
-    and silently storing 10 bottles as 10 crates would corrupt their stock."""
+def test_without_the_feature_everything_entered_is_in_base_units(crate_product):
+    """This test previously asserted the opposite, and the assertion was wrong.
+
+    The template hides the unit selector when the business lacks
+    uom_conversion, but the WTForms field defaults to 'purchase'. So a Shop
+    customer typing 10 pieces submitted no unit at all and had it read as 10
+    crates - 240 pieces into stock. The old test posted the unit by hand, which
+    hid the real case, and justified it as "the server is the authority".
+
+    The server is the authority, and its answer here has to be base units: a
+    business that is not sold the conversion is never shown a way to mean
+    crates, so any purchase unit reaching this route is a default or a forgery.
+    """
     client, business_id, product = crate_product
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.plan_id = Plan.query.filter_by(code='basic').one().id
     subscription.status = 'active'
+    subscription.paid_through = datetime.datetime.utcnow() + datetime.timedelta(days=30)
+    db.session.commit()
+
+    # No order_unit at all, exactly as the template posts it.
+    client.post('/purchases/add', data={
+        'supplier_id': '0', 'order_date': TODAY.isoformat(), 'expected_date': '',
+        'items-0-product_id': str(product.id), 'items-0-quantity_ordered': '10',
+        'items-0-unit_cost': '2.00',
+    }, follow_redirects=True)
+
+    assert PurchaseOrderItem.query.one().quantity_ordered == 10
+
+
+def test_without_the_feature_a_hand_posted_purchase_unit_is_ignored(crate_product):
+    """Hiding a control is not enforcing anything. Posting the unit by hand must
+    not buy the conversion the plan does not include."""
+    client, business_id, product = crate_product
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.plan_id = Plan.query.filter_by(code='basic').one().id
+    subscription.status = 'active'
+    subscription.paid_through = datetime.datetime.utcnow() + datetime.timedelta(days=30)
     db.session.commit()
 
     client.post('/purchases/add', data={
@@ -242,4 +272,4 @@ def test_without_the_feature_a_posted_unit_is_still_honoured_server_side(crate_p
         'items-0-order_unit': 'purchase', 'items-0-unit_cost': '48.00',
     }, follow_redirects=True)
 
-    assert PurchaseOrderItem.query.one().quantity_ordered == 240
+    assert PurchaseOrderItem.query.one().quantity_ordered == 10

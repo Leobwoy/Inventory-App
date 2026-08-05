@@ -255,3 +255,37 @@ def test_page_is_gated_and_filters(register, make_product, make_staff):
 
     staff = make_staff(business_id, 'Sales Staff', 'sales@x.example.com')
     assert staff.get('/auth/audit').status_code == 403
+
+
+def test_a_bad_date_filter_does_not_take_the_page_down(register):
+    """start_date and end_date were compared straight against a timestamp
+    column. On PostgreSQL an unparseable value raises DataError and returns 500,
+    which anyone holding audit.view could trigger from the URL bar. SQLite would
+    have compared it lexically and shown nothing."""
+    client, _business_id = register()
+
+    for bad in ('abc', '2026-13-45', "'; DROP TABLE audit_log; --", '2026/08/05'):
+        response = client.get(f'/auth/audit?start_date={bad}&end_date={bad}')
+        assert response.status_code == 200, f'{bad!r} broke the audit log'
+
+
+def test_the_date_filter_still_filters(register, app):
+    """The parsing must not quietly turn every filter into a no-op."""
+    import datetime
+    from auth.models import AuditLog
+    from extensions import db
+
+    client, business_id = register()
+    old = AuditLog(business_id=business_id, action='sale.create',
+                   timestamp=datetime.datetime(2020, 1, 1, 12, 0))
+    recent = AuditLog(business_id=business_id, action='sale.void',
+                      timestamp=datetime.datetime.utcnow())
+    db.session.add_all([old, recent])
+    db.session.commit()
+
+    body = client.get('/auth/audit?start_date=2019-01-01&end_date=2020-12-31').get_data(as_text=True)
+    # Only the results table. Both actions also appear in the filter dropdown,
+    # so searching the whole page would pass no matter what the filter did.
+    results = body.split('<tbody>', 1)[1].split('</tbody>', 1)[0]
+    assert 'sale.create' in results
+    assert 'sale.void' not in results

@@ -37,6 +37,27 @@
         input.setAttribute('aria-expanded', 'false');
         input.setAttribute('aria-controls', this.listId);
 
+        // The page's <label> points at the native <select>, which is now
+        // hidden - so the visible control had no accessible name at all, and
+        // clicking the label focused nothing. Borrow the label's identity.
+        var labelIds = [];
+        var listId = this.listId;
+        Array.prototype.forEach.call(select.labels || [], function (label, index) {
+            if (!label.id) {
+                label.id = listId + '-label-' + index;
+            }
+            labelIds.push(label.id);
+            label.addEventListener('click', function (event) {
+                event.preventDefault();
+                input.focus();
+            });
+        });
+        if (labelIds.length) {
+            input.setAttribute('aria-labelledby', labelIds.join(' '));
+        } else if (select.getAttribute('aria-label')) {
+            input.setAttribute('aria-label', select.getAttribute('aria-label'));
+        }
+
         var list = document.createElement('ul');
         list.className = 'combobox-list';
         list.id = this.listId;

@@ -66,22 +66,29 @@ def effective_plan(business_id):
 
     now = datetime.utcnow()
 
+
+    free = Plan.query.filter_by(code='free').first()
+
+    # A missing date denies, it does not grant. Reading a null as "no expiry"
+    # means one row written without an end date entitles a business to a paid
+    # plan permanently and silently - and the only way anyone finds out is by
+    # noticing the money never arrived.
     if subscription.status == 'trialing':
-        if subscription.trial_ends_at and subscription.trial_ends_at < now:
-            return Plan.query.filter_by(code='free').first()
+        if subscription.trial_ends_at is None or subscription.trial_ends_at < now:
+            return free
         return subscription.plan
 
     if subscription.status in ('active', 'grace'):
-        if subscription.paid_through:
-            grace_deadline = subscription.paid_through + _grace()
-            if grace_deadline < now:
-                return Plan.query.filter_by(code='free').first()
+        if subscription.paid_through is None:
+            return free
+        if subscription.paid_through + _grace() < now:
+            return free
         return subscription.plan
 
     # free, cancelled, or anything unrecognised
     if subscription.status == 'free':
         return subscription.plan
-    return Plan.query.filter_by(code='free').first()
+    return free
 
 
 def _grace():

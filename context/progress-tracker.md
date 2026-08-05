@@ -141,12 +141,33 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   refused sale, and the safe reading of that is to retry forever.
   `services/limits.has_feature` is memoised per request: templates ask it a dozen times a
   page and each ask was two queries.
+- **Review round (F-40).** Fixes from an automated review of the PR, mostly in code from
+  this branch. The one that mattered most: **`effective_plan` failed open on a null date** —
+  a subscription with `status='active'` and no `paid_through` kept a paid plan forever, and
+  the test helper `put_on` created exactly that state, so every billing test sat on the
+  fail-open branch and none of them could see it. Missing dates now deny.
+  Also: API responses carry `Cache-Control: no-store` (`/session` hands out a CSRF token
+  and names the user; `/catalogue` carries customer phone numbers); malformed quantities
+  and amounts are **rejected, not retried** — as `retry` they sat in the device queue
+  forever, failing identically on every reconnect; audit date filters are parsed, since a
+  raw string compared against a timestamp column returns 500 on PostgreSQL for anyone
+  holding `audit.view`; the sale form renumbers rows after a removal, or a later add
+  reuses an index and the POST binds the wrong product; the offline queue drains a backlog
+  larger than one batch; the offline page no longer claims a queued sale is on the server;
+  supplier deletion is refused when purchase history depends on it; purchase orders refuse
+  inactive products; `products_with_alternatives` went from two queries per product to two
+  for the page; label/control associations and the combobox's accessible name.
+  **A test of mine asserted the wrong behaviour**: with `uom_conversion` off the template
+  hides the unit selector, but the WTForms field still defaults to `'purchase'`, so a
+  quantity typed in pieces was multiplied by the conversion factor. The old test posted the
+  unit by hand, which hid the real case, and justified it as "the server is the authority".
+  Entered values are now base units whenever the business lacks the feature.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**314 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+**321 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 
@@ -187,6 +208,12 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   Stage 4. Revisit before pilot.
 - **Roadmap Phase 3 contradiction.** "Supplier ad placements" undermines the unbiased
   price comparison that Stage 2.3 just built. Unresolved; you can have one or the other.
+- **Base-unit cost rounding (F-41).** `services/uom.cost_to_base` quantizes to two
+  decimals, so a purchase price that does not divide evenly by its pack factor loses value:
+  ₵1.00 for 24 units becomes ₵0.04 each and the line total reads ₵0.96. Raised in review and
+  **not fixed** — it needs a precision migration across `unit_cost`, and changing money
+  columns days before a first deploy risks more than it repairs. Real, bounded (cents per
+  line), and worth doing before the pilot.
 - **Dependency pinning.** Now bounded (floor excludes the Werkzeug CVEs, ceiling stops an
   unannounced major). Exact pins with a lockfile remain the right end state.
 - **Free-tier cold start.** Both Neon and Koyeb idle out; the first request after a quiet

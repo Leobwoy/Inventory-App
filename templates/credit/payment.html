@@ -36,7 +36,7 @@
 
     <div class="row g-4">
       <div class="col-md-6">
-        <label class="form-label">{{ form.amount.label.text }}</label>
+        <label class="form-label" for="{{ form.amount.id }}">{{ form.amount.label.text }}</label>
         <div class="input-group">
           <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
           {{ form.amount(class_='form-control' + (' is-invalid' if form.amount.errors else '')) }}
@@ -48,18 +48,18 @@
       </div>
 
       <div class="col-md-6">
-        <label class="form-label">{{ form.method.label.text }}</label>
+        <label class="form-label" for="{{ form.method.id }}">{{ form.method.label.text }}</label>
         {{ form.method(class_='form-select') }}
       </div>
 
       <div class="col-md-6">
-        <label class="form-label">{{ form.reference.label.text }}</label>
+        <label class="form-label" for="{{ form.reference.id }}">{{ form.reference.label.text }}</label>
         {{ form.reference(class_='form-control', placeholder='e.g. MoMo transaction ID') }}
         <small class="text-muted">{{ form.reference.description }}</small>
       </div>
 
       <div class="col-md-6">
-        <label class="form-label">{{ form.paid_on.label.text }}</label>
+        <label class="form-label" for="{{ form.paid_on.id }}">{{ form.paid_on.label.text }}</label>
         {{ form.paid_on(class_='form-control' + (' is-invalid' if form.paid_on.errors else '')) }}
         {% for error in form.paid_on.errors %}
         <div class="invalid-feedback">{{ error }}</div>
@@ -67,7 +67,7 @@
       </div>
 
       <div class="col-12">
-        <label class="form-label">{{ form.notes.label.text }}</label>
+        <label class="form-label" for="{{ form.notes.id }}">{{ form.notes.label.text }}</label>
         {{ form.notes(class_='form-control', rows=2) }}
       </div>
     </div>

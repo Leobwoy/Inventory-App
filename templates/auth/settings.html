@@ -16,17 +16,17 @@
     </div>
     <div class="row g-4">
       <div class="col-md-6">
-        <label class="form-label">{{ form.name.label.text }}</label>
+        <label class="form-label" for="{{ form.name.id }}">{{ form.name.label.text }}</label>
         {{ form.name(class_='form-control' + (' is-invalid' if form.name.errors else '')) }}
         {% for error in form.name.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
       </div>
       <div class="col-md-6">
-        <label class="form-label">{{ form.contact_number.label.text }}</label>
+        <label class="form-label" for="{{ form.contact_number.id }}">{{ form.contact_number.label.text }}</label>
         {{ form.contact_number(class_='form-control' + (' is-invalid' if form.contact_number.errors else '')) }}
         {% for error in form.contact_number.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
       </div>
       <div class="col-12">
-        <label class="form-label">{{ form.address.label.text }}</label>
+        <label class="form-label" for="{{ form.address.id }}">{{ form.address.label.text }}</label>
         {{ form.address(class_='form-control' + (' is-invalid' if form.address.errors else '')) }}
         {% for error in form.address.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
       </div>
@@ -46,6 +46,7 @@
       <div class="text-muted"><i class="bi bi-image fs-1"></i></div>
       {% endif %}
       <div class="flex-grow-1" style="min-width: 240px;">
+        <label class="form-label" for="{{ form.logo.id }}">{{ form.logo.label.text }}</label>
         {{ form.logo(class_='form-control' + (' is-invalid' if form.logo.errors else '')) }}
         {% for error in form.logo.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
         <div class="form-text">PNG or JPG, up to 512KB.</div>
@@ -67,7 +68,7 @@
     </div>
     <div class="row g-4">
       <div class="col-md-6">
-        <label class="form-label">{{ form.max_discount_percent.label.text }}</label>
+        <label class="form-label" for="{{ form.max_discount_percent.id }}">{{ form.max_discount_percent.label.text }}</label>
         <div class="input-group">
           {{ form.max_discount_percent(class_='form-control' + (' is-invalid' if form.max_discount_percent.errors else '')) }}
           <span class="input-group-text border-secondary bg-transparent text-muted">%</span>
@@ -81,7 +82,7 @@
         </div>
       </div>
       <div class="col-md-6">
-        <label class="form-label">{{ form.expiry_alert_days.label.text }}</label>
+        <label class="form-label" for="{{ form.expiry_alert_days.id }}">{{ form.expiry_alert_days.label.text }}</label>
         <div class="input-group">
           {{ form.expiry_alert_days(class_='form-control' + (' is-invalid' if form.expiry_alert_days.errors else '')) }}
           <span class="input-group-text border-secondary bg-transparent text-muted">days</span>

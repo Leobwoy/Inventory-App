@@ -72,7 +72,11 @@ def add_purchase():
     supplier_choices = [(0, 'No Supplier')] + [(s.id, s.name) for s in Supplier.query.filter_by(business_id=current_user.business_id).order_by(Supplier.name)]
     form.supplier_id.choices = supplier_choices
     
-    products = Product.query.filter_by(business_id=current_user.business_id).all()
+    # Active only. A deactivated product is retired from new orders - offering
+    # one here would let a business order stock it has decided to stop carrying,
+    # and (on the free plan) walk straight back over its product cap.
+    products = Product.query.filter_by(
+        business_id=current_user.business_id, is_active=True).all()
     product_choices = [(p.id, p.name) for p in products]
     for item in form.items:
         item.form.product_id.choices = product_choices
@@ -115,13 +119,30 @@ def add_purchase():
             
             converted = []
             for item_form in form.items:
-                product = Product.query.filter_by(id=item_form.product_id.data, business_id=current_user.business_id).first()
+                product = Product.query.filter_by(
+                    id=item_form.product_id.data,
+                    business_id=current_user.business_id,
+                    is_active=True).first()
                 if not product:
-                    continue
+                    # Refuse the order rather than dropping the line. Silently
+                    # skipping it saves an order the buyer did not ask for, and
+                    # the missing item is only noticed when the goods arrive.
+                    db.session.rollback()
+                    flash('One of the selected products is no longer available. '
+                          'Nothing was ordered.', 'danger')
+                    return render_template('purchases/add.html', form=form,
+                                           price_history=price_history)
 
                 # Entered in cartons or pieces; stored in base units either way,
                 # so nothing downstream has to ask which unit a row is in.
-                entered_unit = item_form.order_unit.data or uom.BASE
+                # The template only shows the unit selector when the business
+                # has uom_conversion. Without it WTForms still supplies the
+                # field default, 'purchase', so a quantity typed in base units
+                # would be multiplied by the conversion factor and its cost
+                # divided by it. Trust the posted unit only when it was offered.
+                entered_unit = uom.BASE
+                if limits.has_feature('uom_conversion'):
+                    entered_unit = item_form.order_unit.data or uom.BASE
                 if not uom.has_conversion(product):
                     entered_unit = uom.BASE
 

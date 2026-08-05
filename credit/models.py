@@ -31,6 +31,16 @@ class Payment(db.Model):
     be traced to what it paid for. A customer-level balance is the sum across
     their sales.
     """
+    # Mirrors migration f4a82c17d6e9. Declared here too, or a schema built by
+    # create_all() differs from the deployed one and autogenerate proposes
+    # dropping all four the next time anyone runs it.
+    __table_args__ = (
+        db.CheckConstraint('amount > 0', name='ck_payment_amount_positive'),
+        db.Index('ix_payment_sale', 'sale_id'),
+        db.Index('ix_payment_business_customer', 'business_id', 'customer_id'),
+        db.Index('ix_payment_business_paid_on', 'business_id', 'paid_on'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     sale_id = db.Column(db.Integer, db.ForeignKey('sale.id', ondelete='CASCADE'), nullable=False)

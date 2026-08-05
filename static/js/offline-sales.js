@@ -184,6 +184,19 @@
                 // 'retry' is left exactly as it is, to go again next time.
             }
             Offline.announce();
+
+            // A week offline arrives in batches. Both sides batch, but nothing
+            // asked for the next one - so a device that reconnected and stayed
+            // online kept the rest of its backlog on disk indefinitely. Only
+            // continue when the batch filled and every sale in it landed;
+            // otherwise the queue head is stuck and looping would spin.
+            if (sendable.length === MAX_BATCH && accepted === sendable.length) {
+                const next = await Offline.sync();
+                if (next && typeof next.accepted === 'number') {
+                    accepted += next.accepted;
+                    conflicts += next.conflicts;
+                }
+            }
             return { accepted, conflicts };
         },
 

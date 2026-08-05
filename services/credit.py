@@ -11,7 +11,7 @@ from collections import defaultdict
 from decimal import Decimal
 
 from sqlalchemy import func
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 
 from credit.models import PAYMENT_METHODS, Payment, sale_total, settlement_of
 from extensions import db
@@ -81,6 +81,9 @@ def outstanding_sales(business_id, customer_id=None, as_of=None):
             totals.c.total,
             func.coalesce(payments.c.paid, 0).label('paid'),
         )
+        # ageing() reads sale.customer for every outstanding sale, so without
+        # this the dashboard fires one query per sale.
+        .options(joinedload(Sale.customer))
         .join(totals, totals.c.sale_id == Sale.id)
         .outerjoin(payments, payments.c.sale_id == Sale.id)
         .filter(

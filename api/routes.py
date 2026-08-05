@@ -40,6 +40,19 @@ from services import audit, pricing, stock
 MAX_BATCH = 50
 
 
+@api_bp.after_request
+def never_cache(response):
+    """No API response may be stored.
+
+    /session hands out a CSRF token and names the user and business; /catalogue
+    carries customer names and phone numbers. Both are scoped to whoever is
+    signed in, and neither carries a cache header of its own - so a shared
+    device could serve one person's data to the next.
+    """
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
+
 @api_bp.route('/session')
 @login_required
 def session_state():
@@ -154,15 +167,21 @@ def _record_one(payload, business_id):
             if not product:
                 raise _Conflict('A product on this sale no longer exists.')
 
-            quantity = int(line.get('quantity') or 0)
+            # Unreadable is rejected, not retried. A malformed value fails the
+            # same way every time, and 'retry' would leave it in the device queue
+            # forever, failing on every reconnect with nobody told why.
+            try:
+                quantity = int(line.get('quantity') or 0)
+            except (TypeError, ValueError):
+                raise _Rejected('A line has an unreadable quantity.') from None
             if quantity <= 0:
                 raise _Rejected('A line has no quantity.')
 
             requested = line.get('price')
             try:
                 requested = Decimal(str(requested)) if requested is not None else None
-            except InvalidOperation:
-                raise _Rejected('A line has an unreadable price.')
+            except (InvalidOperation, ValueError):
+                raise _Rejected('A line has an unreadable price.') from None
 
             # The price the device saw may be stale, and the rule may have
             # changed while it was offline. Re-resolve against the truth now.
@@ -186,7 +205,10 @@ def _record_one(payload, business_id):
 
         db.session.flush()
 
-        received = Decimal(str(payload.get('amount_paid') or 0))
+        try:
+            received = Decimal(str(payload.get('amount_paid') or 0))
+        except (InvalidOperation, ValueError):
+            raise _Rejected('The amount paid is unreadable.') from None
         total = sale_total(sale)
         received = max(Decimal('0'), min(received, total))
         if received > 0:

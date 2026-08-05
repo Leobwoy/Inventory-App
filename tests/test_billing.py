@@ -23,10 +23,20 @@ def business(register):
 
 
 def put_on(business_id, plan_code, **overrides):
-    """Move a business onto a plan, with optional subscription overrides."""
+    """Move a business onto a plan, with optional subscription overrides.
+
+    An 'active' subscription gets a real future paid_through unless the caller
+    supplies one. Leaving it null used to land every test on the branch where a
+    missing date was read as "no expiry" - so the helper quietly modelled a
+    subscription nobody had paid for, and hid the fail-open it created.
+    """
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.plan_id = Plan.query.filter_by(code=plan_code).one().id
     subscription.status = overrides.pop('status', 'active')
+    if subscription.status == 'active' and 'paid_through' not in overrides:
+        subscription.paid_through = datetime.utcnow() + timedelta(days=30)
+    if subscription.status == 'trialing' and 'trial_ends_at' not in overrides:
+        subscription.trial_ends_at = datetime.utcnow() + timedelta(days=14)
     for field, value in overrides.items():
         setattr(subscription, field, value)
     db.session.commit()
@@ -319,3 +329,26 @@ def test_a_business_without_a_subscription_falls_back_to_free(business):
 
     assert limits.effective_plan(business).code == 'free'
     assert not limits.has_feature('purchase_orders', business)
+
+
+def test_a_subscription_with_no_paid_through_does_not_keep_a_paid_plan(business):
+    """A null end date used to read as "no expiry", so one row written without
+    one entitled a business to a paid plan permanently and silently. The only
+    signal would have been the money never arriving."""
+    subscription = Subscription.query.filter_by(business_id=business).one()
+    subscription.plan_id = Plan.query.filter_by(code='advanced').one().id
+    subscription.status = 'active'
+    subscription.paid_through = None
+    db.session.commit()
+
+    assert limits.effective_plan(business).code == 'free'
+
+
+def test_a_trial_with_no_end_date_does_not_run_forever(business):
+    subscription = Subscription.query.filter_by(business_id=business).one()
+    subscription.plan_id = Plan.query.filter_by(code='advanced').one().id
+    subscription.status = 'trialing'
+    subscription.trial_ends_at = None
+    db.session.commit()
+
+    assert limits.effective_plan(business).code == 'free'

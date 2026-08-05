@@ -15,7 +15,7 @@ import io
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
 from datetime import date, timedelta
-from purchases.models import StockBatch
+from purchases.models import PurchaseOrder, StockBatch
 from services import audit, limits, listing
 
 PRODUCT_SORTS = {
@@ -358,12 +358,10 @@ def upload_products():
         # share one path on disk - one overwriting, reading or deleting the
         # other's file, and importing another tenant's products.
         # (mkstemp also replaces the hardcoded /tmp, which does not exist on Windows.)
-        suffix = os.path.splitext(secure_filename(form.file.data.filename))[1] or '.xlsx'
-        descriptor, filepath = tempfile.mkstemp(prefix='product-upload-', suffix=suffix)
-        os.close(descriptor)
-        # Compute the remaining allowance once rather than querying per row. The
-        # upload is the obvious way round a per-product limit, so it has to obey
-        # the same cap as the form.
+        # Checked before anything is written to disk. The cleanup that removes
+        # filepath lives in a `finally` further down, so returning between
+        # mkstemp and that try left an orphaned file behind on every rejected
+        # upload from a business sitting at its cap.
         plan = limits.effective_plan(biz)
         remaining = None
         if plan is not None and plan.max_products is not None:
@@ -371,6 +369,10 @@ def upload_products():
             if remaining == 0:
                 flash(limits.can_add_product(biz)[1], 'warning')
                 return redirect(url_for('products.list_products'))
+
+        suffix = os.path.splitext(secure_filename(form.file.data.filename))[1] or '.xlsx'
+        descriptor, filepath = tempfile.mkstemp(prefix='product-upload-', suffix=suffix)
+        os.close(descriptor)
 
         added, skipped, errors, over_limit = 0, 0, [], 0
         wb = None
@@ -723,6 +725,18 @@ def edit_supplier(supplier_id):
 @permission_required('suppliers.manage')
 def delete_supplier(supplier_id):
     supplier = Supplier.query.filter_by(id=supplier_id, business_id=current_user.business_id).first_or_404()
+
+    # PurchaseOrder.supplier_id is nullable with no cascade, so deleting a
+    # supplier silently nulls its orders - and the price-comparison history
+    # requires a supplier, so those orders vanish from it. Same rule as
+    # products: history is never destroyed to tidy a list.
+    orders = PurchaseOrder.query.filter_by(supplier_id=supplier.id).count()
+    if orders:
+        flash(f'{supplier.name} cannot be deleted: {orders} purchase '
+              f'{"order" if orders == 1 else "orders"} reference them. '
+              'Their price history would be lost.', 'warning')
+        return redirect(url_for('products.list_suppliers'))
+
     audit.log('supplier.delete', entity_type='supplier', entity_id=supplier.id, name=supplier.name)
     db.session.delete(supplier)
     db.session.commit()

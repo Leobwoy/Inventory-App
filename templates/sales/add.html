@@ -296,7 +296,25 @@
     syncSettlement();
   }
 
+  // Remove a middle row and the indexes develop a hole, so rows().length can
+  // name a new row items-2-* while an existing row is already items-2-*. The
+  // POST then carries duplicate WTForms names and binds the wrong product,
+  // quantity or price. Renumber after every removal and before every clone.
+  function reindexRows() {
+    rows().forEach(function (row, position) {
+      row.querySelectorAll('input, select').forEach(function (field) {
+        if (field.name) {
+          field.name = field.name.replace(/items-\d+-/, 'items-' + position + '-');
+        }
+        if (field.id) {
+          field.id = field.id.replace(/items-\d+-/, 'items-' + position + '-');
+        }
+      });
+    });
+  }
+
   document.getElementById('add-item').addEventListener('click', function () {
+    reindexRows();
     var index = rows().length;
     var holder = document.createElement('tbody');
     holder.innerHTML = rowTemplate;
@@ -331,6 +349,7 @@
     // Never remove the last row: a sale with no items cannot be recorded.
     if (button && rows().length > 1) {
       button.closest('tr').remove();
+      reindexRows();
       refresh();
     }
   });

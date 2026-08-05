@@ -44,22 +44,20 @@ def _priced_lines(business_id, product_id=None):
     )
     if product_id is not None:
         query = query.filter(PurchaseOrderItem.product_id == product_id)
-    return query.order_by(PurchaseOrder.order_date.desc(), PurchaseOrderItem.id.desc()).all()
+    # nullslast: on PostgreSQL a DESC sort puts NULLs first, which would make a
+    # dateless order the 'latest' price and set last_ordered to None.
+    return query.order_by(PurchaseOrder.order_date.desc().nullslast(),
+                          PurchaseOrderItem.id.desc()).all()
 
 
-def suppliers_for(business_id, product_id):
-    """Every supplier who has supplied this product, cheapest latest price first.
+def _reduce_to_options(lines):
+    """Group priced lines by supplier into the shape the comparison renders.
 
-    Returns [{supplier, latest, best, average, times, last_ordered, trend}].
-
-    `latest` is what they charged most recently and is what a buyer decides on;
-    `best` is the lowest they have ever gone, which is the number to quote back
-    at them. `trend` compares the latest against the one before it, so a supplier
-    who has quietly crept up is visible.
+    Shared by suppliers_for() and the batched path so one product and a whole
+    page cannot drift into answering the question differently.
     """
     by_supplier = {}
-
-    for line in _priced_lines(business_id, product_id):
+    for line in lines:
         supplier = line.purchase_order.supplier
         entry = by_supplier.setdefault(supplier.id, {
             'supplier': supplier,
@@ -74,7 +72,6 @@ def suppliers_for(business_id, product_id):
         costs = entry['costs']
         latest = costs[0]
         previous = costs[1] if len(costs) > 1 else None
-
         results.append({
             'supplier': entry['supplier'],
             'latest': latest,
@@ -88,6 +85,32 @@ def suppliers_for(business_id, product_id):
 
     # Cheapest current price first - the order a buyer wants to read.
     return sorted(results, key=lambda r: r['latest'])
+
+
+def _options_for_many(business_id, product_ids):
+    """suppliers_for() for a set of products, in one pass over one query."""
+    if not product_ids:
+        return {}
+
+    lines_by_product = {}
+    for line in _priced_lines(business_id):
+        if line.product_id in set(product_ids):
+            lines_by_product.setdefault(line.product_id, []).append(line)
+    return {product_id: _reduce_to_options(lines)
+            for product_id, lines in lines_by_product.items()}
+
+
+def suppliers_for(business_id, product_id):
+    """Every supplier who has supplied this product, cheapest latest price first.
+
+    Returns [{supplier, latest, best, average, times, last_ordered, trend}].
+
+    `latest` is what they charged most recently and is what a buyer decides on;
+    `best` is the lowest they have ever gone, which is the number to quote back
+    at them. `trend` compares the latest against the one before it, so a supplier
+    who has quietly crept up is visible.
+    """
+    return _reduce_to_options(_priced_lines(business_id, product_id))
 
 
 def _trend(latest, previous):
@@ -146,12 +169,25 @@ def products_with_alternatives(business_id, limit=None):
         .all()
     )
 
+    # Two queries for the whole page, not two per product. This ran
+    # session.get(Product) and then suppliers_for() - itself a round trip - for
+    # every candidate, and the route calls it with no limit for the whole
+    # business, so the cost grew with the catalogue. The limit did not help
+    # either: it was applied after every product had already been loaded.
+    candidate_ids = [product_id for product_id, _count in counts]
+    products = {
+        product.id: product
+        for product in Product.query.filter(
+            Product.id.in_(candidate_ids), Product.business_id == business_id).all()
+    } if candidate_ids else {}
+    options_by_product = _options_for_many(business_id, candidate_ids)
+
     rows = []
     for product_id, supplier_count in counts:
-        product = db.session.get(Product, product_id)
-        if product is None or product.business_id != business_id:
+        product = products.get(product_id)
+        if product is None:
             continue
-        options = suppliers_for(business_id, product_id)
+        options = options_by_product.get(product_id, [])
         if len(options) < 2:
             continue
         spread = options[-1]['latest'] - options[0]['latest']

@@ -251,3 +251,42 @@ def test_export_omits_cost_price_for_unpermitted_staff(business, make_staff, mak
                                 data={'action': 'export_csv', 'product_ids': [str(product.id)]}
                                 ).get_data(as_text=True)
     assert 'Cost Price' in manager_body
+
+
+def test_a_supplier_with_purchase_history_cannot_be_deleted(register, make_product, make_po):
+    """PurchaseOrder.supplier_id is nullable with no cascade, so deleting a
+    supplier silently nulls its orders - and the price comparison requires a
+    supplier, so that history disappears from it. Same rule as products."""
+    from products.models import Supplier
+    from purchases.models import PurchaseOrder
+    from extensions import db
+
+    client, business_id = register()
+    product = make_product(business_id)
+    supplier = Supplier(business_id=business_id, name='Voltic Ghana')
+    db.session.add(supplier)
+    db.session.commit()
+    po, _item = make_po(business_id, product)
+    po.supplier_id = supplier.id
+    db.session.commit()
+
+    response = client.post(f'/products/suppliers/delete/{supplier.id}', follow_redirects=True)
+
+    assert 'cannot be deleted' in response.get_data(as_text=True)
+    assert Supplier.query.get(supplier.id) is not None
+    assert PurchaseOrder.query.get(po.id).supplier_id == supplier.id
+
+
+def test_a_supplier_with_no_history_can_still_be_deleted(register):
+    """The guard must not make suppliers permanent the moment they are created."""
+    from products.models import Supplier
+    from extensions import db
+
+    client, business_id = register()
+    supplier = Supplier(business_id=business_id, name='Never Used Ltd')
+    db.session.add(supplier)
+    db.session.commit()
+    supplier_id = supplier.id
+
+    client.post(f'/products/suppliers/delete/{supplier_id}', follow_redirects=True)
+    assert Supplier.query.get(supplier_id) is None
