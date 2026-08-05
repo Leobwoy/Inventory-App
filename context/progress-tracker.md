@@ -170,6 +170,14 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   excluded from the sourcing read entirely — every figure it produces is time-ordered, and
   a line that cannot be placed in time cannot answer any of them — with a null-safe key in
   `savings_against_latest` as defence in depth.
+  **F-41 fixed**: `PurchaseOrderItem.unit_cost` widened to `Numeric(14, 6)` and
+  `cost_to_base` quantises the *divided* figure to six decimals. Two decimals on a derived
+  per-unit cost lost money on every unit of the line — ₵1.00 a carton of 24 recorded ₵96.00
+  against ₵100.00 paid over 100 cartons — and that figure is the cost price behind every
+  margin and the number `services/sourcing.py` compares suppliers on, so the error landed
+  in the one feature meant to answer who is cheaper. A cost typed directly in base units
+  stays at 2dp; widening it would invent precision nobody entered. Fixed before first
+  deploy deliberately: with no production data the migration is as cheap as it will ever be.
   A third round found three more: `Decimal()` accepts `'NaN'` and `'Infinity'` without
   raising, and `Infinity` was the dangerous one — `min(received, total)` clamped it to the
   full amount, so a malformed payload would have recorded a sale as **paid in full when
@@ -184,7 +192,7 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**326 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+**332 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 
@@ -225,12 +233,11 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   Stage 4. Revisit before pilot.
 - **Roadmap Phase 3 contradiction.** "Supplier ad placements" undermines the unbiased
   price comparison that Stage 2.3 just built. Unresolved; you can have one or the other.
-- **Base-unit cost rounding (F-41).** `services/uom.cost_to_base` quantizes to two
-  decimals, so a purchase price that does not divide evenly by its pack factor loses value:
-  ₵1.00 for 24 units becomes ₵0.04 each and the line total reads ₵0.96. Raised in review and
-  **not fixed** — it needs a precision migration across `unit_cost`, and changing money
-  columns days before a first deploy risks more than it repairs. Real, bounded (cents per
-  line), and worth doing before the pilot.
+- **Deployment host changed.** Koyeb was acquired by Mistral and new signups land on a
+  marketing page with no way to create a service. **Render** replaces it. The original
+  objection to Render — its free Postgres self-deletes after 30 days — does not apply,
+  because the database is Neon and Render only runs the container. Free instance sleeps
+  after 15 min (~1 min cold start); $7/month removes it. See `DEPLOY.md`.
 - **Dependency pinning.** Now bounded (floor excludes the Werkzeug CVEs, ceiling stops an
   unannounced major). Exact pins with a lockfile remain the right end state.
 - **Free-tier cold start.** Both Neon and Koyeb idle out; the first request after a quiet

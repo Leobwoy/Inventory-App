@@ -80,14 +80,23 @@ def describe(product, base_quantity):
 def cost_to_base(product, cost, unit=BASE):
     """Convert a typed unit cost into cost per base unit.
 
-    A crate at GHS 48 for 24 bottles is GHS 2.00 a bottle. Quantised to 2dp,
-    which is the precision the column stores - anything finer would be discarded
-    on write and make totals disagree with what was entered.
+    A crate at GHS 48 for 24 bottles is GHS 2.00 a bottle.
+
+    The converted figure keeps six decimals, because it is derived rather than
+    typed: GHS 1.00 for 24 rounds to 0.04 at pesewa precision, and 100 cartons
+    then record 96.00 against 100.00 actually paid. It is also the cost price
+    behind every margin and the number services/sourcing.py compares suppliers
+    on, so the error lands in the one feature meant to answer who is cheaper.
+
+    A cost typed directly in base units is already exact and stays at 2dp -
+    widening it would only invent precision nobody entered. Display quantises
+    to 2dp everywhere; this is the stored intermediate (F-41).
     """
     cost = Decimal(str(cost or 0))
     if unit != PURCHASE:
         return cost.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
-    return (cost / Decimal(factor(product))).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    return (cost / Decimal(factor(product))).quantize(
+        Decimal('0.000001'), rounding=ROUND_HALF_UP)
 
 
 def cost_per_purchase_unit(product, base_cost):

@@ -83,12 +83,18 @@ def test_cost_converts_per_crate_to_per_bottle(crate_product):
     assert uom.cost_to_base(product, Decimal('2.00'), uom.BASE) == Decimal('2.00')
 
 
-def test_cost_conversion_rounds_to_the_stored_precision(crate_product):
-    """The column stores 2dp; anything finer would be discarded on write and make
-    the total disagree with what was typed."""
+def test_cost_conversion_keeps_the_precision_the_division_produced(crate_product):
+    """This test previously asserted 2.08, and that assertion was the bug (F-41).
+
+    Rounding a *derived* per-unit cost to pesewas discards money on every unit
+    of the line: 50/24 stored as 2.08 records 49.92 for a carton that cost 50.00.
+    The column now holds six decimals and display quantises to two."""
     _client, _business_id, product = crate_product
     # 50 / 24 = 2.0833...
-    assert uom.cost_to_base(product, Decimal('50.00'), uom.PURCHASE) == Decimal('2.08')
+    per_unit = uom.cost_to_base(product, Decimal('50.00'), uom.PURCHASE)
+    assert per_unit == Decimal('2.083333')
+    # The point of keeping them: the carton total comes back whole.
+    assert (per_unit * 24).quantize(Decimal('0.01')) == Decimal('50.00')
 
 
 def test_cost_round_trips_back_to_the_crate_figure(crate_product):
@@ -273,3 +279,60 @@ def test_without_the_feature_a_hand_posted_purchase_unit_is_ignored(crate_produc
     }, follow_redirects=True)
 
     assert PurchaseOrderItem.query.one().quantity_ordered == 10
+
+
+# --- F-41: a derived per-unit cost must not lose the money it divided --------
+
+@pytest.mark.parametrize('carton_price,per_carton,cartons,expected_total', [
+    ('48.00', 24, 10, '480.00'),      # divides exactly - was always fine
+    ('1.00', 24, 100, '100.00'),      # recorded 96.00 before
+    ('55.00', 12, 40, '2200.00'),     # recorded 2198.40 before
+    ('24.00', 7, 50, '1200.00'),      # recorded 1200.50 before - over, not under
+])
+def test_a_converted_cost_still_totals_what_was_paid(crate_product, carton_price,
+                                                     per_carton, cartons, expected_total):
+    """Two decimals on a *derived* figure loses money on every unit of the line.
+    The cedis are small; the consequence is not - this is the cost price behind
+    every margin, and the number services/sourcing.py compares suppliers on."""
+    _client, _business_id, product = crate_product
+    product.units_per_purchase_uom = per_carton
+    db.session.commit()
+
+    per_unit = uom.cost_to_base(product, Decimal(carton_price), uom.PURCHASE)
+    units = per_carton * cartons
+    recorded = (per_unit * units).quantize(Decimal('0.01'))
+
+    assert recorded == Decimal(expected_total), (
+        f'{cartons} cartons at {carton_price} recorded {recorded}, not {expected_total}')
+
+
+def test_a_cost_typed_in_base_units_is_not_given_invented_precision(crate_product):
+    """Only the divided figure needs the room. A price typed per bottle is
+    already exact, and six decimals there would invent precision nobody entered."""
+    _client, _business_id, product = crate_product
+
+    assert uom.cost_to_base(product, Decimal('2.005'), uom.BASE) == Decimal('2.01')
+    assert uom.cost_to_base(product, Decimal('2.00'), uom.BASE) == Decimal('2.00')
+
+
+def test_the_stored_cost_survives_a_round_trip_through_the_database(crate_product):
+    """Numeric(10,2) would have truncated the extra places on write, so the
+    column had to widen with the calculation."""
+    from purchases.models import PurchaseOrderItem, PurchaseOrder
+
+    _client, business_id, product = crate_product
+    product.units_per_purchase_uom = 24
+    db.session.commit()
+
+    po = PurchaseOrder(business_id=business_id, order_date=TODAY, status='ordered')
+    db.session.add(po)
+    db.session.flush()
+    db.session.add(PurchaseOrderItem(
+        po_id=po.id, product_id=product.id, quantity_ordered=24,
+        quantity_received=0, unit_cost=uom.cost_to_base(product, Decimal('1.00'), uom.PURCHASE)))
+    db.session.commit()
+    db.session.expire_all()
+
+    stored = PurchaseOrderItem.query.one().unit_cost
+    assert stored == Decimal('0.041667')
+    assert (stored * 24).quantize(Decimal('0.01')) == Decimal('1.00')
