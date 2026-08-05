@@ -32,23 +32,41 @@ tier has no expiry — it sleeps when idle and wakes on the next request.
 
 ---
 
-## 2. The app — Koyeb
+## 2. The app — Render
 
-1. Sign up at **https://koyeb.com** with GitHub.
-2. **Create Web Service** → **GitHub** → authorise it → pick your repository.
+> **Koyeb was the original plan and is no longer usable.** It has been acquired
+> by Mistral; new signups land on a marketing page with no way to create a
+> service. Render replaces it.
+>
+> Render was rejected first time round for one reason: its free Postgres
+> **deletes itself after 30 days**. That objection does not apply here, because
+> the database is Neon. We are only using Render to run the container.
+
+1. Sign up at **https://render.com** with GitHub. No card required.
+2. **New** → **Web Service** → connect your repository.
 3. Settings:
    - **Branch**: `main`
-   - **Builder**: **Dockerfile** (not Buildpack — the repo has a Dockerfile that
-     runs migrations at start)
-   - **Instance**: **Free** (`eco-nano`)
-   - **Region**: **Frankfurt** (`fra`) — same as the database
-   - **Port**: `8000`
+   - **Language / Runtime**: **Docker** (Render detects the Dockerfile; do not
+     pick Python, or it will skip the migration step that runs at start)
+   - **Instance Type**: **Free**
+   - **Region**: **Frankfurt** — same as the database
+   - **Health Check Path**: `/offline`
+
+   Leave build and start commands empty. The Dockerfile owns both, and its start
+   command is what runs `flask db upgrade`.
+
+   `/offline` as the health check is deliberate: it is the one route that returns
+   200 with no login and no database. Render's default probe hits `/`, which
+   redirects to the login page, and a 302 reads as a failed health check.
 4. **Environment variables** — add both, marked **Secret**:
 
    | Name | Value |
    |---|---|
-   | `DATABASE_URL` | the Neon string from step 1, in full |
+   | `DATABASE_URL` | the Neon string from step 1, in full, keeping `?sslmode=require` |
    | `SECRET_KEY` | generate it — see below |
+
+   Render injects `PORT` itself; the Dockerfile already binds to it, so do not
+   set it by hand.
 
    Generate the key on your machine and paste the output:
 
@@ -62,7 +80,18 @@ tier has no expiry — it sleeps when idle and wakes on the next request.
    business. A deploy that fails loudly is better than one that serves an app
    whose login means nothing.
 
-5. **Deploy.** First build takes 3–5 minutes.
+5. **Create Web Service.** First build takes 5–10 minutes.
+
+### If you would rather not have the app sleep
+
+Render's free instance spins down after 15 minutes idle and takes **about a
+minute** to wake — noticeably worse than Koyeb's was. Two ways out:
+
+- **Render Starter, $7/month.** Same service, no sleep, one click.
+- **Fly.io.** A small always-on allowance that covers one instance of this size,
+  and it is Docker-native so the same Dockerfile works. It requires a card on
+  file even for the free allowance, which is the only reason it is not the
+  recommendation here.
 
 ---
 
@@ -108,7 +137,7 @@ signal returns.
 | | Free tier | Runs out when |
 |---|---|---|
 | **Neon** | 0.5 GB storage, sleeps when idle | 0.5 GB is thousands of businesses' worth of rows |
-| **Koyeb** | 1 service, 512 MB RAM, sleeps after inactivity | You need a second service, or the sleep becomes unacceptable |
+| **Render** | 1 web service, 512 MB RAM, sleeps after 15 min idle | The ~1 minute cold start stops being acceptable in front of a customer |
 
 **The sleep is the thing to know about.** Both tiers idle out. The first request
 after a quiet period takes **10–30 seconds** while the container and database
@@ -122,7 +151,7 @@ smallest paid instance is about $2/month and does not sleep.
 
 ## When something goes wrong
 
-**Build fails.** Koyeb → your service → **Logs** → Build. Almost always a
+**Build fails.** Render → your service → **Logs**. Almost always a
 dependency; `requirements.txt` bounds every package rather than letting the host
 resolve whatever it likes.
 
@@ -132,10 +161,10 @@ resolve whatever it likes.
   was dropped from the end.
 
 **Registration says "Owner role not found".** Migrations did not run. Confirm the
-builder is **Dockerfile**, not Buildpack — the Dockerfile's start command is what
-runs `flask db upgrade`.
+runtime is **Docker**, not Python — the Dockerfile's start command is what runs
+`flask db upgrade`.
 
-**"Not secure" or the login loops.** Both come from the proxy. Koyeb terminates
+**"Not secure" or the login loops.** Both come from the proxy. Render terminates
 TLS and forwards plain HTTP, so the app uses `ProxyFix` to see the original
 scheme. Without it Flask thinks every request is insecure and refuses to set the
 session cookie it was told to mark `Secure`. This is already configured — if you
@@ -149,7 +178,7 @@ old caches are deleted on activation.
 
 ## Afterwards
 
-- **Point a domain at it.** Koyeb → Settings → Domains. A real domain matters
+- **Point a domain at it.** Render → Settings → Custom Domains. A real domain matters
   more than it should when selling to a business.
 - **Take a backup before your first real customer.** Neon has restore points,
   and the app has a per-tenant CSV export under **Backup**.
