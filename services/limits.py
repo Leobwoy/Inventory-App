@@ -30,6 +30,28 @@ def subscription_for(business_id):
     return Subscription.query.filter_by(business_id=business_id).first()
 
 
+def _request_cached_plan(business_id):
+    """effective_plan, memoised on the request.
+
+    Outside a request context - a CLI command, a test calling directly - this is
+    just effective_plan, because there is nowhere safe to cache and a long-lived
+    cache would go stale the moment a plan changed.
+    """
+    try:
+        from flask import g, has_request_context
+        if not has_request_context():
+            return effective_plan(business_id)
+    except ImportError:
+        return effective_plan(business_id)
+
+    cache = getattr(g, '_plan_cache', None)
+    if cache is None:
+        cache = g._plan_cache = {}
+    if business_id not in cache:
+        cache[business_id] = effective_plan(business_id)
+    return cache[business_id]
+
+
 def effective_plan(business_id):
     """The plan whose limits actually apply right now.
 
@@ -68,11 +90,17 @@ def _grace():
 
 
 def has_feature(code, business_id=None):
-    """True if the business's current plan includes `code`."""
+    """True if the business's current plan includes `code`.
+
+    The resolved plan is cached for the life of the request. Templates gate
+    navigation, scripts and whole sections on this, so one page render asks the
+    same question a dozen times - and every ask was two queries. A plan cannot
+    change midway through rendering a page, so re-reading it is pure cost.
+    """
     business_id = business_id or _current_business_id()
     if business_id is None:
         return False
-    plan = effective_plan(business_id)
+    plan = _request_cached_plan(business_id)
     if plan is None:
         return False
     # Trust the seeded feature list, falling back to the tier map if a plan row

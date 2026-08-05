@@ -25,7 +25,7 @@
  */
 
 // Bump to invalidate everything. Old caches are deleted on activate.
-const CACHE_VERSION = 'tracktrack-v1';
+const CACHE_VERSION = 'tracktrack-v2';
 const OFFLINE_URL = '/offline';
 
 // The shell: enough to render a styled page with icons and no network.
@@ -34,6 +34,8 @@ const PRECACHE = [
     '/static/css/style.css',
     '/static/css/combobox.css',
     '/static/js/combobox.js',
+    '/static/js/offline-sales.js',
+    '/static/css/offline.css',
     '/static/vendor/bootstrap/bootstrap.min.css',
     '/static/vendor/bootstrap/bootstrap.bundle.min.js',
     '/static/vendor/bootstrap-icons/bootstrap-icons.min.css',

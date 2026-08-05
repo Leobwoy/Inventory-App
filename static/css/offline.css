@@ -1,0 +1,43 @@
+/* The pending-sync badge, and the pending-sales list.
+   Loud on purpose: a sale sitting in the queue is not in the books yet, and the
+   only thing worse than an unsynced sale is one the user believes has synced. */
+
+.offline-queue-badge {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 1080;
+    max-width: 16rem;
+    padding: 0.6rem 0.9rem;
+    border-radius: 0.6rem;
+    font-size: 0.85rem;
+    line-height: 1.4;
+    color: #0f172a;
+    background: #fbbf24;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.45);
+    cursor: pointer;
+}
+
+.offline-queue-badge.has-conflict {
+    color: #fff;
+    background: #dc2626;
+}
+
+/* Sits above the mobile bottom bar rather than on top of it. */
+@media (max-width: 991.98px) {
+    .offline-queue-badge {
+        left: 1rem;
+        right: 1rem;
+        bottom: 0.75rem;
+        max-width: none;
+        text-align: center;
+    }
+}
+
+.queued-sale {
+    border-left: 3px solid #fbbf24;
+}
+
+.queued-sale.is-conflict {
+    border-left-color: #dc2626;
+}

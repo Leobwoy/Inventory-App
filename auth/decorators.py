@@ -1,7 +1,22 @@
 from functools import wraps
 
-from flask import abort, flash, redirect, request, url_for
+from flask import abort, flash, jsonify, redirect, request, url_for
 from flask_login import current_user
+
+
+def _wants_json():
+    """True for the JSON API.
+
+    Redirecting an API client to a login page hands it HTML to parse as JSON,
+    so it cannot tell "signed out" from "not on your plan" from a sale that
+    actually failed. Flashing at it is no better: the message surfaces on some
+    unrelated page later, with no context.
+    """
+    return request.blueprint == 'api' or request.path.startswith('/api/')
+
+
+def _json_error(message, status, code):
+    return jsonify({'error': message, 'code': code}), status
 
 
 def permission_required(*permission_codes):
@@ -15,9 +30,14 @@ def permission_required(*permission_codes):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
+                if _wants_json():
+                    return _json_error('Sign in again.', 401, 'unauthenticated')
                 return redirect(url_for('auth.login', next=request.url))
 
             if not all(current_user.can(code) for code in permission_codes):
+                if _wants_json():
+                    return _json_error('You do not have permission to do that.',
+                                       403, 'forbidden')
                 flash("You do not have permission to do that.", "danger")
                 abort(403)
 
@@ -38,6 +58,8 @@ def requires_feature(feature_code):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
+                if _wants_json():
+                    return _json_error('Sign in again.', 401, 'unauthenticated')
                 return redirect(url_for('auth.login', next=request.url))
 
             from billing.plans import FEATURES
@@ -45,6 +67,10 @@ def requires_feature(feature_code):
 
             if not has_feature(feature_code):
                 description = FEATURES.get(feature_code, (feature_code, None))[0]
+                if _wants_json():
+                    return _json_error(
+                        f'{description} is not included in your current plan.',
+                        403, 'feature_locked')
                 flash(f'{description} is not included in your current plan.', 'warning')
                 return redirect(url_for('index'))
 
@@ -63,9 +89,14 @@ def any_permission_required(*permission_codes):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
+                if _wants_json():
+                    return _json_error('Sign in again.', 401, 'unauthenticated')
                 return redirect(url_for('auth.login', next=request.url))
 
             if not any(current_user.can(code) for code in permission_codes):
+                if _wants_json():
+                    return _json_error('You do not have permission to do that.',
+                                       403, 'forbidden')
                 flash("You do not have permission to do that.", "danger")
                 abort(403)
 

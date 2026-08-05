@@ -36,6 +36,22 @@ def create_app():
         from auth.models import User
         return User.query.get(int(user_id))
 
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        """Redirect a browser to the login page; tell the API in JSON.
+
+        Flask-Login runs before our own decorators, so without this the device
+        syncing offline sales receives a 302 to an HTML login form and tries to
+        read it as JSON. It cannot then tell "your session expired" from "that
+        sale was refused", and the safe reading of an ambiguous answer is to
+        keep retrying a sale forever.
+        """
+        from flask import jsonify, redirect, request, url_for
+
+        if request.blueprint == 'api' or request.path.startswith('/api/'):
+            return jsonify({'error': 'Sign in again.', 'code': 'unauthenticated'}), 401
+        return redirect(url_for('auth.login', next=request.url))
+
     # Register blueprints
     from products.routes import products_bp
     from sales.routes import sales_bp
@@ -57,6 +73,9 @@ def create_app():
     app.register_blueprint(reports_bp, url_prefix='/reports')
     app.register_blueprint(auth_bp, url_prefix='/auth')
     app.register_blueprint(credit_bp, url_prefix='/credit')
+
+    from api import api_bp
+    app.register_blueprint(api_bp)
 
     from auth.cli import create_owner_command, reconcile_stock_command
     app.cli.add_command(create_owner_command)

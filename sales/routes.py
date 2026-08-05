@@ -10,7 +10,7 @@ from flask import send_file
 import io
 from .models import SaleItem
 from flask_login import login_required, current_user
-from auth.decorators import permission_required
+from auth.decorators import permission_required, requires_feature
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from decimal import Decimal
@@ -132,6 +132,20 @@ def _settle_sale(sale, form):
                   total=str(total), paid=str(received), owing=str(owing),
                   customer=sale.customer.name if sale.customer else None)
     return owing
+
+
+@sales_bp.route('/pending')
+@login_required
+@permission_required('sales.create')
+@requires_feature('offline')
+def pending_sales():
+    """Sales recorded on this device and not yet synced.
+
+    The server knows nothing about them - they live in the browser's IndexedDB
+    until they sync, which is the whole point. This route serves the shell and
+    the page fills it from the device.
+    """
+    return render_template('sales/pending.html')
 
 
 @sales_bp.route('/add', methods=['GET', 'POST'])

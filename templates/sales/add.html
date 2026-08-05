@@ -13,6 +13,18 @@
     </div>
 </div>
 
+{% if has_feature('offline') %}
+<div class="alert alert-warning d-flex align-items-center" id="offline-notice" hidden>
+    <i class="bi bi-wifi-off me-2 fs-5"></i>
+    <div>
+        <strong>No connection.</strong>
+        This sale will be saved on this phone and sent when the network returns.
+        Stock and price are checked by the server then, so it may still be
+        refused &mdash; you will be told which.
+    </div>
+</div>
+{% endif %}
+
 <div class="glass-card">
     <form method="post" id="sale-form">
         {{ form.hidden_tag() }}
@@ -340,6 +352,71 @@
 
   rows().forEach(updatePrice);
   refresh();
+
+  // --- selling with no signal ---------------------------------------------
+  //
+  // Submitting normally would fail and lose everything typed. Instead the sale
+  // is queued on the device and sent when the connection returns. The server
+  // re-decides stock and price then; nothing here is authoritative.
+  var form = document.getElementById('sale-form');
+  if (form && window.TrackTrackOffline) {
+    form.addEventListener('submit', function (event) {
+      if (navigator.onLine) {
+        return;                       // normal post, normal rules
+      }
+      event.preventDefault();
+
+      var items = rows().map(function (row) {
+        var select = row.querySelector('.product-select');
+        var qty = row.querySelector('[name$="quantity"]');
+        var price = row.querySelector('.price-input');
+        return {
+          product_id: parseInt(select.value, 10),
+          product_name: select.options[select.selectedIndex].textContent,
+          quantity: parseInt(qty.value, 10) || 0,
+          price: price.value,
+        };
+      }).filter(function (i) { return i.product_id && i.quantity > 0; });
+
+      if (!items.length) {
+        alert('Add at least one product before saving.');
+        return;
+      }
+
+      var customerSelect = document.getElementById('customer_id');
+      var customerId = customerSelect && customerSelect.value !== '0'
+        ? parseInt(customerSelect.value, 10) : null;
+      var settlementChoice = settlement ? settlement.value : 'paid';
+
+      window.TrackTrackOffline.queue({
+        sale_date: form.querySelector('[name="sale_date"]').value,
+        customer_id: customerId,
+        customer_name: customerId ? null : (form.querySelector('[name="customer_name"]') || {}).value,
+        customer_phone: customerId ? null : (form.querySelector('[name="customer_phone"]') || {}).value,
+        items: items,
+        amount_paid: settlementChoice === 'credit' ? '0'
+          : (settlementChoice === 'paid' ? totalEl.textContent
+             : (amountPaid ? amountPaid.value : '0')),
+        payment_method: (form.querySelector('[name="payment_method"]') || {}).value || 'cash',
+        payment_reference: (form.querySelector('[name="payment_reference"]') || {}).value || '',
+        display_total: totalEl.textContent,
+      }).then(function () {
+        window.location.href = '/sales/pending?queued=1';
+      }).catch(function () {
+        alert('Could not save this sale on the device. Please write it down.');
+      });
+    });
+
+    // Say so before they start typing, not after they press the button.
+    function showConnectionNotice() {
+      var notice = document.getElementById('offline-notice');
+      if (!notice) { return; }
+      notice.hidden = navigator.onLine;
+    }
+    window.addEventListener('online', showConnectionNotice);
+    window.addEventListener('offline', showConnectionNotice);
+    showConnectionNotice();
+  }
 })();
 </script>
 {% endblock %}

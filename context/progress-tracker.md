@@ -121,19 +121,38 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   `templates/offline.html` deliberately does **not** extend `base.html`: that template
   branches on whether there is a session, and the first version rendered a full sidebar
   and no content at all for a logged-in reader — which is the case that actually happens.
+- **2.4c/2.4d** Offline sale capture and sync. Built together on purpose: a queue that
+  cannot sync holds real sales hostage on one device, which is worse than no queue.
+  `api/` is the first JSON surface — `/api/v1/session`, `/catalogue`, `/sales`. It **calls
+  the same services the forms call**; a second implementation of "how much stock is there"
+  would drift, and the drifted copy would be the one running when the shop had no network.
+  Three guarantees, each with falsified tests:
+  **not lost** — nothing leaves the device queue except the server confirming it, so a
+  network error, a bad status and a parse failure all mean retry;
+  **not doubled** — the device generates `client_id` before queueing, and `Sale.client_id`
+  is unique per business, so a sync that timed out after committing returns the original
+  (enforced in the route *and* by the constraint);
+  **not quietly wrong** — stock and price are re-decided at sync time, and a conflict is
+  kept, shown in red on `/sales/pending`, and left for a person to resolve.
+  The catalogue endpoint deliberately omits cost price: the device cache is readable by
+  anyone holding the phone, and cost is gated everywhere else (F-16).
+  `auth/decorators.py` and the Flask-Login unauthorized handler now answer the API in JSON
+  — a 302 to an HTML login page left the device unable to tell an expired session from a
+  refused sale, and the safe reading of that is to retry forever.
+  `services/limits.has_feature` is memoised per request: templates ask it a dozen times a
+  page and each ask was two queries.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**284 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+**311 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 
-- **Stage 2.4c** — offline sale capture: cache the catalogue in IndexedDB, queue a sale
-  recorded without a signal, show it as unmistakably pending. Then 2.4d syncs it via a new
-  `/api/v1/sales` that reuses `services/stock.py` and `services/pricing.py` rather than
-  duplicating the rules, returning per-sale accept/conflict.
+- **Deploy to Neon + Koyeb (Stage 0.4).** Nothing else is blocked on code. A PWA needs
+  HTTPS to install, so this is what turns the offline work into something a pilot user can
+  actually put on a phone.
 
 ## Next Up
 

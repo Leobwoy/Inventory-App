@@ -15,6 +15,10 @@ class Customer(db.Model):
         return f'<Customer {self.name}>'
 
 class Sale(db.Model):
+    __table_args__ = (
+        db.UniqueConstraint('business_id', 'client_id', name='uq_sale_business_client_id'),
+    )
+
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     sale_date = db.Column(db.Date, nullable=False)
@@ -25,6 +29,10 @@ class Sale(db.Model):
     customer_name = db.Column(db.String(100))
     # A debt you cannot phone is a debt you do not collect.
     customer_phone = db.Column(db.String(50))
+    # The id the device gave this sale before it could send it. Retrying a sync
+    # is normal - a timeout after the server committed looks identical to a
+    # failure - so the id is what stops the same crate being sold twice.
+    client_id = db.Column(db.String(64), index=True)
     items = db.relationship('SaleItem', backref='sale', lazy=True, cascade='all, delete-orphan')
 
     @property
