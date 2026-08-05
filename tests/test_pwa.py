@@ -218,3 +218,19 @@ def test_development_still_starts_without_a_secret_key(monkeypatch):
     built = app_module.create_app()
     assert built.config['SECRET_KEY']
     assert built.config['SESSION_COOKIE_SECURE'] is not True
+
+
+def test_the_hidden_attribute_actually_hides():
+    """Browsers implement `hidden` as `[hidden] { display: none }`, and every
+    Bootstrap display utility is `!important` - so `class="d-flex" hidden`
+    renders in full. That is how the sale form's "No connection" banner showed
+    on a working connection, and the discount summary showed a discount of
+    zero, each stating something untrue."""
+    # code_only, or this matches the example inside the comment that explains
+    # the rule rather than the rule itself.
+    css = code_only((REPO_ROOT / 'static' / 'css' / 'style.css').read_text(encoding='utf-8'))
+    rule = re.search(r'\[hidden\]\s*\{([^}]*)\}', css)
+
+    assert rule, 'no [hidden] rule in style.css'
+    assert 'display' in rule.group(1) and 'none' in rule.group(1)
+    assert '!important' in rule.group(1), 'without !important the utilities still win'

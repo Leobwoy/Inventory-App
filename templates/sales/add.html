@@ -30,29 +30,29 @@
         {{ form.hidden_tag() }}
         
         <div class="row g-4 mb-4">
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label">{{ form.sale_date.label.text }}</label>
                 {{ form.sale_date(class_='form-control' + (' is-invalid' if form.sale_date.errors else '')) }}
                 {% for error in form.sale_date.errors %}
                 <div class="invalid-feedback">{{ error }}</div>
                 {% endfor %}
             </div>
-            <div class="col-md-4">
+            <div class="col-md-3">
                 <label class="form-label">{{ form.customer_id.label.text }}</label>
                 {{ form.customer_id(class_='form-select' + (' is-invalid' if form.customer_id.errors else ''), id='customer_id') }}
                 {% for error in form.customer_id.errors %}
                 <div class="invalid-feedback">{{ error }}</div>
                 {% endfor %}
             </div>
-            <div class="col-md-2">
-                <label class="form-label">{{ form.customer_name.label.text }} <span class="text-muted small">(If walk-in)</span></label>
+            <div class="col-md-3">
+                <label class="form-label">Walk-in name <span class="text-muted small">(optional)</span></label>
                 {{ form.customer_name(class_='form-control' + (' is-invalid' if form.customer_name.errors else ''), placeholder='Optional') }}
                 {% for error in form.customer_name.errors %}
                 <div class="invalid-feedback">{{ error }}</div>
                 {% endfor %}
             </div>
-            <div class="col-md-2">
-                <label class="form-label">Phone <span class="text-muted small">(If walk-in)</span></label>
+            <div class="col-md-3">
+                <label class="form-label">Walk-in phone <span class="text-muted small">(optional)</span></label>
                 {{ form.customer_phone(class_='form-control' + (' is-invalid' if form.customer_phone.errors else ''), placeholder='Optional') }}
                 {% for error in form.customer_phone.errors %}
                 <div class="invalid-feedback">{{ error }}</div>

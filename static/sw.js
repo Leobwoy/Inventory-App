@@ -25,7 +25,7 @@
  */
 
 // Bump to invalidate everything. Old caches are deleted on activate.
-const CACHE_VERSION = 'tracktrack-v2';
+const CACHE_VERSION = 'tracktrack-v3';
 const OFFLINE_URL = '/offline';
 
 // The shell: enough to render a styled page with icons and no network.
