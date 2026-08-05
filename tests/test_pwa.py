@@ -176,3 +176,45 @@ def test_precaching_survives_one_missing_file():
     install = CODE.split("addEventListener('install'")[1].split("addEventListener('activate'")[0]
     assert 'addAll' not in install
     assert '.catch(' in install
+
+
+# --- production configuration ----------------------------------------------
+
+def test_the_app_refuses_to_start_in_production_without_a_secret_key(monkeypatch):
+    """A published default key is not a weak key, it is no key: anyone who has
+    read this repository could forge a session cookie and sign in as any user of
+    any business. Better to fail the deploy than to serve that."""
+    import app as app_module
+
+    monkeypatch.setenv('TRACKTRACK_ENV', 'production')
+    monkeypatch.delenv('SECRET_KEY', raising=False)
+
+    with pytest.raises(RuntimeError, match='SECRET_KEY'):
+        app_module.create_app()
+
+
+def test_production_marks_the_session_cookie_secure(monkeypatch):
+    """Koyeb terminates TLS and forwards plain http, so without ProxyFix Flask
+    thinks every request is insecure and declines to set the Secure cookie."""
+    import app as app_module
+
+    monkeypatch.setenv('TRACKTRACK_ENV', 'production')
+    monkeypatch.setenv('SECRET_KEY', 'x' * 64)
+    built = app_module.create_app()
+
+    assert built.config['SESSION_COOKIE_SECURE'] is True
+    assert built.config['SESSION_COOKIE_HTTPONLY'] is True
+    assert built.config['SESSION_COOKIE_SAMESITE'] == 'Lax'
+    assert 'ProxyFix' in type(built.wsgi_app).__name__
+
+
+def test_development_still_starts_without_a_secret_key(monkeypatch):
+    """The guard must not make the app unrunnable on a laptop."""
+    import app as app_module
+
+    monkeypatch.delenv('TRACKTRACK_ENV', raising=False)
+    monkeypatch.delenv('SECRET_KEY', raising=False)
+
+    built = app_module.create_app()
+    assert built.config['SECRET_KEY']
+    assert built.config['SESSION_COOKIE_SECURE'] is not True

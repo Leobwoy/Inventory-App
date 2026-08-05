@@ -15,14 +15,52 @@ login_manager = LoginManager()
 
 def create_app():
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'devkey')
-    
+
+    # The Dockerfile sets this. Explicit rather than guessed from FLASK_DEBUG or
+    # the presence of DATABASE_URL, both of which can be true by accident.
+    production = os.environ.get('TRACKTRACK_ENV') == 'production'
+
+    secret = os.environ.get('SECRET_KEY')
+    if not secret:
+        if production:
+            # A published default key is not a weak key, it is no key: anyone
+            # who has read this repository can forge a session cookie and sign
+            # in as any user of any business. Refuse to start rather than serve
+            # an app whose login means nothing.
+            raise RuntimeError(
+                'SECRET_KEY is not set. Generate one with '
+                '`python -c "import secrets; print(secrets.token_hex(32))"` '
+                'and set it in the environment before deploying.'
+            )
+        secret = 'dev-only-never-deploy-this'
+    app.config['SECRET_KEY'] = secret
+
     db_url = os.environ.get('DATABASE_URL', 'postgresql://postgres:postgres123@localhost:5432/purchasesalesdb')
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql://", 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-    
+
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    # Neon closes idle connections and drops them behind a pooler, so a
+    # connection held since the last request is often already dead. Recycle
+    # before that happens and check one before handing it out.
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 280,
+    }
+
+    if production:
+        app.config.update(
+            SESSION_COOKIE_SECURE=True,      # never send the session over plain http
+            SESSION_COOKIE_HTTPONLY=True,    # not readable from JavaScript
+            SESSION_COOKIE_SAMESITE='Lax',   # not sent on cross-site POSTs
+            PREFERRED_URL_SCHEME='https',
+        )
+        # Koyeb terminates TLS and forwards over http, so without this Flask
+        # believes every request is insecure: it would build http:// redirects
+        # and refuse to set the Secure cookie it was just told to set.
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     bootstrap.init_app(app)
     db.init_app(app)

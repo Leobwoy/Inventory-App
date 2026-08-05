@@ -146,7 +146,7 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**311 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+**314 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 
@@ -175,8 +175,11 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   the user; not scoped or scheduled yet.
 - **Paystack merchant registration.** Requires a registered Ghanaian business and a
   corporate bank account. Long lead time; gates Stage 2B regardless of code readiness.
-- **Deployment.** Neon + Koyeb accounts not yet provisioned — blocked on the user.
-  A PWA needs HTTPS to install, so this blocks verifying Stage 2.4b on a real phone.
+- **Deployment.** `DEPLOY.md` has the full walkthrough. Production config is ready:
+  `SECRET_KEY` is now **required** in production (it silently fell back to a default
+  written in this repository, which anyone reading the code could use to forge a session),
+  secure cookie flags are set, `ProxyFix` handles Koyeb's TLS termination, and the engine
+  pre-pings because Neon drops idle connections.
 - **Free-tier retention.** What happens to a business sitting on Kiosk for two years with
   500 deactivated products? A retention question, tied to the Ghana Data Protection Act
   review in Stage 4.
@@ -184,9 +187,11 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   Stage 4. Revisit before pilot.
 - **Roadmap Phase 3 contradiction.** "Supplier ad placements" undermines the unbiased
   price comparison that Stage 2.3 just built. Unresolved; you can have one or the other.
-- **Dependency pinning.** `requirements.txt` is all `>=`, so Koyeb resolves Flask 3.1.3 /
-  pandas 3.0.5 while local development runs older versions. Not currently breaking; pin
-  before the pilot.
+- **Dependency pinning.** Now bounded (floor excludes the Werkzeug CVEs, ceiling stops an
+  unannounced major). Exact pins with a lockfile remain the right end state.
+- **Free-tier cold start.** Both Neon and Koyeb idle out; the first request after a quiet
+  spell takes 10-30s. Fine for a demo you warn people about, and the first thing worth
+  paying to remove before real pilot users. See `DEPLOY.md`.
 
 ## Architecture Decisions
 
