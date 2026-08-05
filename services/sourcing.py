@@ -38,6 +38,13 @@ def _priced_lines(business_id, product_id=None):
             PurchaseOrder.business_id == business_id,
             PurchaseOrder.status.in_(REAL_ORDER_STATUSES),
             PurchaseOrder.supplier_id.isnot(None),
+            # Every figure here is time-ordered - latest price, trend, who was
+            # used most recently. An order with no date cannot be placed in
+            # time, so it cannot answer any of them. nullslast() alone was not
+            # enough: a supplier whose orders are *all* undated still produced
+            # last_ordered=None, and comparing that against a real date in
+            # savings_against_latest() raises TypeError.
+            PurchaseOrder.order_date.isnot(None),
             PurchaseOrderItem.unit_cost.isnot(None),
             PurchaseOrderItem.unit_cost > 0,
         )
@@ -135,7 +142,10 @@ def savings_against_latest(options):
     """
     if len(options) < 2:
         return None
-    most_recent = max(options, key=lambda r: r['last_ordered'])
+    dated = [option for option in options if option['last_ordered'] is not None]
+    if not dated:
+        return None
+    most_recent = max(dated, key=lambda r: r['last_ordered'])
     cheapest = options[0]
     if cheapest['supplier'].id == most_recent['supplier'].id:
         return None

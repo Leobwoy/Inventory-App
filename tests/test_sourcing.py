@@ -268,3 +268,58 @@ def test_a_product_from_another_tenant_is_not_reachable(shop, register, make_pro
     foreign = make_product(business_b, sku='BETA-1')
 
     assert client.get(f'/purchases/compare/{foreign.id}').status_code == 404
+
+
+def test_an_undated_order_does_not_break_the_comparison(register, make_product, make_po):
+    """PurchaseOrder.order_date is nullable. Every figure here is time-ordered,
+    so an undated order cannot answer any of them - and a supplier whose orders
+    are all undated used to yield last_ordered=None, which then met a real date
+    inside max() and raised TypeError."""
+    from decimal import Decimal
+    from extensions import db
+    from products.models import Supplier
+    from services import sourcing
+
+    _client, business = register()
+    product = make_product(business, sku='BA-750')
+    dated_supplier = Supplier(business_id=business, name='Voltic Ghana')
+    undated_supplier = Supplier(business_id=business, name='No Date Ltd')
+    db.session.add_all([dated_supplier, undated_supplier])
+    db.session.commit()
+
+    dated_po, dated_item = make_po(business, product)
+    dated_po.supplier_id = dated_supplier.id
+    dated_po.status = 'received'
+    dated_item.unit_cost = Decimal('5.00')
+
+    undated_po, undated_item = make_po(business, product)
+    undated_po.supplier_id = undated_supplier.id
+    undated_po.status = 'received'
+    undated_po.order_date = None
+    undated_item.unit_cost = Decimal('3.00')
+    db.session.commit()
+
+    options = sourcing.suppliers_for(business, product.id)
+    # Excluded outright: a price with no date cannot be "what they charge now".
+    assert [o['supplier'].name for o in options] == ['Voltic Ghana']
+    assert all(o['last_ordered'] is not None for o in options)
+
+    # The whole page must render rather than raising.
+    assert sourcing.savings_against_latest(options) is None
+    sourcing.products_with_alternatives(business)
+
+
+def test_savings_survives_options_with_no_usable_date():
+    """Defence in depth: the query excludes them, but this must not crash if a
+    caller ever assembles options another way."""
+    from services import sourcing
+
+    class FakeSupplier:
+        def __init__(self, supplier_id):
+            self.id = supplier_id
+
+    options = [
+        {'supplier': FakeSupplier(1), 'latest': 3, 'last_ordered': None},
+        {'supplier': FakeSupplier(2), 'latest': 5, 'last_ordered': None},
+    ]
+    assert sourcing.savings_against_latest(options) is None

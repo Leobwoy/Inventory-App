@@ -162,12 +162,20 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   quantity typed in pieces was multiplied by the conversion factor. The old test posted the
   unit by hand, which hid the real case, and justified it as "the server is the authority".
   Entered values are now base units whenever the business lacks the feature.
+  A follow-up round caught that my first fix for undated purchase orders was only half of
+  one: `nullslast()` stopped a dateless order becoming a supplier's *latest* price, but a
+  supplier whose orders were **all** undated still yielded `last_ordered=None`, which then
+  met a real date inside `max()` in `savings_against_latest` and raised `TypeError`.
+  `PurchaseOrder.order_date` is nullable, so this was reachable. Undated lines are now
+  excluded from the sourcing read entirely — every figure it produces is time-ordered, and
+  a line that cannot be placed in time cannot answer any of them — with a null-safe key in
+  `savings_against_latest` as defence in depth.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**321 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+**323 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 
