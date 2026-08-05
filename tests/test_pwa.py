@@ -232,5 +232,10 @@ def test_the_hidden_attribute_actually_hides():
     rule = re.search(r'\[hidden\]\s*\{([^}]*)\}', css)
 
     assert rule, 'no [hidden] rule in style.css'
-    assert 'display' in rule.group(1) and 'none' in rule.group(1)
-    assert '!important' in rule.group(1), 'without !important the utilities still win'
+    # The whole declaration, not three tokens that happen to be present:
+    # `display: block !important; content: none` satisfies a token check
+    # while leaving every [hidden] element on screen.
+    declaration = re.sub(r'\s+', '', rule.group(1))
+    assert 'display:none!important' in declaration, (
+        "the [hidden] rule must set display: none !important, or Bootstrap's "
+        "display utilities still win")
