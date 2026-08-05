@@ -170,12 +170,21 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   excluded from the sourcing read entirely — every figure it produces is time-ordered, and
   a line that cannot be placed in time cannot answer any of them — with a null-safe key in
   `savings_against_latest` as defence in depth.
+  A third round found three more: `Decimal()` accepts `'NaN'` and `'Infinity'` without
+  raising, and `Infinity` was the dangerous one — `min(received, total)` clamped it to the
+  full amount, so a malformed payload would have recorded a sale as **paid in full when
+  nothing was received**; the batched sourcing query loaded every priced line for the
+  business and discarded most in Python, defeating the batching; and the offline queue only
+  continued to the next batch when *every* sale was accepted, so one refused sale in fifty
+  stranded the other forty-nine. A conflict is terminal — it drops out of the pending
+  filter — so the condition is now "every sale reached a terminal state", with `retry` still
+  stopping the loop so a sale that cannot go never spins.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**323 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+**326 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 

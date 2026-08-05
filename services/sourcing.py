@@ -28,7 +28,7 @@ from purchases.models import PurchaseOrder, PurchaseOrderItem
 REAL_ORDER_STATUSES = ('ordered', 'partially_received', 'received')
 
 
-def _priced_lines(business_id, product_id=None):
+def _priced_lines(business_id, product_id=None, product_ids=None):
     """Purchase order lines that carry a usable price, newest first."""
     query = (
         PurchaseOrderItem.query
@@ -51,6 +51,10 @@ def _priced_lines(business_id, product_id=None):
     )
     if product_id is not None:
         query = query.filter(PurchaseOrderItem.product_id == product_id)
+    if product_ids is not None:
+        # Narrow in SQL. Loading every priced line for the business and then
+        # discarding most of them in Python defeats the point of batching.
+        query = query.filter(PurchaseOrderItem.product_id.in_(product_ids))
     # nullslast: on PostgreSQL a DESC sort puts NULLs first, which would make a
     # dateless order the 'latest' price and set last_ordered to None.
     return query.order_by(PurchaseOrder.order_date.desc().nullslast(),
@@ -100,9 +104,8 @@ def _options_for_many(business_id, product_ids):
         return {}
 
     lines_by_product = {}
-    for line in _priced_lines(business_id):
-        if line.product_id in set(product_ids):
-            lines_by_product.setdefault(line.product_id, []).append(line)
+    for line in _priced_lines(business_id, product_ids=product_ids):
+        lines_by_product.setdefault(line.product_id, []).append(line)
     return {product_id: _reduce_to_options(lines)
             for product_id, lines in lines_by_product.items()}
 

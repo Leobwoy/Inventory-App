@@ -187,10 +187,16 @@
 
             // A week offline arrives in batches. Both sides batch, but nothing
             // asked for the next one - so a device that reconnected and stayed
-            // online kept the rest of its backlog on disk indefinitely. Only
-            // continue when the batch filled and every sale in it landed;
-            // otherwise the queue head is stuck and looping would spin.
-            if (sendable.length === MAX_BATCH && accepted === sendable.length) {
+            // online kept the rest of its backlog on disk indefinitely.
+            //
+            // The condition is "every sale in this batch reached a terminal
+            // state", not "every sale was accepted". A conflict is terminal:
+            // it is marked and drops out of the pending filter, so the queue
+            // head has moved and the batch behind it can be sent. Requiring
+            // acceptance meant one refused sale in fifty stranded the other
+            // forty-nine. Only 'retry' stops the loop, which is what keeps it
+            // from spinning on a sale that will not go.
+            if (sendable.length === MAX_BATCH && accepted + conflicts === sendable.length) {
                 const next = await Offline.sync();
                 if (next && typeof next.accepted === 'number') {
                     accepted += next.accepted;

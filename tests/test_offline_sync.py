@@ -406,3 +406,43 @@ def test_every_queued_sale_gets_an_id_before_it_is_stored():
     # randomUUID is unavailable on http:// and older WebViews, so there must be
     # a fallback - an id is required, not best-effort.
     assert 'randomUUID' in code and 'Math.random' in code
+
+
+def test_nan_and_infinity_are_refused(shop):
+    """Decimal() accepts 'NaN' and 'Infinity' without raising. NaN poisons every
+    comparison downstream; Infinity is the dangerous one, because
+    min(received, total) clamps it to the full amount and would record a sale as
+    paid in full when nothing was received."""
+    client, _business_id, product = shop
+
+    for bad in ('NaN', 'Infinity', '-Infinity', 'sNaN'):
+        result = json.loads(sync(client, queued(product, f'price-{bad}', price=bad)).data)['results'][0]
+        assert result['status'] == 'rejected', f'price {bad!r} was not refused'
+
+        result = json.loads(sync(client, queued(product, f'paid-{bad}', amount_paid=bad)).data)['results'][0]
+        assert result['status'] == 'rejected', f'amount_paid {bad!r} was not refused'
+
+    assert Sale.query.count() == 0
+
+
+def test_infinity_never_records_a_sale_as_settled(shop):
+    """The specific failure the check exists to prevent."""
+    client, _business_id, product = shop
+    sync(client, queued(product, 'inf-pay', quantity=2, amount_paid='Infinity'))
+
+    assert Sale.query.count() == 0
+    from credit.models import Payment
+    assert Payment.query.count() == 0
+
+
+def test_the_queue_drains_past_a_conflict_in_a_full_batch():
+    """A conflict is terminal - it drops out of the pending filter, so the queue
+    head has moved. Requiring every sale to be accepted meant one refused sale
+    in fifty stranded the other forty-nine until the next reconnect."""
+    source = (Path(__file__).resolve().parent.parent / 'static' / 'js' / 'offline-sales.js')
+    code = re.sub(r'//.*', '', re.sub(r'/\*.*?\*/', '', source.read_text(encoding='utf-8'), flags=re.S))
+
+    sync_body = code.split('async sync()')[1].split('async announce()')[0]
+    assert 'accepted + conflicts === sendable.length' in sync_body
+    # 'retry' must still stop it, or a sale that cannot go spins forever.
+    assert 'accepted === sendable.length' not in sync_body

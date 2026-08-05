@@ -182,6 +182,12 @@ def _record_one(payload, business_id):
                 requested = Decimal(str(requested)) if requested is not None else None
             except (InvalidOperation, ValueError):
                 raise _Rejected('A line has an unreadable price.') from None
+            # Decimal() accepts 'NaN' and 'Infinity' without complaint. NaN
+            # poisons every comparison downstream; Infinity would sail through
+            # the discount floor as though it were the highest price ever
+            # charged. Neither is a price.
+            if requested is not None and not requested.is_finite():
+                raise _Rejected('A line has an unreadable price.')
 
             # The price the device saw may be stale, and the rule may have
             # changed while it was offline. Re-resolve against the truth now.
@@ -209,6 +215,11 @@ def _record_one(payload, business_id):
             received = Decimal(str(payload.get('amount_paid') or 0))
         except (InvalidOperation, ValueError):
             raise _Rejected('The amount paid is unreadable.') from None
+        # Infinity here is the dangerous one: min(received, total) clamps it to
+        # the full amount, so a malformed payload would record a sale as paid
+        # in full when nothing was received.
+        if not received.is_finite():
+            raise _Rejected('The amount paid is unreadable.')
         total = sale_total(sale)
         received = max(Decimal('0'), min(received, total))
         if received > 0:
