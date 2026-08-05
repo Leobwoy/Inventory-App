@@ -1,11 +1,18 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import (Blueprint, Response, abort, current_app, flash, redirect,
+                   render_template, request, url_for)
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
-from auth.models import User, Business, Role
-from auth.forms import RegistrationForm, ChangePasswordForm, UserForm
-from auth.decorators import permission_required
+from auth.models import User, Business, Role, AuditLog
+from sqlalchemy.orm import joinedload
+from auth.forms import (BusinessSettingsForm, RegistrationForm, ChangePasswordForm,
+                        UserForm)
+from auth.decorators import permission_required, requires_feature
 from auth.permissions import ALL as ALL_PERMISSION_CODES, GROUP_ORDER, PERMISSIONS
 from products.models import Brand, ItemGroup
+from services import audit, limits
+from billing.models import Plan, Subscription
+from billing.plans import TRIAL_DAYS
+from datetime import timedelta
 from extensions import db
 from sqlalchemy import func
 from datetime import datetime
@@ -104,14 +111,26 @@ def register():
         # the permission grid renders correctly for them.
         new_user.apply_role_preset('Owner')
 
-        # 4. Seed catalogue fallbacks. Product.brand_id and item_group_id are NOT NULL,
+        # 4. Start the free trial. Full features for TRIAL_DAYS, then the
+        # account downgrades to Free rather than locking - they keep their data
+        # and keep working at the free tier's limits.
+        trial_plan = Plan.query.filter_by(code='trial').first()
+        if trial_plan:
+            db.session.add(Subscription(
+                business_id=new_business.id,
+                plan_id=trial_plan.id,
+                status='trialing',
+                trial_ends_at=datetime.utcnow() + timedelta(days=TRIAL_DAYS),
+            ))
+
+        # 5. Seed catalogue fallbacks. Product.brand_id and item_group_id are NOT NULL,
         # so without these the business cannot save a single product.
         db.session.add(Brand(business_id=new_business.id, name='Generic'))
         db.session.add(ItemGroup(business_id=new_business.id, name='Uncategorized'))
 
         db.session.commit()
         
-        # 5. Log them in
+        # 6. Log them in
         login_user(new_user)
         flash('Registration successful! Welcome to TrackTrack.', 'success')
         return redirect(url_for('index'))
@@ -153,6 +172,12 @@ def add_user():
             return render_template('auth/add_user.html', form=form, roles=roles)
             
         if form.validate_on_submit():
+            allowed, message = limits.can_add_user()
+            if not allowed:
+                # A plan ceiling is a sales conversation, not a 403.
+                flash(message, 'warning')
+                return render_template('auth/add_user.html', form=form, roles=roles)
+
             existing_user = User.query.filter(
                 func.lower(User.email) == (form.email.data or '').strip().lower()
             ).first()
@@ -180,6 +205,9 @@ def add_user():
 
             # The role seeds a starting set; the Owner tunes it per person afterwards.
             new_user.apply_role_preset(role.name)
+            audit.log('user.create', entity_type='user', entity_id=new_user.id,
+                      email=new_user.email, name=new_user.name, preset=role.name,
+                      permissions=sorted(new_user.permission_codes()))
             db.session.commit()
             flash(f'{new_user.name} added. Review their permissions, and note they must '
                   'change their password on first login.', 'success')
@@ -202,7 +230,13 @@ def edit_user_permissions(user_id):
     if request.method == 'POST':
         submitted = set(request.form.getlist('permissions'))
         # Ignore anything not in the catalogue - never trust posted codes.
+        before = user.permission_codes()
         user.set_permissions(submitted & ALL_PERMISSION_CODES)
+        after = user.permission_codes()
+        if before != after:
+            audit.log('user.permissions_change', entity_type='user', entity_id=user.id,
+                      email=user.email,
+                      granted=sorted(after - before), revoked=sorted(before - after))
         db.session.commit()
         flash(f"Permissions updated for {user.name}.", 'success')
         return redirect(url_for('auth.users_list'))
@@ -233,11 +267,67 @@ def apply_user_preset(user_id):
         flash('Select a valid role.', 'danger')
         return redirect(url_for('auth.edit_user_permissions', user_id=user.id))
 
+    before = user.permission_codes()
     user.role_id = role.id
     user.apply_role_preset(role.name)
+    audit.log('user.preset_applied', entity_type='user', entity_id=user.id,
+              email=user.email, preset=role.name,
+              granted=sorted(user.permission_codes() - before),
+              revoked=sorted(before - user.permission_codes()))
     db.session.commit()
     flash(f"{user.name} reset to the {role.name} preset. Adjust individual permissions below.", 'success')
     return redirect(url_for('auth.edit_user_permissions', user_id=user.id))
+
+
+def _as_date(value):
+    """A yyyy-mm-dd filter value, or None. A bad one must not take the page down."""
+    try:
+        return datetime.strptime(value, '%Y-%m-%d').date() if value else None
+    except (TypeError, ValueError):
+        return None
+
+
+@auth_bp.route('/audit')
+@login_required
+@permission_required('audit.view')
+@requires_feature('audit_log')
+def audit_log():
+    """Who did what, and when. Filterable by person, kind of action and date."""
+    page = request.args.get('page', 1, type=int)
+    action = request.args.get('action', '').strip()
+    user_id = request.args.get('user_id', type=int)
+    start, end = request.args.get('start_date'), request.args.get('end_date')
+
+    query = AuditLog.query.filter_by(business_id=current_user.business_id) \
+        .options(joinedload(AuditLog.user))
+    if action:
+        query = query.filter(AuditLog.action == action)
+    if user_id:
+        query = query.filter(AuditLog.user_id == user_id)
+    # Parsed, not passed through. These are raw query strings compared against a
+    # timestamp column: on PostgreSQL `?start_date=abc` raises a DataError and
+    # returns 500, which anyone holding audit.view can trigger from the URL bar.
+    start_on, end_on = _as_date(start), _as_date(end)
+    if start_on:
+        query = query.filter(AuditLog.timestamp >= start_on)
+    if end_on:
+        # Whole day inclusive, built from a real date rather than string-glued.
+        query = query.filter(AuditLog.timestamp < end_on + timedelta(days=1))
+
+    pagination = query.order_by(AuditLog.timestamp.desc()).paginate(
+        page=page, per_page=50, error_out=False)
+
+    # Only offer filters for actions this business has actually recorded.
+    actions = [row[0] for row in db.session.query(AuditLog.action)
+               .filter_by(business_id=current_user.business_id)
+               .distinct().order_by(AuditLog.action).all()]
+
+    return render_template(
+        'auth/audit.html',
+        entries=pagination.items, pagination=pagination, actions=actions,
+        users=User.query.filter_by(business_id=current_user.business_id).order_by(User.name).all(),
+        filters=request.args,
+    )
 
 
 @auth_bp.route('/users/<int:user_id>/toggle_active', methods=['POST'])
@@ -252,6 +342,87 @@ def toggle_user_active(user_id):
         flash('You cannot suspend your own account.', 'warning')
     else:
         user.is_active = not user.is_active
+        audit.log('user.reinstate' if user.is_active else 'user.suspend',
+                  entity_type='user', entity_id=user.id, email=user.email)
         db.session.commit()
         flash(f"{user.name} {'reinstated' if user.is_active else 'suspended'}.", 'success')
     return redirect(url_for('auth.users_list'))
+
+
+MAX_LOGO_BYTES = 512 * 1024
+
+
+@auth_bp.route('/settings', methods=['GET', 'POST'])
+@login_required
+@permission_required('settings.manage')
+def business_settings():
+    """Business-level configuration.
+
+    Every field here already existed on the Business row with no way to change
+    it. max_discount_percent matters most: it defaults to 0, so until this page
+    existed the whole discount system - the sales.discount permission, the
+    ceiling, the never-below-cost floor - was finished code no business could
+    switch on.
+    """
+    business = Business.query.get_or_404(current_user.business_id)
+    form = BusinessSettingsForm(obj=business)
+
+    if form.validate_on_submit():
+        before = {
+            'name': business.name,
+            'max_discount_percent': str(business.max_discount_percent),
+            'expiry_alert_days': business.expiry_alert_days,
+        }
+        business.name = form.name.data.strip()
+        business.address = (form.address.data or '').strip() or None
+        business.contact_number = (form.contact_number.data or '').strip() or None
+        business.expiry_alert_days = form.expiry_alert_days.data
+        business.max_discount_percent = form.max_discount_percent.data
+
+        upload = form.logo.data
+        if form.remove_logo.data:
+            business.logo_data = None
+            business.logo_mimetype = None
+        elif upload:
+            blob = upload.read()
+            if len(blob) > MAX_LOGO_BYTES:
+                flash(f'That logo is {len(blob) // 1024}KB. Keep it under '
+                      f'{MAX_LOGO_BYTES // 1024}KB so pages stay quick on mobile data.',
+                      'danger')
+                return render_template('auth/settings.html', form=form, business=business)
+            business.logo_data = blob
+            business.logo_mimetype = upload.mimetype
+
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('saving business settings failed')
+            flash('Something went wrong and the settings were not saved.', 'danger')
+            return render_template('auth/settings.html', form=form, business=business)
+
+        # The discount ceiling is a money control, so a change to it is worth
+        # being able to find later.
+        audit.log('settings.update', entity_type='business', entity_id=business.id,
+                  before=before,
+                  after={'name': business.name,
+                         'max_discount_percent': str(business.max_discount_percent),
+                         'expiry_alert_days': business.expiry_alert_days})
+        db.session.commit()
+        flash('Settings saved.', 'success')
+        return redirect(url_for('auth.business_settings'))
+
+    return render_template('auth/settings.html', form=form, business=business)
+
+
+@auth_bp.route('/business/logo')
+@login_required
+def business_logo():
+    """Serve this business's logo. Scoped to the caller, so an id cannot be
+    tampered with to read another tenant's branding."""
+    business = Business.query.get_or_404(current_user.business_id)
+    if not business.has_logo:
+        abort(404)
+    return Response(business.logo_data,
+                    mimetype=business.logo_mimetype or 'image/png',
+                    headers={'Cache-Control': 'private, max-age=300'})

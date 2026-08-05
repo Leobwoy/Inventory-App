@@ -1,4 +1,4 @@
-from flask import Flask, render_template
+from flask import Flask, render_template, send_from_directory
 from flask_bootstrap import Bootstrap
 from flask_wtf.csrf import CSRFProtect
 import os
@@ -15,14 +15,52 @@ login_manager = LoginManager()
 
 def create_app():
     app = Flask(__name__)
-    app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'devkey')
-    
+
+    # The Dockerfile sets this. Explicit rather than guessed from FLASK_DEBUG or
+    # the presence of DATABASE_URL, both of which can be true by accident.
+    production = os.environ.get('TRACKTRACK_ENV') == 'production'
+
+    secret = os.environ.get('SECRET_KEY')
+    if not secret:
+        if production:
+            # A published default key is not a weak key, it is no key: anyone
+            # who has read this repository can forge a session cookie and sign
+            # in as any user of any business. Refuse to start rather than serve
+            # an app whose login means nothing.
+            raise RuntimeError(
+                'SECRET_KEY is not set. Generate one with '
+                '`python -c "import secrets; print(secrets.token_hex(32))"` '
+                'and set it in the environment before deploying.'
+            )
+        secret = 'dev-only-never-deploy-this'
+    app.config['SECRET_KEY'] = secret
+
     db_url = os.environ.get('DATABASE_URL', 'postgresql://postgres:postgres123@localhost:5432/purchasesalesdb')
     if db_url.startswith("postgres://"):
         db_url = db_url.replace("postgres://", "postgresql://", 1)
     app.config['SQLALCHEMY_DATABASE_URI'] = db_url
-    
+
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    # Neon closes idle connections and drops them behind a pooler, so a
+    # connection held since the last request is often already dead. Recycle
+    # before that happens and check one before handing it out.
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_pre_ping': True,
+        'pool_recycle': 280,
+    }
+
+    if production:
+        app.config.update(
+            SESSION_COOKIE_SECURE=True,      # never send the session over plain http
+            SESSION_COOKIE_HTTPONLY=True,    # not readable from JavaScript
+            SESSION_COOKIE_SAMESITE='Lax',   # not sent on cross-site POSTs
+            PREFERRED_URL_SCHEME='https',
+        )
+        # Koyeb terminates TLS and forwards over http, so without this Flask
+        # believes every request is insecure: it would build http:// redirects
+        # and refuse to set the Secure cookie it was just told to set.
+        from werkzeug.middleware.proxy_fix import ProxyFix
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     bootstrap.init_app(app)
     db.init_app(app)
@@ -36,14 +74,33 @@ def create_app():
         from auth.models import User
         return User.query.get(int(user_id))
 
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        """Redirect a browser to the login page; tell the API in JSON.
+
+        Flask-Login runs before our own decorators, so without this the device
+        syncing offline sales receives a 302 to an HTML login form and tries to
+        read it as JSON. It cannot then tell "your session expired" from "that
+        sale was refused", and the safe reading of an ambiguous answer is to
+        keep retrying a sale forever.
+        """
+        from flask import jsonify, redirect, request, url_for
+
+        if request.blueprint == 'api' or request.path.startswith('/api/'):
+            return jsonify({'error': 'Sign in again.', 'code': 'unauthenticated'}), 401
+        return redirect(url_for('auth.login', next=request.url))
+
     # Register blueprints
     from products.routes import products_bp
     from sales.routes import sales_bp
     from purchases.routes import purchases_bp
     from reports.routes import reports_bp
     from auth.routes import auth_bp
+    from credit.routes import credit_bp
     from auth import models as auth_models
     from products.models import Product
+    from billing import models as billing_models
+    from credit import models as credit_models
     from sales.models import Sale
     from sqlalchemy import func
     import datetime
@@ -53,6 +110,10 @@ def create_app():
     app.register_blueprint(purchases_bp, url_prefix='/purchases')
     app.register_blueprint(reports_bp, url_prefix='/reports')
     app.register_blueprint(auth_bp, url_prefix='/auth')
+    app.register_blueprint(credit_bp, url_prefix='/credit')
+
+    from api import api_bp
+    app.register_blueprint(api_bp)
 
     from auth.cli import create_owner_command, reconcile_stock_command
     app.cli.add_command(create_owner_command)
@@ -60,6 +121,52 @@ def create_app():
 
     from flask_login import login_required, current_user
     from auth.decorators import permission_required
+
+    @app.context_processor
+    def billing_helpers():
+        """Let templates ask what the business's plan includes.
+
+        Permissions are already reachable via current_user.can(); this is the
+        other gate - what the business has paid for rather than who is asking.
+        """
+        from services import limits, uom
+
+        def has_feature(code):
+            return limits.has_feature(code)
+
+        return {'has_feature': has_feature, 'uom': uom}
+
+    @app.route('/sw.js')
+    def service_worker():
+        """Serve the worker from the site root.
+
+        A service worker can only control URLs beneath its own path, so one
+        served from /static/sw.js would see nothing but /static - not a single
+        page of the app. Serving the same file from / gives it the whole origin.
+
+        No-cache: the browser re-checks this file to discover a new worker, and
+        a stale copy pins users to an old one until it expires.
+        """
+        response = send_from_directory(app.static_folder, 'sw.js',
+                                       mimetype='application/javascript')
+        response.headers['Cache-Control'] = 'no-cache'
+        response.headers['Service-Worker-Allowed'] = '/'
+        return response
+
+    @app.route('/manifest.json')
+    def manifest():
+        return send_from_directory(app.static_folder, 'manifest.json',
+                                   mimetype='application/manifest+json')
+
+    @app.route('/offline')
+    def offline():
+        """The page shown when the network is gone.
+
+        Deliberately outside @login_required: it is served from the cache with
+        no session to check, and redirecting to a login screen that also cannot
+        load would be a worse answer than saying plainly what happened.
+        """
+        return render_template('offline.html')
 
     @app.route('/')
     @login_required
@@ -119,6 +226,7 @@ def create_app():
         Scoped per tenant: the export contains just the caller's rows, and the
         import writes only into the caller's business_id, remapping primary keys.
         """
+        from services import audit
         from services import backup as backup_service
 
         if request.method == 'POST':
@@ -128,6 +236,9 @@ def create_app():
                 except Exception as e:
                     flash(f'Export failed: {e}', 'danger')
                     return redirect(url_for('backup_restore'))
+                audit.log('backup.export', entity_type='business',
+                          entity_id=current_user.business_id, filename=filename)
+                db.session.commit()
                 return send_file(
                     archive,
                     mimetype='application/zip',
@@ -145,6 +256,9 @@ def create_app():
                     return redirect(url_for('backup_restore'))
                 try:
                     written = backup_service.import_business(current_user.business_id, upload)
+                    audit.log('backup.restore', entity_type='business',
+                              entity_id=current_user.business_id,
+                              filename=upload.filename, rows=written)
                     db.session.commit()
                 except ValueError as e:
                     db.session.rollback()
@@ -165,4 +279,7 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True) 
+    # PORT from the environment, because that is how every host tells a process
+    # where to listen - and it lets a second instance start when the first has
+    # left a socket behind.
+    app.run(debug=True, port=int(os.environ.get('PORT', 5000)))

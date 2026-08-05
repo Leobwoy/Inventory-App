@@ -19,9 +19,16 @@ class Business(db.Model):
     max_discount_percent = db.Column(db.Numeric(5, 2), nullable=False, default=0)
     address = db.Column(db.String(255))
     contact_number = db.Column(db.String(50))
-    logo_path = db.Column(db.String(255))
-    
+    # In the row, not on disk: the container is rebuilt on every deploy, so a
+    # logo written to the filesystem disappears at the next release.
+    logo_data = db.Column(db.LargeBinary)
+    logo_mimetype = db.Column(db.String(50))
+
     users = db.relationship('User', backref='business', lazy=True)
+
+    @property
+    def has_logo(self):
+        return self.logo_data is not None
 
 class Role(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -111,7 +118,10 @@ class User(UserMixin, db.Model):
 class AuditLog(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
+    # Nullable so an entry survives the user being deleted - the trail must
+    # outlive the account, otherwise removing someone erases what they did.
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    user = db.relationship('User', backref=db.backref('audit_entries', lazy='dynamic'))
     action = db.Column(db.String(100), nullable=False)
     entity_type = db.Column(db.String(100))
     entity_id = db.Column(db.Integer)

@@ -1,0 +1,103 @@
+{% extends 'base.html' %}
+{% from '_macros.html' import render_pagination %}
+{% block title %}Activity Log | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Activity Log</h2>
+</div>
+
+<div class="glass-card mb-4">
+  <form method="get" class="row g-3 align-items-end">
+    <div class="col-md-3">
+      <label class="form-label text-muted small">Person</label>
+      <select name="user_id" class="form-select">
+        <option value="">Anyone</option>
+        {% for user in users %}
+        <option value="{{ user.id }}" {% if filters.get('user_id')|int == user.id %}selected{% endif %}>
+          {{ user.name }}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-3">
+      <label class="form-label text-muted small">Action</label>
+      <select name="action" class="form-select">
+        <option value="">All actions</option>
+        {% for a in actions %}
+        <option value="{{ a }}" {% if filters.get('action') == a %}selected{% endif %}>{{ a }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label text-muted small">From</label>
+      <input type="date" name="start_date" class="form-control" value="{{ filters.get('start_date', '') }}">
+    </div>
+    <div class="col-md-2">
+      <label class="form-label text-muted small">To</label>
+      <input type="date" name="end_date" class="form-control" value="{{ filters.get('end_date', '') }}">
+    </div>
+    <div class="col-md-2 d-flex gap-2">
+      <button type="submit" class="btn btn-primary w-100"><i class="bi bi-funnel me-1"></i> Filter</button>
+      <a href="{{ url_for('auth.audit_log') }}" class="btn btn-outline-secondary" title="Clear">
+        <i class="bi bi-x-lg"></i>
+      </a>
+    </div>
+  </form>
+</div>
+
+<div class="glass-card">
+  {% if entries %}
+  <div class="table-responsive">
+    <table class="table table-hover table-cards align-middle">
+      <thead>
+        <tr>
+          <th>When</th>
+          <th>Who</th>
+          <th>Action</th>
+          <th>Details</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in entries %}
+        <tr>
+          <td data-label="When" class="text-muted text-nowrap">
+            {{ entry.timestamp.strftime('%Y-%m-%d %H:%M') if entry.timestamp else '—' }}
+          </td>
+          <td data-label="Who">
+            {{ entry.user.name if entry.user else 'Deleted user' }}
+          </td>
+          <td data-label="Action">
+            <span class="badge bg-secondary font-monospace">{{ entry.action }}</span>
+            {% if entry.entity_type %}
+            <div class="text-muted" style="font-size: 0.75rem;">
+              {{ entry.entity_type }}{% if entry.entity_id %} #{{ entry.entity_id }}{% endif %}
+            </div>
+            {% endif %}
+          </td>
+          <td data-label="Details">
+            {% if entry.details_json %}
+            <pre class="mb-0 text-muted"
+                 style="font-size: 0.75rem; white-space: pre-wrap; word-break: break-word;">{{ entry.details_json }}</pre>
+            {% else %}
+            <span class="text-muted">—</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {{ render_pagination(pagination, 'auth.audit_log') }}
+  {% else %}
+  <div class="text-center py-5">
+    <i class="bi bi-clock-history fs-1 text-muted d-block mb-3"></i>
+    <h5>Nothing recorded yet</h5>
+    <p class="text-muted">
+      Price changes, stock corrections, goods received, voided sales and staff permission
+      changes all appear here as they happen.
+    </p>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

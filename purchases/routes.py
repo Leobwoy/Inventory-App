@@ -9,28 +9,99 @@ import pandas as pd
 from flask import send_file
 import io
 from flask_login import login_required, current_user
-from auth.decorators import permission_required
-from services import stock
+from auth.decorators import permission_required, requires_feature
+from sqlalchemy.orm import joinedload
+from services import audit, limits, listing, sourcing, stock, uom
+
+PO_SORTS = {
+    'newest': [PurchaseOrder.order_date.desc(), PurchaseOrder.id.desc()],
+    'oldest': [PurchaseOrder.order_date.asc(), PurchaseOrder.id.asc()],
+    'supplier': [Supplier.name.asc().nullslast(), PurchaseOrder.id.desc()],
+    'status': [PurchaseOrder.status.asc(), PurchaseOrder.order_date.desc()],
+}
+PO_SORT_LABELS = [
+    ('newest', 'Newest first'), ('oldest', 'Oldest first'),
+    ('supplier', 'Supplier name'), ('status', 'Status'),
+]
+
 
 @purchases_bp.route('/')
 @login_required
 @permission_required('purchase_orders.view')
+@requires_feature('purchase_orders')
 def list_purchases():
     page = request.args.get('page', 1, type=int)
-    pagination = PurchaseOrder.query.filter_by(business_id=current_user.business_id).order_by(PurchaseOrder.order_date.desc()).paginate(page=page, per_page=15, error_out=False)
-    return render_template('purchases/list.html', purchase_orders=pagination.items, pagination=pagination)
+    business_id = current_user.business_id
+    term = listing.search_term()
+    sort = listing.sort_key(PO_SORTS, 'newest')
+    statuses = [s[0] for s in db.session.query(PurchaseOrder.status)
+                .filter(PurchaseOrder.business_id == business_id)
+                .distinct().order_by(PurchaseOrder.status).all() if s[0]]
+    status = listing.filter_value('status', statuses)
+
+    # Outer join, not inner: a purchase order may have no supplier, and an inner
+    # join would quietly drop those rows the moment anyone sorted or searched.
+    query = (PurchaseOrder.query
+             .filter(PurchaseOrder.business_id == business_id)
+             .outerjoin(Supplier, PurchaseOrder.supplier_id == Supplier.id)
+             .options(joinedload(PurchaseOrder.supplier)))
+
+    if term:
+        conditions = [Supplier.name.ilike(f'%{term}%')]
+        if term.lstrip('#').isdigit():
+            conditions.append(PurchaseOrder.id == int(term.lstrip('#')))
+        query = query.filter(db.or_(*conditions))
+    if status:
+        query = query.filter(PurchaseOrder.status == status)
+
+    pagination = (listing.apply_sort(query, PO_SORTS, sort)
+                  .paginate(page=page, per_page=15, error_out=False))
+    return render_template(
+        'purchases/list.html', purchase_orders=pagination.items,
+        pagination=pagination, q=term, sort=sort, sort_options=PO_SORT_LABELS,
+        status=status,
+        status_options=[('', 'Any')] + [(s, s.replace('_', ' ').title()) for s in statuses],
+        is_filtered=listing.is_filtered('q', 'status'))
 
 @purchases_bp.route('/add', methods=['GET', 'POST'])
 @login_required
 @permission_required('purchase_orders.create')
+@requires_feature('purchase_orders')
 def add_purchase():
     form = PurchaseOrderForm()
     supplier_choices = [(0, 'No Supplier')] + [(s.id, s.name) for s in Supplier.query.filter_by(business_id=current_user.business_id).order_by(Supplier.name)]
     form.supplier_id.choices = supplier_choices
     
-    product_choices = [(p.id, p.name) for p in Product.query.filter_by(business_id=current_user.business_id).all()]
+    # Active only. A deactivated product is retired from new orders - offering
+    # one here would let a business order stock it has decided to stop carrying,
+    # and (on the free plan) walk straight back over its product cap.
+    products = Product.query.filter_by(
+        business_id=current_user.business_id, is_active=True).all()
+    product_choices = [(p.id, p.name) for p in products]
     for item in form.items:
         item.form.product_id.choices = product_choices
+        if uom.has_conversion_available(products):
+            item.form.order_unit.choices = [('purchase', 'Purchase unit'), ('base', 'Stock unit')]
+
+    # What each product has cost before, so the buyer sees the going rate while
+    # they type rather than after the order is placed.
+    price_history = {}
+    if limits.has_feature('price_comparison'):
+        for product in products:
+            best = sourcing.best_price(current_user.business_id, product.id)
+            if best:
+                price_history[str(product.id)] = {
+                    'supplier': best['supplier'].name,
+                    'price': str(best['latest']),
+                    'times': best['times'],
+                }
+
+    # Feeds the line preview: what a carton price works out to per unit.
+    product_uom = {
+        str(p.id): {'per': uom.factor(p), 'base': p.base_uom or 'pcs',
+                    'purchase': p.purchase_uom or 'unit'}
+        for p in products
+    }
 
     if form.validate_on_submit():
         try:
@@ -46,26 +117,86 @@ def add_purchase():
             db.session.add(po)
             db.session.flush() # get po.id
             
+            converted = []
             for item_form in form.items:
-                product = Product.query.filter_by(id=item_form.product_id.data, business_id=current_user.business_id).first()
-                if product:
-                    poi = PurchaseOrderItem(
-                        po_id=po.id,
-                        product_id=product.id,
-                        quantity_ordered=item_form.quantity_ordered.data,
-                        quantity_received=0,
-                        unit_cost=item_form.unit_cost.data
-                    )
-                    db.session.add(poi)
-            
+                product = Product.query.filter_by(
+                    id=item_form.product_id.data,
+                    business_id=current_user.business_id,
+                    is_active=True).first()
+                if not product:
+                    # Refuse the order rather than dropping the line. Silently
+                    # skipping it saves an order the buyer did not ask for, and
+                    # the missing item is only noticed when the goods arrive.
+                    db.session.rollback()
+                    flash('One of the selected products is no longer available. '
+                          'Nothing was ordered.', 'danger')
+                    return render_template('purchases/add.html', form=form,
+                                           price_history=price_history)
+
+                # Entered in cartons or pieces; stored in base units either way,
+                # so nothing downstream has to ask which unit a row is in.
+                # The template only shows the unit selector when the business
+                # has uom_conversion. Without it WTForms still supplies the
+                # field default, 'purchase', so a quantity typed in base units
+                # would be multiplied by the conversion factor and its cost
+                # divided by it. Trust the posted unit only when it was offered.
+                entered_unit = uom.BASE
+                if limits.has_feature('uom_conversion'):
+                    entered_unit = item_form.order_unit.data or uom.BASE
+                if not uom.has_conversion(product):
+                    entered_unit = uom.BASE
+
+                base_quantity = uom.to_base(product, item_form.quantity_ordered.data, entered_unit)
+                base_cost = uom.cost_to_base(product, item_form.unit_cost.data, entered_unit)
+
+                db.session.add(PurchaseOrderItem(
+                    po_id=po.id,
+                    product_id=product.id,
+                    quantity_ordered=base_quantity,
+                    quantity_received=0,
+                    unit_cost=base_cost,
+                ))
+                if entered_unit == uom.PURCHASE:
+                    converted.append(f'{product.name}: {uom.describe(product, base_quantity)}')
+
             db.session.commit()
             flash('Purchase Order created!', 'success')
+            for line in converted:
+                flash(line, 'info')
             return redirect(url_for('purchases.list_purchases'))
         except Exception as e:
             db.session.rollback()
             current_app.logger.exception('%s failed', request.endpoint)
             flash('Something went wrong and nothing was saved. Please try again.', 'danger')
-    return render_template('purchases/add.html', form=form)
+    return render_template('purchases/add.html', form=form, product_uom=product_uom,
+                           price_history=price_history)
+
+@purchases_bp.route('/compare')
+@login_required
+@permission_required('purchase_orders.view')
+@requires_feature('price_comparison')
+def compare_prices():
+    """Products bought from more than one supplier, biggest price gap first."""
+    rows = sourcing.products_with_alternatives(current_user.business_id)
+    return render_template('purchases/compare.html', rows=rows)
+
+
+@purchases_bp.route('/compare/<int:product_id>')
+@login_required
+@permission_required('purchase_orders.view')
+@requires_feature('price_comparison')
+def compare_product(product_id):
+    """Every supplier who has supplied one product, and what they charged."""
+    product = Product.query.filter_by(
+        id=product_id, business_id=current_user.business_id).first_or_404()
+    options = sourcing.suppliers_for(current_user.business_id, product_id)
+    return render_template(
+        'purchases/compare_product.html',
+        product=product,
+        options=options,
+        savings=sourcing.savings_against_latest(options),
+    )
+
 
 def _parse_date(raw):
     """Parse an ISO date from a form field, returning None for blank or malformed input."""
@@ -80,6 +211,7 @@ def _parse_date(raw):
 @purchases_bp.route('/receive/<int:po_id>', methods=['GET', 'POST'])
 @login_required
 @permission_required('purchase_orders.receive')
+@requires_feature('purchase_orders')
 def receive_po(po_id):
     po = PurchaseOrder.query.filter_by(id=po_id, business_id=current_user.business_id).first_or_404()
     if po.status == 'received':
@@ -113,13 +245,21 @@ def receive_po(po_id):
                     errors.append(f'Line {item.id} has no product and cannot be received.')
                     continue
 
-                qty = request.form.get(f'qty_{item.id}', type=int) or 0
+                # A delivery arrives in whatever unit the supplier ships. Convert
+                # to base before anything is compared or stored.
+                entered = request.form.get(f'qty_{item.id}', type=int) or 0
+                entered_unit = request.form.get(f'unit_{item.id}') or uom.BASE
+                if not uom.has_conversion(item.product):
+                    entered_unit = uom.BASE
+                qty = uom.to_base(item.product, entered, entered_unit)
+
                 if qty <= 0:
                     continue          # this line simply is not being received now
                 if qty > outstanding:
                     errors.append(
-                        f'{item.product.name}: cannot receive {qty}, '
-                        f'only {outstanding} outstanding.'
+                        f'{item.product.name}: cannot receive '
+                        f'{uom.describe(item.product, qty)}, only '
+                        f'{uom.describe(item.product, outstanding)} outstanding.'
                     )
                     continue
 
@@ -169,6 +309,12 @@ def receive_po(po_id):
             fully = all((i.quantity_received or 0) >= i.quantity_ordered for i in locked_items)
             po.status = 'received' if fully else 'partially_received'
 
+            audit.log('purchase_order.receive', entity_type='purchase_order', entity_id=po.id,
+                      received_on=str(received_on), status=po.status,
+                      lines=[{'sku': i.product.sku, 'qty': q,
+                              'batch': b or None, 'expiry': str(e) if e else None}
+                             for i, q, b, e in receipts])
+
             db.session.commit()
             total = sum(qty for _i, qty, _b, _e in receipts)
             flash(
@@ -205,6 +351,8 @@ def bulk_action():
     if action == 'delete':
         try:
             for po in pos:
+                audit.log('purchase_order.delete', entity_type='purchase_order', entity_id=po.id,
+                          status=po.status, supplier=po.supplier.name if po.supplier else None)
                 db.session.delete(po)
             db.session.commit()
             flash(f'{len(pos)} purchase orders deleted.', 'success')

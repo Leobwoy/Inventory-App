@@ -11,6 +11,16 @@
 </div>
 
 <div class="glass-card">
+    {# Outside the bulk-action form: nesting forms is invalid HTML and the
+       browser drops the inner one, so the toolbar has to be its own. #}
+    {% set search_placeholder = 'Customer, phone or invoice number' %}
+    {% set filters = [{
+        'name': 'settlement', 'label': 'Payment', 'value': settlement,
+        'options': [('', 'Any'), ('paid', 'Paid in full'),
+                    ('partial', 'Part paid'), ('credit', 'Unpaid')]
+    }] %}
+    {% include '_partials/list_toolbar.html' with context %}
+
     <form id="bulk-action-form" method="post" action="{{ url_for('sales.bulk_action') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card-toolbar">
@@ -26,7 +36,10 @@
             </div>
             
             <div class="text-muted small">
-                Showing {{ sales|length }} records
+                {# The count that matters is how many matched, not how many fit
+                   on this page - otherwise a search always reads "15". #}
+                {{ pagination.total }} {{ 'record' if pagination.total == 1 else 'records' }}
+                {% if is_filtered %}matched{% endif %}
             </div>
         </div>
 
@@ -49,7 +62,12 @@
                             <input class="form-check-input" type="checkbox" name="sale_ids" value="{{ sale.id }}">
                         </td>
                         <td data-label="Date" class="text-muted">{{ sale.sale_date.strftime('%Y-%m-%d') if sale.sale_date else '' }}</td>
-                        <td data-label="Customer" class="fw-medium">{{ sale.customer.name if sale.customer else 'Walk-in Customer' }}</td>
+                        <td data-label="Customer" class="fw-medium">
+                            {{ sale.buyer_name }}
+                            {% if not sale.customer and sale.customer_phone %}
+                            <div class="text-muted" style="font-size: 0.75rem;">{{ sale.customer_phone }}</div>
+                            {% endif %}
+                        </td>
                         <td data-label="Products">
                             <ul class="list-unstyled mb-0 small">
                             {% for item in sale.items %}
@@ -75,7 +93,27 @@
             </table>
         </div>
     </form>
-    
+
+    {% if not sales %}
+    <div class="text-center py-5 text-muted">
+      {% if is_filtered %}
+      <i class="bi bi-search fs-1 d-block mb-3"></i>
+      No sale matches that search.
+      <div class="mt-3">
+        <a href="{{ url_for('sales.list_sales') }}" class="btn btn-outline-secondary btn-sm">
+          Clear filters
+        </a>
+      </div>
+      {% else %}
+      <i class="bi bi-receipt fs-1 d-block mb-3"></i>
+      No sales recorded yet.
+      <div class="mt-3">
+        <a href="{{ url_for('sales.add_sale') }}" class="btn btn-primary btn-sm">Record your first sale</a>
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+
     {{ render_pagination(pagination, 'sales.list_sales') }}
 </div>
 {% endblock %}

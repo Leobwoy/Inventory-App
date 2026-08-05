@@ -4,7 +4,8 @@ FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    FLASK_APP=app:create_app
+    FLASK_APP=app:create_app \
+    TRACKTRACK_ENV=production
 
 WORKDIR /app
 

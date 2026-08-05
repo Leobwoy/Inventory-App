@@ -1,6 +1,9 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, PasswordField, SubmitField
-from wtforms.validators import DataRequired, Email, EqualTo, Length
+from flask_wtf.file import FileAllowed, FileField
+from wtforms import (BooleanField, DecimalField, IntegerField, PasswordField,
+                     StringField, SubmitField)
+from wtforms.validators import (DataRequired, Email, EqualTo, InputRequired,
+                                Length, NumberRange)
 
 class RegistrationForm(FlaskForm):
     # Business Branding
@@ -42,3 +45,24 @@ class UserForm(FlaskForm):
     ])
     # Role will be dynamic or hardcoded SelectField in the route
     submit = SubmitField('Add User')
+
+
+class BusinessSettingsForm(FlaskForm):
+    """Business-level configuration an Owner can change after registration."""
+    name = StringField('Business Name', validators=[DataRequired(), Length(max=100)])
+    address = StringField('Business Address', validators=[Length(max=255)])
+    contact_number = StringField('Contact Number', validators=[Length(max=50)])
+    logo = FileField('Logo', validators=[
+        FileAllowed(['png', 'jpg', 'jpeg'], 'Images only: PNG or JPG.'),
+    ])
+    remove_logo = BooleanField('Remove the current logo')
+    # InputRequired, not DataRequired: both of these are legitimately 0, and
+    # DataRequired treats 0 as missing.
+    expiry_alert_days = IntegerField('Warn me this many days before stock expires',
+                                     validators=[InputRequired(), NumberRange(min=0, max=365)])
+    max_discount_percent = DecimalField(
+        'Largest discount staff may give (%)', places=2,
+        validators=[InputRequired(), NumberRange(
+            min=0, max=100,
+            message='A discount ceiling must be between 0 and 100 percent.')])
+    submit = SubmitField('Save settings')

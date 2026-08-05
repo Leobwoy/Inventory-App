@@ -32,23 +32,41 @@
         </div>
 
         <h5 class="mb-3">Order Items</h5>
+
+        {% if has_feature('uom_conversion') %}
+        <p class="text-muted small">
+            <i class="bi bi-box2 me-1"></i>
+            Order in cartons or crates and the quantity and cost convert to single units
+            automatically &mdash; stock is always counted in the unit you sell.
+        </p>
+        {% endif %}
+
         {% for item in form.items %}
-            <div class="row g-4 mb-4">
+            <div class="row g-4 mb-4 po-line">
                 {{ item.form.hidden_tag() }}
-                <div class="col-md-6">
+                <div class="col-md-5">
                     <label class="form-label">{{ item.form.product_id.label.text }}</label>
-                    {{ item.form.product_id(class_='form-select') }}
+                    {{ item.form.product_id(class_='form-select product-select') }}
                 </div>
                 <div class="col-md-3">
                     <label class="form-label">{{ item.form.quantity_ordered.label.text }}</label>
-                    {{ item.form.quantity_ordered(class_='form-control') }}
+                    <div class="input-group">
+                        {{ item.form.quantity_ordered(class_='form-control qty-input') }}
+                        {% if has_feature('uom_conversion') %}
+                        {{ item.form.order_unit(class_='form-select unit-select', style='max-width: 8rem;') }}
+                        {% endif %}
+                    </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-4">
                     <label class="form-label">{{ item.form.unit_cost.label.text }}</label>
                     <div class="input-group">
                         <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
-                        {{ item.form.unit_cost(class_='form-control') }}
+                        {{ item.form.unit_cost(class_='form-control cost-input') }}
                     </div>
+                    <small class="text-muted line-hint d-block"></small>
+                    {% if has_feature('price_comparison') %}
+                    <small class="text-muted price-hint d-block"></small>
+                    {% endif %}
                 </div>
             </div>
         {% endfor %}
@@ -59,4 +77,68 @@
         </div>
     </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script type="application/json" id="product-uom-data">{{ product_uom|tojson }}</script>
+<script type="application/json" id="price-history-data">{{ price_history|tojson }}</script>
+<script>
+// Mirrors the server's conversion back to the buyer so they can see what a
+// carton price works out to per unit before committing. The server converts
+// independently - this is a preview, not the calculation.
+var PRODUCT_UOM = JSON.parse(document.getElementById('product-uom-data').textContent);
+var PRICE_HISTORY = JSON.parse(document.getElementById('price-history-data').textContent);
+
+function refreshLine(line) {
+    var hint = line.querySelector('.line-hint');
+    var priceHint = line.querySelector('.price-hint');
+    var select = line.querySelector('.unit-select');
+
+    var productId = line.querySelector('.product-select').value;
+    var info = PRODUCT_UOM[productId];
+    var qty = parseInt(line.querySelector('.qty-input').value || '0', 10) || 0;
+    var cost = parseFloat(line.querySelector('.cost-input').value || '0') || 0;
+
+    // What this product has cost before, shown while they type rather than
+    // after the order is placed.
+    if (priceHint) {
+        var known = PRICE_HISTORY[productId];
+        if (!known) {
+            priceHint.textContent = '';
+        } else {
+            var perBase = (info && info.per > 1 && select && select.value === 'purchase')
+                          ? cost / info.per : cost;
+            var best = parseFloat(known.price);
+            var text = 'Best so far: ₵' + best.toFixed(2) + ' from ' + known.supplier;
+            priceHint.textContent = text;
+            priceHint.classList.remove('text-danger', 'text-success');
+            if (cost > 0) {
+                priceHint.classList.add(perBase > best ? 'text-danger' : 'text-success');
+                if (perBase > best) {
+                    priceHint.textContent = text + ' — this is ₵' +
+                        (perBase - best).toFixed(2) + ' more';
+                }
+            }
+        }
+    }
+
+    if (!hint) return;
+    if (!info || info.per <= 1 || !select || select.value !== 'purchase' || !qty) {
+        hint.textContent = '';
+        return;
+    }
+    var baseQty = qty * info.per;
+    var baseCost = cost / info.per;
+    hint.textContent = qty + ' × ' + info.per + ' = ' + baseQty + ' ' + info.base +
+                       ' at ₵' + baseCost.toFixed(2) + ' each';
+}
+
+document.querySelectorAll('.po-line').forEach(function (line) {
+    line.querySelectorAll('input, select').forEach(function (field) {
+        field.addEventListener('input', function () { refreshLine(line); });
+        field.addEventListener('change', function () { refreshLine(line); });
+    });
+    refreshLine(line);
+});
+</script>
 {% endblock %}

@@ -1,0 +1,70 @@
+{#
+  Search / filter / sort bar shared by every record list.
+
+  Submits with GET so the URL carries the whole state: a filtered list can be
+  bookmarked, shared, or reloaded. Everything is server-side, so it still works
+  on a phone that has given up on JavaScript, and it searches the whole table
+  rather than only the page you can see - which is the point.
+
+  Expects:
+    search_placeholder  what the box searches, in the user's words
+    sort_options        [(key, label)] - must match the route's whitelist
+    sort               the active key
+    filters             [{name, label, options: [(value, label)], value}]
+#}
+<form method="get" class="list-toolbar row g-2 align-items-end mb-3">
+  <div class="col-12 col-lg">
+    <label class="form-label small text-muted mb-1" for="list-search">Search</label>
+    <div class="input-group">
+      <span class="input-group-text border-secondary bg-transparent text-muted">
+        <i class="bi bi-search"></i>
+      </span>
+      <input type="search" class="form-control" id="list-search" name="q"
+             value="{{ q or '' }}" placeholder="{{ search_placeholder or 'Search' }}"
+             autocomplete="off">
+    </div>
+  </div>
+
+  {% for f in filters or [] %}
+  <div class="col-6 col-md-4 col-lg-auto">
+    <label class="form-label small text-muted mb-1" for="filter-{{ f.name }}">{{ f.label }}</label>
+    <select class="form-select" id="filter-{{ f.name }}" name="{{ f.name }}">
+      {% for value, label in f.options %}
+      <option value="{{ value }}" {% if f.value == value %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endfor %}
+
+  {% if sort_options %}
+  <div class="col-6 col-md-4 col-lg-auto">
+    <label class="form-label small text-muted mb-1" for="list-sort">Sort by</label>
+    <select class="form-select" id="list-sort" name="sort">
+      {% for key, label in sort_options %}
+      <option value="{{ key }}" {% if sort == key %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  {% endif %}
+
+  <div class="col-12 col-lg-auto d-flex gap-2">
+    <button type="submit" class="btn btn-primary flex-grow-1 flex-lg-grow-0">Apply</button>
+    {% if request.args %}
+    {# Only offered when something is actually set, so it never reads as a
+       button that does nothing. #}
+    <a href="{{ request.path }}" class="btn btn-outline-secondary" title="Clear all filters">
+      <i class="bi bi-x-lg"></i>
+    </a>
+    {% endif %}
+  </div>
+</form>
+
+<script>
+  // Changing a dropdown applies immediately. The Apply button stays for the
+  // search box, and for when this script never arrives at all.
+  document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form.list-toolbar select').forEach(function (select) {
+      select.addEventListener('change', function () { select.form.submit(); });
+    });
+  });
+</script>

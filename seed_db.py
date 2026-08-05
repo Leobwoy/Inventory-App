@@ -25,6 +25,9 @@ from werkzeug.security import generate_password_hash
 from app import create_app
 from extensions import db
 from auth.models import Business, Role, User
+from billing.models import Plan, Subscription
+from credit.models import Payment
+from services import credit as credit_service
 from products.models import Brand, Category, ItemGroup, Product, Supplier
 from purchases.models import PurchaseOrder, PurchaseOrderItem, StockBatch
 from sales.models import Customer, Sale, SaleItem
@@ -75,6 +78,14 @@ CUSTOMERS = [
     ('Osu Mini Mart', '0243009988', 'osu@shops.gh', 'Oxford Street, Osu'),
 ]
 
+# Standing rate each supplier charges, as a multiple of the product's cost price.
+# Takoradi is dearest but ships to the west; Voltic is cheapest on its own brands.
+SUPPLIER_RATES = {
+    'Voltic Ghana Ltd': Decimal('0.94'),
+    'Accra Bulk Beverages': Decimal('1.00'),
+    'Takoradi Drinks Depot': Decimal('1.09'),
+}
+
 STAFF = [
     ('Ama Darko', 'ama@accrabev.com', 'Manager'),
     ('Kwesi Appiah', 'kwesi@accrabev.com', 'Inventory Staff'),
@@ -103,6 +114,16 @@ def seed(auto_yes=False):
                             contact_number='0302 555 000', expiry_alert_days=30)
         db.session.add(business)
         db.session.flush()
+
+        # This business is built directly rather than through registration, so it
+        # would otherwise have no subscription at all and fall back to the Free
+        # plan - which excludes purchase orders, and the demo is full of them.
+        advanced = Plan.query.filter_by(code='advanced').first()
+        if advanced:
+            db.session.add(Subscription(
+                business_id=business.id, plan_id=advanced.id, status='active',
+                paid_through=datetime.datetime.utcnow() + datetime.timedelta(days=365),
+            ))
 
         roles = {r.name: r for r in Role.query.all()}
         owner = User(business_id=business.id, name='Kofi Mensah', email=OWNER_EMAIL,
@@ -207,10 +228,16 @@ def seed(auto_yes=False):
             for product in random.sample(products, random.randint(6, 10)):
                 cartons = random.randint(15, 40)
                 qty = cartons * product.units_per_purchase_uom
+                # Each supplier has its own standing rate, drifting a little over
+                # time - otherwise every price is identical and the comparison
+                # page has nothing to say.
+                rate = SUPPLIER_RATES[supplier.name]
+                drift = Decimal(str(random.uniform(-0.04, 0.06))).quantize(Decimal('0.001'))
+                unit_cost = (product.cost_price * (rate + drift)).quantize(Decimal('0.01'))
                 item = PurchaseOrderItem(
                     po_id=po.id, product_id=product.id,
                     quantity_ordered=qty, quantity_received=0,
-                    unit_cost=product.cost_price,
+                    unit_cost=max(Decimal('0.01'), unit_cost),
                 )
                 db.session.add(item)
                 db.session.flush()
@@ -276,8 +303,40 @@ def seed(auto_yes=False):
                         batch.quantity_remaining -= take
                         remaining -= take
 
+        db.session.flush()
+
+        # --- payments, so the credit book shows something real -----------------
+        # Roughly how a wholesaler's book actually looks: most sales settled on
+        # the day, a few part-paid, and a tail of old debt to chase.
+        paid_count = partial_count = credit_count = 0
+        for sale in Sale.query.filter_by(business_id=business.id).all():
+            total = sum((i.price_at_sale * i.quantity for i in sale.items), Decimal('0'))
+            if total <= 0:
+                continue
+            roll = random.random()
+            if roll < 0.70:
+                amount, method = total, random.choice(['cash', 'momo', 'momo'])
+                paid_count += 1
+            elif roll < 0.88:
+                amount = (total * Decimal(random.choice(['0.25', '0.4', '0.5', '0.6']))
+                          ).quantize(Decimal('0.01'))
+                method = 'momo'
+                partial_count += 1
+            else:
+                credit_count += 1
+                continue
+
+            db.session.add(Payment(
+                business_id=business.id, sale_id=sale.id, customer_id=sale.customer_id,
+                amount=amount, method=method,
+                reference=f'MP{sale.sale_date.strftime("%y%m%d")}.{random.randint(1000, 9999)}'
+                          if method == 'momo' else None,
+                paid_on=sale.sale_date, recorded_by=owner.id,
+            ))
+
         db.session.commit()
 
+        outstanding = credit_service.total_outstanding(business.id)
         low_stock = sum(1 for p in products if p.quantity_in_stock <= p.min_stock_alert)
         expiring = StockBatch.query.filter(
             StockBatch.expiry_date.isnot(None),
@@ -292,6 +351,8 @@ Seeded {BUSINESS_NAME}
   {len(suppliers)} suppliers, {len(customers)} customers
   {po_count} purchase orders ({batch_count} received into stock batches, 1 left outstanding)
   {sale_count} sales / {item_count} line items over the last 30 days
+  {paid_count} paid in full, {partial_count} part-paid, {credit_count} still on credit
+  GHS {outstanding:,.2f} outstanding across the credit book
   {low_stock} products below their reorder threshold
   {expiring} stock batches expiring within 30 days
 

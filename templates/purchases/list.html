@@ -11,6 +11,13 @@
 </div>
 
 <div class="glass-card">
+    {% set search_placeholder = 'Supplier or order number' %}
+    {% set filters = [{
+        'name': 'status', 'label': 'Status', 'value': status,
+        'options': status_options
+    }] %}
+    {% include '_partials/list_toolbar.html' with context %}
+
     <form id="bulk-action-form" method="post" action="{{ url_for('purchases.bulk_action') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="card-toolbar">
@@ -24,7 +31,8 @@
             </div>
             
             <div class="text-muted small">
-                Showing {{ purchase_orders|length }} records
+                {{ pagination.total }} {{ 'order' if pagination.total == 1 else 'orders' }}
+                {% if is_filtered %}matched{% endif %}
             </div>
         </div>
 

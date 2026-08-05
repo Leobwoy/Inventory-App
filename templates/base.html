@@ -4,10 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}TrackTrack{% endblock %}</title>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
+    {# Vendored, not CDN: a service worker cannot reliably cache cross-origin
+       responses, and every CDN request is metered mobile data here. #}
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+
+    {# Installable: the manifest names the app, the theme colour paints the
+       Android status bar, and iOS ignores both and reads its own tags. #}
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TrackTrack">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icons/apple-touch-icon.png') }}">
+    {% if current_user.is_authenticated and has_feature('offline') %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/offline.css') }}">
+    {% endif %}
     {% block head %}{% endblock %}
 </head>
 <body>
@@ -62,6 +77,9 @@
             {% if current_user.can('customers.view') %}
             <a class="nav-link" href="/sales/customers" id="nav-customers"><i class="bi bi-people"></i> Customers</a>
             {% endif %}
+            {% if current_user.can('credit.view') and has_feature('credit_ledger') %}
+            <a class="nav-link" href="/credit/" id="nav-credit"><i class="bi bi-cash-stack"></i> Money Owed</a>
+            {% endif %}
             {% endif %}
 
             {% if current_user.can('purchase_orders.view') or current_user.can('suppliers.view') %}
@@ -72,16 +90,26 @@
             {% if current_user.can('suppliers.view') %}
             <a class="nav-link" href="/products/suppliers" id="nav-suppliers"><i class="bi bi-buildings"></i> Suppliers</a>
             {% endif %}
+            {% if current_user.can('purchase_orders.view') and has_feature('price_comparison') %}
+            <a class="nav-link" href="/purchases/compare" id="nav-compare"><i class="bi bi-graph-up-arrow"></i> Supplier Prices</a>
+            {% endif %}
             {% endif %}
 
             {% if current_user.can('reports.view') %}
             <a class="nav-link" href="/reports/sales" id="nav-reports"><i class="bi bi-bar-chart"></i> Reports</a>
             {% endif %}
 
-            {% if current_user.can('users.manage') or current_user.can('backup.run') %}
+            {% if current_user.can('users.manage') or current_user.can('backup.run')
+                  or current_user.can('audit.view') or current_user.can('settings.manage') %}
             <div class="nav-section-label">Administration</div>
+            {% if current_user.can('settings.manage') %}
+            <a class="nav-link" href="/auth/settings" id="nav-settings"><i class="bi bi-gear-fill"></i> Settings</a>
+            {% endif %}
             {% if current_user.can('users.manage') %}
             <a class="nav-link" href="/auth/users" id="nav-users"><i class="bi bi-people-fill"></i> Staff</a>
+            {% endif %}
+            {% if current_user.can('audit.view') %}
+            <a class="nav-link" href="/auth/audit" id="nav-audit"><i class="bi bi-clock-history"></i> Activity</a>
             {% endif %}
             {% if current_user.can('backup.run') %}
             <a class="nav-link" href="/backup_restore" id="nav-backup"><i class="bi bi-hdd-network"></i> Backup</a>
@@ -125,7 +153,7 @@
 </main>
 {% endif %}
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>
 <script>
     // Highlight active nav link
     document.addEventListener("DOMContentLoaded", function() {
@@ -155,6 +183,28 @@
         }
     });
 </script>
+{% if current_user.is_authenticated and has_feature('offline') and current_user.can('sales.create') %}
+<script src="{{ url_for('static', filename='js/offline-sales.js') }}"></script>
+<script>
+    // The badge is the way into the queue, so it has to lead somewhere.
+    document.addEventListener('click', function (event) {
+        if (event.target.closest('#offline-queue-badge')) {
+            window.location.href = '/sales/pending';
+        }
+    });
+</script>
+{% endif %}
 {% block scripts %}{% endblock %}
+<script>
+    // Registered after load so it never competes with the page for bandwidth on
+    // a slow connection. An unsupported browser just carries on as a website.
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function () {
+            navigator.serviceWorker.register('/sw.js').catch(function (error) {
+                console.warn('Service worker registration failed:', error);
+            });
+        });
+    }
+</script>
 </body>
 </html>

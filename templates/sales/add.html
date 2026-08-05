@@ -1,6 +1,10 @@
 {% extends 'base.html' %}
 {% block title %}Record Sale | TrackTrack{% endblock %}
 
+{% block head %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/combobox.css') }}">
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
     <h2>Record Sale</h2>
@@ -8,6 +12,18 @@
         <a href="{{ url_for('sales.list_sales') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back to Sales</a>
     </div>
 </div>
+
+{% if has_feature('offline') %}
+<div class="alert alert-warning d-flex align-items-center" id="offline-notice" hidden>
+    <i class="bi bi-wifi-off me-2 fs-5"></i>
+    <div>
+        <strong>No connection.</strong>
+        This sale will be saved on this phone and sent when the network returns.
+        Stock and price are checked by the server then, so it may still be
+        refused &mdash; you will be told which.
+    </div>
+</div>
+{% endif %}
 
 <div class="glass-card">
     <form method="post" id="sale-form">
@@ -28,10 +44,17 @@
                 <div class="invalid-feedback">{{ error }}</div>
                 {% endfor %}
             </div>
-            <div class="col-md-4">
+            <div class="col-md-2">
                 <label class="form-label">{{ form.customer_name.label.text }} <span class="text-muted small">(If walk-in)</span></label>
                 {{ form.customer_name(class_='form-control' + (' is-invalid' if form.customer_name.errors else ''), placeholder='Optional') }}
                 {% for error in form.customer_name.errors %}
+                <div class="invalid-feedback">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Phone <span class="text-muted small">(If walk-in)</span></label>
+                {{ form.customer_phone(class_='form-control' + (' is-invalid' if form.customer_phone.errors else ''), placeholder='Optional') }}
+                {% for error in form.customer_phone.errors %}
                 <div class="invalid-feedback">{{ error }}</div>
                 {% endfor %}
             </div>
@@ -48,7 +71,8 @@
         {% endif %}
         
         <div class="table-responsive mb-4">
-            <table class="table table-bordered table-hover align-middle table-cards table-sale-items" id="items-table">
+            <table class="table table-bordered table-hover align-middle table-cards table-sale-items"
+                   id="items-table" data-max-discount="{{ max_discount or 0 }}">
                 <thead>
                     <tr>
                         <th>Product</th>
@@ -61,7 +85,7 @@
                     {% for subform in form.items %}
                     <tr>
                         <td data-label="Product">
-                            {{ subform.product_id(class_='form-control product-select' + (' is-invalid' if subform.product_id.errors else '')) }}
+                            {{ subform.product_id(class_='form-control product-select' + (' is-invalid' if subform.product_id.errors else ''), data_combobox='true', data_combobox_placeholder='Search products') }}
                             {% for error in subform.product_id.errors %}
                             <div class="invalid-feedback">{{ error }}</div>
                             {% endfor %}
@@ -83,6 +107,10 @@
                                 {{ subform.price_at_sale(class_='form-control price-input', readonly=True) }}
                                 {% endif %}
                             </div>
+                            {# Filled in by JavaScript as the price is typed. The server
+                               re-checks the same rule; this only makes it visible before
+                               you commit, instead of after it is rejected. #}
+                            <div class="line-discount small mt-1" hidden></div>
                         </td>
                         <td data-label="" class="cell-actions text-center">
                             <button type="button" class="btn btn-outline-danger btn-sm remove-item" title="Remove Item"><i class="bi bi-trash"></i></button>
@@ -94,10 +122,44 @@
             <button type="button" class="btn btn-outline-primary btn-sm" id="add-item"><i class="bi bi-plus-lg"></i> Add Item</button>
         </div>
 
-        <div class="d-flex justify-content-between align-items-center bg-dark p-3 rounded border border-secondary mb-4">
-            <div class="text-muted">Total Amount</div>
-            <h3 class="mb-0 text-success">₵<span id="sale-total">0.00</span></h3>
+        <div class="bg-dark p-3 rounded border border-secondary mb-4">
+            <div id="discount-summary" class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary" hidden>
+                <div class="text-warning">
+                    <i class="bi bi-tag-fill me-1"></i> Discount applied
+                    <span class="text-muted small ms-1" id="discount-detail"></span>
+                </div>
+                <div class="fs-5 fw-bold text-warning">&minus;₵<span id="discount-total">0.00</span></div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center">
+                <div class="text-muted">Total Amount</div>
+                <h3 class="mb-0 text-success">₵<span id="sale-total">0.00</span></h3>
+            </div>
         </div>
+
+        {% if has_feature('credit_ledger') %}
+        <h5 class="mb-3 border-bottom border-secondary pb-2">Payment</h5>
+        <div class="row g-4 mb-4">
+            <div class="col-md-3">
+                <label class="form-label">{{ form.settlement.label.text }}</label>
+                {{ form.settlement(class_='form-select', id='settlement') }}
+            </div>
+            <div class="col-md-3 settlement-detail">
+                <label class="form-label">{{ form.amount_paid.label.text }}</label>
+                <div class="input-group">
+                    <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
+                    {{ form.amount_paid(class_='form-control', id='amount-paid') }}
+                </div>
+            </div>
+            <div class="col-md-3 settlement-detail">
+                <label class="form-label">{{ form.payment_method.label.text }}</label>
+                {{ form.payment_method(class_='form-select') }}
+            </div>
+            <div class="col-md-3 settlement-detail">
+                <label class="form-label">{{ form.payment_reference.label.text }}</label>
+                {{ form.payment_reference(class_='form-control', placeholder='MoMo ID, optional') }}
+            </div>
+        </div>
+        {% endif %}
 
         <div class="d-flex gap-2">
             <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check2-circle me-1"></i> Record Sale</button>
@@ -108,112 +170,272 @@
 {% endblock %}
 
 {% block scripts %}
-<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
-<style>
-/* Select2 Dark Theme Adjustments */
-.select2-container--default .select2-selection--single {
-    background-color: rgba(0,0,0,0.2);
-    border: 1px solid var(--border-color);
-    border-radius: 0.5rem;
-    height: calc(1.5em + 1.5rem + 2px);
-}
-.select2-container--default .select2-selection--single .select2-selection__rendered {
-    color: var(--text-primary);
-    line-height: calc(1.5em + 1.5rem + 2px);
-}
-.select2-container--default .select2-selection--single .select2-selection__arrow {
-    height: calc(1.5em + 1.5rem + 2px);
-}
-.select2-dropdown {
-    background-color: var(--bg-card);
-    border: 1px solid var(--border-color);
-}
-.select2-container--default .select2-results__option--selected {
-    background-color: var(--accent-primary);
-}
-.select2-container--default .select2-search--dropdown .select2-search__field {
-    background-color: rgba(0,0,0,0.2);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
-}
-</style>
-<script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+<script src="{{ url_for('static', filename='js/combobox.js') }}"></script>
 <script type="application/json" id="product-prices-data">
   {{ product_prices|tojson }}
 </script>
 <script>
-  const productPrices = JSON.parse(document.getElementById('product-prices-data').textContent);
-  function initSelect2() {
-    $('.product-select').select2({
-      width: '100%',
-      placeholder: 'Select a product',
-      allowClear: true
-    });
+/*
+ * Deliberately runs at parse time rather than on DOMContentLoaded: the row
+ * template must be captured before combobox.js enhances the first row, and its
+ * enhancement is itself a DOMContentLoaded handler registered before this one.
+ */
+(function () {
+  'use strict';
+
+  var productPrices = JSON.parse(document.getElementById('product-prices-data').textContent);
+  var table = document.getElementById('items-table');
+  var body = table.querySelector('tbody');
+  var totalEl = document.getElementById('sale-total');
+  var settlement = document.getElementById('settlement');
+  var amountPaid = document.getElementById('amount-paid');
+  var discountSummary = document.getElementById('discount-summary');
+  var discountTotal = document.getElementById('discount-total');
+  var discountDetail = document.getElementById('discount-detail');
+  var maxDiscount = parseFloat(table.dataset.maxDiscount || '0') || 0;
+
+  // Clean server-rendered markup, so an added row inherits the server's own
+  // decision about whether price is editable instead of assuming readonly.
+  var rowTemplate = body.querySelector('tr').outerHTML;
+
+  function rows() {
+    return Array.prototype.slice.call(body.querySelectorAll('tr'));
   }
+
   function updatePrice(row) {
-    var productId = row.find('.product-select').val();
-    var price = productPrices[productId] || '';
-    row.find('.price-input').val(price);
+    var select = row.querySelector('.product-select');
+    var price = row.querySelector('.price-input');
+    if (!select || !price) {
+      return;
+    }
+    price.value = productPrices[select.value] !== undefined ? productPrices[select.value] : '';
   }
+
+  // Show a discount while it is being typed rather than only after the server
+  // rejects it. The server still decides - this is the same rule, said earlier.
+  function updateLineDiscount(row) {
+    var select = row.querySelector('.product-select');
+    var priceField = row.querySelector('.price-input');
+    var note = row.querySelector('.line-discount');
+    if (!select || !priceField || !note) {
+      return 0;
+    }
+    var listPrice = productPrices[select.value];
+    var charged = parseFloat(priceField.value);
+    var qty = parseFloat((row.querySelector('[name$="quantity"]') || {}).value) || 0;
+
+    if (listPrice === undefined || isNaN(charged) || charged >= listPrice) {
+      note.hidden = true;
+      priceField.classList.remove('border-warning', 'border-danger');
+      return 0;
+    }
+
+    var off = listPrice - charged;
+    var percent = listPrice > 0 ? (off / listPrice) * 100 : 0;
+    var overCeiling = percent > maxDiscount + 0.001;
+
+    note.hidden = false;
+    note.className = 'line-discount small mt-1 ' + (overCeiling ? 'text-danger' : 'text-warning');
+    note.textContent = overCeiling
+      ? '₵' + off.toFixed(2) + ' off (' + percent.toFixed(1) + '%) — over the '
+        + maxDiscount + '% limit, this will be refused'
+      : '₵' + off.toFixed(2) + ' off list ₵' + listPrice.toFixed(2)
+        + ' (' + percent.toFixed(1) + '%)';
+    priceField.classList.toggle('border-danger', overCeiling);
+    priceField.classList.toggle('border-warning', !overCeiling);
+    return off * qty;
+  }
+
   function updateTotal() {
-    let total = 0;
-    $('#items-table tbody tr').each(function () {
-      var qty = parseFloat($(this).find('input[name$="quantity"]').val()) || 0;
-      var price = parseFloat($(this).find('input[name$="price_at_sale"]').val()) || 0;
+    var total = 0;
+    var discount = 0;
+    var discountedLines = 0;
+    rows().forEach(function (row) {
+      var qtyField = row.querySelector('[name$="quantity"]');
+      var priceField = row.querySelector('[name$="price_at_sale"]');
+      var qty = qtyField ? parseFloat(qtyField.value) || 0 : 0;
+      var price = priceField ? parseFloat(priceField.value) || 0 : 0;
       total += qty * price;
-    });
-    $('#sale-total').text(total.toFixed(2));
-  }
-  $(document).ready(function () {
-    initSelect2();
-    $('#items-table').on('change', '.product-select', function () {
-      var row = $(this).closest('tr');
-      updatePrice(row);
-    });
-    $('#add-item').click(function () {
-      var $lastRow = $('#items-table tbody tr:last');
-      var idx = $('#items-table tbody tr').length;
-      var $newRow = $lastRow.clone();
-
-      $newRow.find('input, select').each(function () {
-        var name = $(this).attr('name');
-        var id = $(this).attr('id');
-        if (name) {
-          name = name.replace(/items-\d+-/, 'items-' + idx + '-');
-          $(this).attr('name', name);
-        }
-        if (id) {
-          id = id.replace(/items-\d+-/, 'items-' + idx + '-');
-          $(this).attr('id', id);
-        }
-        $(this).val('');
-        $(this).removeClass('is-invalid');
-        $(this).next('.invalid-feedback').remove();
-      });
-
-      $newRow.find('.price-input').prop('readonly', true);
-      $newRow.find('.select2-container').remove();
-      $newRow.find('.product-select').removeClass('select2-hidden-accessible').removeAttr('data-select2-id');
-
-      $newRow.appendTo('#items-table tbody');
-      initSelect2();
-    });
-    $('#items-table').on('click', '.remove-item', function () {
-      if ($('#items-table tbody tr').length > 1) {
-        $(this).closest('tr').remove();
-        updateTotal();
+      var off = updateLineDiscount(row);
+      if (off > 0) {
+        discount += off;
+        discountedLines += 1;
       }
     });
-    $('#items-table tbody tr').each(function () {
-      updatePrice($(this));
+    totalEl.textContent = total.toFixed(2);
+
+    if (discountSummary) {
+      discountSummary.hidden = discount <= 0;
+      discountTotal.textContent = discount.toFixed(2);
+      discountDetail.textContent = discountedLines === 1
+        ? 'on 1 line' : 'on ' + discountedLines + ' lines';
+    }
+  }
+
+  // Payment fields only matter once money has actually changed hands, and the
+  // amount is only editable for a part payment - the other two are implied by
+  // the total, so asking for them would just be a chance to mistype.
+  function syncSettlement() {
+    if (!settlement || !amountPaid) {
+      return;
+    }
+    var choice = settlement.value;
+    document.querySelectorAll('.settlement-detail').forEach(function (el) {
+      el.style.display = choice === 'credit' ? 'none' : '';
     });
-    
-    // Auto total updater
-    $('#items-table').on('input change', 'input, select', function () {
-      updateTotal();
-    });
+    amountPaid.readOnly = choice !== 'partial';
+    if (choice === 'paid') {
+      amountPaid.value = totalEl.textContent;
+    } else if (choice === 'credit') {
+      amountPaid.value = '0';
+    }
+  }
+
+  function refresh() {
     updateTotal();
+    syncSettlement();
+  }
+
+  // Remove a middle row and the indexes develop a hole, so rows().length can
+  // name a new row items-2-* while an existing row is already items-2-*. The
+  // POST then carries duplicate WTForms names and binds the wrong product,
+  // quantity or price. Renumber after every removal and before every clone.
+  function reindexRows() {
+    rows().forEach(function (row, position) {
+      row.querySelectorAll('input, select').forEach(function (field) {
+        if (field.name) {
+          field.name = field.name.replace(/items-\d+-/, 'items-' + position + '-');
+        }
+        if (field.id) {
+          field.id = field.id.replace(/items-\d+-/, 'items-' + position + '-');
+        }
+      });
+    });
+  }
+
+  document.getElementById('add-item').addEventListener('click', function () {
+    reindexRows();
+    var index = rows().length;
+    var holder = document.createElement('tbody');
+    holder.innerHTML = rowTemplate;
+    var row = holder.querySelector('tr');
+
+    row.querySelectorAll('input, select').forEach(function (field) {
+      if (field.name) {
+        field.name = field.name.replace(/items-\d+-/, 'items-' + index + '-');
+      }
+      if (field.id) {
+        field.id = field.id.replace(/items-\d+-/, 'items-' + index + '-');
+      }
+      field.classList.remove('is-invalid');
+      if (field.tagName === 'SELECT') {
+        field.selectedIndex = 0;
+      } else {
+        field.value = '';
+      }
+    });
+    row.querySelectorAll('.invalid-feedback').forEach(function (el) {
+      el.remove();
+    });
+
+    body.appendChild(row);
+    Combobox.enhance(row);
+    updatePrice(row);
+    refresh();
   });
+
+  table.addEventListener('click', function (event) {
+    var button = event.target.closest('.remove-item');
+    // Never remove the last row: a sale with no items cannot be recorded.
+    if (button && rows().length > 1) {
+      button.closest('tr').remove();
+      reindexRows();
+      refresh();
+    }
+  });
+
+  // The combobox writes to the native <select> and dispatches a bubbling
+  // 'change', so one delegated listener covers both input styles.
+  table.addEventListener('change', function (event) {
+    if (event.target.classList.contains('product-select')) {
+      updatePrice(event.target.closest('tr'));
+    }
+    refresh();
+  });
+
+  table.addEventListener('input', refresh);
+
+  if (settlement) {
+    settlement.addEventListener('change', syncSettlement);
+  }
+
+  rows().forEach(updatePrice);
+  refresh();
+
+  // --- selling with no signal ---------------------------------------------
+  //
+  // Submitting normally would fail and lose everything typed. Instead the sale
+  // is queued on the device and sent when the connection returns. The server
+  // re-decides stock and price then; nothing here is authoritative.
+  var form = document.getElementById('sale-form');
+  if (form && window.TrackTrackOffline) {
+    form.addEventListener('submit', function (event) {
+      if (navigator.onLine) {
+        return;                       // normal post, normal rules
+      }
+      event.preventDefault();
+
+      var items = rows().map(function (row) {
+        var select = row.querySelector('.product-select');
+        var qty = row.querySelector('[name$="quantity"]');
+        var price = row.querySelector('.price-input');
+        return {
+          product_id: parseInt(select.value, 10),
+          product_name: select.options[select.selectedIndex].textContent,
+          quantity: parseInt(qty.value, 10) || 0,
+          price: price.value,
+        };
+      }).filter(function (i) { return i.product_id && i.quantity > 0; });
+
+      if (!items.length) {
+        alert('Add at least one product before saving.');
+        return;
+      }
+
+      var customerSelect = document.getElementById('customer_id');
+      var customerId = customerSelect && customerSelect.value !== '0'
+        ? parseInt(customerSelect.value, 10) : null;
+      var settlementChoice = settlement ? settlement.value : 'paid';
+
+      window.TrackTrackOffline.queue({
+        sale_date: form.querySelector('[name="sale_date"]').value,
+        customer_id: customerId,
+        customer_name: customerId ? null : (form.querySelector('[name="customer_name"]') || {}).value,
+        customer_phone: customerId ? null : (form.querySelector('[name="customer_phone"]') || {}).value,
+        items: items,
+        amount_paid: settlementChoice === 'credit' ? '0'
+          : (settlementChoice === 'paid' ? totalEl.textContent
+             : (amountPaid ? amountPaid.value : '0')),
+        payment_method: (form.querySelector('[name="payment_method"]') || {}).value || 'cash',
+        payment_reference: (form.querySelector('[name="payment_reference"]') || {}).value || '',
+        display_total: totalEl.textContent,
+      }).then(function () {
+        window.location.href = '/sales/pending?queued=1';
+      }).catch(function () {
+        alert('Could not save this sale on the device. Please write it down.');
+      });
+    });
+
+    // Say so before they start typing, not after they press the button.
+    function showConnectionNotice() {
+      var notice = document.getElementById('offline-notice');
+      if (!notice) { return; }
+      notice.hidden = navigator.onLine;
+    }
+    window.addEventListener('online', showConnectionNotice);
+    window.addEventListener('offline', showConnectionNotice);
+    showConnectionNotice();
+  }
+})();
 </script>
 {% endblock %}

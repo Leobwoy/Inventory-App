@@ -1,0 +1,131 @@
+{% extends 'base.html' %}
+{% block title %}Waiting to sync | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Waiting to sync</h2>
+  <div class="page-header-actions">
+    <button type="button" class="btn btn-primary" id="sync-now">
+      <i class="bi bi-arrow-repeat me-1"></i> Sync now
+    </button>
+    <a href="{{ url_for('sales.list_sales') }}" class="btn btn-outline-secondary">Back to Sales</a>
+  </div>
+</div>
+
+{% if request.args.get('queued') %}
+<div class="alert alert-warning">
+  <i class="bi bi-check2 me-1"></i>
+  Saved on this phone. It is <strong>not in your records yet</strong> — it will be
+  sent automatically when the network returns.
+</div>
+{% endif %}
+
+<div class="glass-card">
+  <div class="card-toolbar">
+    <h5 class="mb-0">Sales recorded on this device</h5>
+    <div class="text-muted small" id="sync-state"></div>
+  </div>
+
+  <p class="text-muted small">
+    These live on this phone only. Another device will not see them, and they
+    are not counted in any report, until they sync. The server checks stock and
+    price at that point — anything it refuses appears here in red.
+  </p>
+
+  <div id="pending-list"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  'use strict';
+  var list = document.getElementById('pending-list');
+  var state = document.getElementById('sync-state');
+
+  function escapeHtml(text) {
+    var div = document.createElement('div');
+    div.textContent = text == null ? '' : text;
+    return div.innerHTML;
+  }
+
+  function render(sales) {
+    if (!sales.length) {
+      list.innerHTML = '<div class="text-center py-5 text-muted">'
+        + '<i class="bi bi-cloud-check fs-1 d-block mb-3"></i>'
+        + 'Nothing waiting. Every sale on this device is in your records.'
+        + '</div>';
+      return;
+    }
+    list.innerHTML = sales.map(function (sale) {
+      var conflict = sale.state === 'conflict';
+      var lines = (sale.items || []).map(function (i) {
+        return escapeHtml(i.product_name || ('Product #' + i.product_id))
+             + ' <span class="text-muted">(x' + i.quantity + ')</span>';
+      }).join('<br>');
+      return '<div class="glass-card queued-sale mb-3' + (conflict ? ' is-conflict' : '') + '">'
+        + '<div class="d-flex justify-content-between flex-wrap gap-2">'
+        + '<div><div class="fw-medium">' + escapeHtml(sale.customer_name || 'Walk-in customer') + '</div>'
+        + '<div class="text-muted small">' + escapeHtml(sale.sale_date) + '</div>'
+        + '<div class="mt-2 small">' + lines + '</div></div>'
+        + '<div class="text-end"><div class="fs-5 fw-bold">₵' + escapeHtml(sale.display_total || '') + '</div>'
+        + (conflict
+            ? '<span class="badge bg-danger">Refused</span>'
+            : '<span class="badge bg-warning text-dark">Waiting</span>')
+        + '</div></div>'
+        + (conflict
+            ? '<div class="alert alert-danger mt-3 mb-0 py-2 small">'
+              + '<i class="bi bi-exclamation-triangle-fill me-1"></i>'
+              + escapeHtml(sale.conflict || 'The server refused this sale.')
+              + '<div class="mt-2">Check the stock on the floor, then record it again '
+              + 'with the right quantity. '
+              + '<button type="button" class="btn btn-sm btn-outline-light ms-2" '
+              + 'data-discard="' + escapeHtml(sale.client_id) + '">Discard this one</button></div>'
+              + '</div>'
+            : '')
+        + '</div>';
+    }).join('');
+  }
+
+  function refresh() {
+    return window.TrackTrackOffline.pending().then(render);
+  }
+
+  // Discarding is manual and explicit. Nothing here deletes a sale on its own.
+  list.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-discard]');
+    if (!button) { return; }
+    if (!window.confirm('Discard this sale? It will not be recorded anywhere.')) { return; }
+    window.TrackTrackOffline.remove(button.dataset.discard)
+      .then(refresh)
+      .then(function () { window.TrackTrackOffline.announce(); });
+  });
+
+  document.getElementById('sync-now').addEventListener('click', function () {
+    state.textContent = 'Syncing…';
+    window.TrackTrackOffline.sync().then(function (result) {
+      if (result.error === 'unreachable') {
+        state.textContent = 'Still no connection.';
+      } else if (result.error === 'signed-out') {
+        state.textContent = 'Please sign in again, then sync.';
+      } else if (result.error) {
+        state.textContent = 'The server refused the batch. Nothing was discarded.';
+      } else if (result.accepted) {
+        state.textContent = result.accepted + ' recorded'
+          + (result.conflicts ? ', ' + result.conflicts + ' refused' : '') + '.';
+      } else {
+        state.textContent = 'Nothing to send.';
+      }
+      refresh();
+    });
+  });
+
+  document.addEventListener('tracktrack:queue', refresh);
+  if (window.TrackTrackOffline) {
+    refresh();
+  } else {
+    list.innerHTML = '<div class="text-muted py-4">Offline selling is not enabled on your plan.</div>';
+  }
+})();
+</script>
+{% endblock %}

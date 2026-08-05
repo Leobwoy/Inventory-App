@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+{% block title %}Supplier Prices | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Supplier Prices</h2>
+  <div class="page-header-actions">
+    <a href="{{ url_for('purchases.add_purchase') }}" class="btn btn-primary">
+      <i class="bi bi-plus-lg me-1"></i> New Order
+    </a>
+  </div>
+</div>
+
+{% if rows %}
+<p class="text-muted">
+  Products you have bought from more than one supplier, biggest price gap first.
+  Every figure comes from your own order history.
+</p>
+
+<div class="row g-4">
+  {% for row in rows %}
+  <div class="col-lg-6">
+    <div class="glass-card h-100">
+      <div class="d-flex justify-content-between align-items-start mb-3">
+        <div>
+          <a href="{{ url_for('purchases.compare_product', product_id=row.product.id) }}"
+             class="fw-bold fs-5 text-decoration-none">{{ row.product.name }}</a>
+          <div class="text-muted font-monospace" style="font-size: 0.75rem;">{{ row.product.sku }}</div>
+        </div>
+        <span class="badge bg-secondary">{{ row.supplier_count }} suppliers</span>
+      </div>
+
+      {% if row.savings %}
+      <div class="alert alert-success py-2 px-3 mb-3" style="font-size: 0.9rem;">
+        <i class="bi bi-arrow-down-circle me-1"></i>
+        You last bought from <strong>{{ row.savings['from'].supplier.name }}</strong> at
+        ₵{{ '%.2f'|format(row.savings['from'].latest) }}.
+        <strong>{{ row.savings.to.supplier.name }}</strong> charges
+        ₵{{ '%.2f'|format(row.savings.to.latest) }} &mdash; saving
+        <strong>₵{{ '%.2f'|format(row.savings.per_unit) }}</strong> per {{ row.product.base_uom }}.
+      </div>
+      {% endif %}
+
+      <div class="table-responsive">
+        <table class="table table-sm table-borderless mb-0">
+          <thead>
+            <tr class="text-muted" style="font-size: 0.75rem;">
+              <th>Supplier</th>
+              <th class="text-end">Latest</th>
+              <th class="text-end">Best ever</th>
+              <th class="text-end">Orders</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for option in row.options %}
+            <tr>
+              <td>
+                {{ option.supplier.name }}
+                {% if loop.first %}<span class="badge bg-success ms-1">Cheapest</span>{% endif %}
+              </td>
+              <td class="text-end fw-medium">
+                ₵{{ '%.2f'|format(option.latest) }}
+                {% if option.trend == 'up' %}<i class="bi bi-arrow-up-short text-danger"></i>
+                {% elif option.trend == 'down' %}<i class="bi bi-arrow-down-short text-success"></i>{% endif %}
+              </td>
+              <td class="text-end text-muted">₵{{ '%.2f'|format(option.best) }}</td>
+              <td class="text-end text-muted">{{ option.times }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="glass-card text-center py-5">
+  <i class="bi bi-graph-up-arrow fs-1 text-muted d-block mb-3"></i>
+  <h5>Nothing to compare yet</h5>
+  <p class="text-muted">
+    Once you have bought the same product from two or more suppliers, this page shows
+    what each of them charged so you can see who is actually cheapest.
+  </p>
+  <a href="{{ url_for('purchases.add_purchase') }}" class="btn btn-primary mt-2">Record an order</a>
+</div>
+{% endif %}
+{% endblock %}

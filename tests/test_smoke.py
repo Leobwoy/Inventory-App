@@ -109,6 +109,23 @@ def test_dashboard_product_count_is_not_capped(register, make_product):
     assert '>7 <' in body.replace('\n', ' ') or '>7<' in body
 
 
+def test_permission_grid_renders_for_a_staff_member(register, make_staff):
+    """The route smoke test only ever reaches this page for the Owner, who is
+    redirected away before it renders - so a template error here went unseen
+    (loop.parent does not exist in Jinja, and the page raised UndefinedError)."""
+    client, business_id = register()
+    make_staff(business_id, 'Sales Staff', 'sales@x.example.com')
+
+    from auth.models import User
+    staff_id = User.query.filter_by(email='sales@x.example.com').one().id
+
+    response = client.get(f'/auth/users/{staff_id}/permissions')
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'sales.create' in body          # the grid actually rendered
+    assert 'Toggle all' in body
+
+
 def test_every_post_form_carries_a_csrf_token():
     """Six templates posted without one, so every bulk action 400'd (F-28)."""
     import pathlib

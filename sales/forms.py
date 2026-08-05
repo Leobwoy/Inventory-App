@@ -21,4 +21,21 @@ class SaleForm(FlaskForm):
     sale_date = DateField('Sale Date', validators=[DataRequired()])
     customer_id = SelectField('Customer', coerce=str, validators=[Optional()])
     customer_name = StringField('Customer Name (optional)', validators=[Optional(), Length(max=100)])
+    # A walk-in buying on credit has no customer record to hold a number, and a
+    # debt you cannot phone is a debt you do not collect.
+    customer_phone = StringField('Phone (optional)', validators=[Optional(), Length(max=50)])
+
+    # Wholesale runs on credit, so how the sale was settled is part of recording
+    # it. 'paid' writes a payment for the full amount; 'partial' writes whatever
+    # was handed over; 'credit' writes none and the sale sits on the ageing report.
+    settlement = SelectField('Payment', coerce=str, default='paid', validators=[Optional()],
+                             choices=[('paid', 'Paid in full'),
+                                      ('partial', 'Part payment'),
+                                      ('credit', 'On credit')])
+    amount_paid = DecimalField('Amount received', places=2,
+                               validators=[Optional(), NumberRange(min=0)])
+    payment_method = SelectField('Method', coerce=str, default='cash', validators=[Optional()],
+                                 choices=[('cash', 'Cash'), ('momo', 'Mobile Money'),
+                                          ('bank', 'Bank transfer'), ('cheque', 'Cheque')])
+    payment_reference = StringField('Reference', validators=[Optional(), Length(max=120)])
     submit = SubmitField('Record Sale') 

@@ -40,7 +40,10 @@ class PurchaseOrderItem(db.Model):
     product_id = db.Column(db.Integer, db.ForeignKey('product.id'), nullable=False)
     quantity_ordered = db.Column(db.Integer, nullable=False)
     quantity_received = db.Column(db.Integer, default=0)
-    unit_cost = db.Column(db.Numeric(10, 2))
+    # Six decimals, not two: this is a *derived* per-unit figure (a carton price
+    # divided by its pack factor), and rounding it to pesewas loses money on
+    # every unit of the line. Displayed at two decimals everywhere (F-41).
+    unit_cost = db.Column(db.Numeric(14, 6))
     
     product = db.relationship('Product')
 

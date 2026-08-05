@@ -14,25 +14,74 @@ from flask import send_file
 import io
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
+from datetime import date, timedelta
+from purchases.models import PurchaseOrder, StockBatch
+from services import audit, limits, listing
+
+PRODUCT_SORTS = {
+    'name':     [Product.name.asc()],
+    'newest':   [Product.id.desc()],
+    'stock_low': [Product.quantity_in_stock.asc(), Product.name.asc()],
+    'stock_high': [Product.quantity_in_stock.desc(), Product.name.asc()],
+    'price_low': [Product.unit_price.asc(), Product.name.asc()],
+    'price_high': [Product.unit_price.desc(), Product.name.asc()],
+}
+PRODUCT_SORT_LABELS = [
+    ('name', 'Name (A–Z)'), ('newest', 'Recently added'),
+    ('stock_low', 'Stock: lowest'), ('stock_high', 'Stock: highest'),
+    ('price_low', 'Price: lowest'), ('price_high', 'Price: highest'),
+]
+
+SUPPLIER_SORTS = {
+    'name':   [Supplier.name.asc()],
+    'newest': [Supplier.id.desc()],
+}
+SUPPLIER_SORT_LABELS = [('name', 'Name (A-Z)'), ('newest', 'Recently added')]
+
 
 @products_bp.route('/')
 @login_required
 @permission_required('products.view')
 def list_products():
     page = request.args.get('page', 1, type=int)
-    search_query = request.args.get('q', '').strip()
-    
-    query = Product.query.filter_by(business_id=current_user.business_id)
-    if search_query:
-        query = query.filter(db.or_(
-            Product.name.ilike(f'%{search_query}%'),
-            Product.sku.ilike(f'%{search_query}%'),
-            Product.barcode.ilike(f'%{search_query}%'),
-            Product.variant_label.ilike(f'%{search_query}%')
-        ))
-        
-    pagination = query.order_by(Product.name).paginate(page=page, per_page=15, error_out=False)
-    return render_template('products/list.html', products=pagination.items, pagination=pagination, search_query=search_query)
+    business_id = current_user.business_id
+    term = listing.search_term()
+    stock_filter = listing.filter_value('stock', ['low', 'out', 'expiring'])
+    status = listing.filter_value('status', ['active', 'inactive'])
+    sort = listing.sort_key(PRODUCT_SORTS, 'name')
+
+    query = Product.query.filter_by(business_id=business_id)
+    query = listing.apply_search(query, term, [
+        Product.name, Product.sku, Product.barcode, Product.variant_label,
+    ])
+
+    if status == 'active':
+        query = query.filter(Product.is_active.is_(True))
+    elif status == 'inactive':
+        query = query.filter(Product.is_active.is_(False))
+
+    if stock_filter == 'out':
+        query = query.filter(Product.quantity_in_stock <= 0)
+    elif stock_filter == 'low':
+        # At or below the threshold is what the owner needs to reorder, and a
+        # product already at zero is the most urgent case of that.
+        query = query.filter(Product.quantity_in_stock <= Product.min_stock_alert)
+    elif stock_filter == 'expiring':
+        horizon = date.today() + timedelta(days=current_user.business.expiry_alert_days or 30)
+        expiring = (db.session.query(StockBatch.product_id)
+                    .filter(StockBatch.business_id == business_id,
+                            StockBatch.quantity_remaining > 0,
+                            StockBatch.expiry_date.isnot(None),
+                            StockBatch.expiry_date <= horizon))
+        query = query.filter(Product.id.in_(expiring))
+
+    query = listing.apply_sort(query, PRODUCT_SORTS, sort)
+    pagination = query.paginate(page=page, per_page=15, error_out=False)
+    return render_template(
+        'products/list.html', products=pagination.items, pagination=pagination,
+        search_query=term, q=term, sort=sort, sort_options=PRODUCT_SORT_LABELS,
+        stock=stock_filter, status=status,
+        is_filtered=listing.is_filtered('q', 'stock', 'status'))
 
 def _sku_token(text, length=4):
     """Uppercase alphanumeric fragment of `text`, for building a readable SKU."""
@@ -70,6 +119,33 @@ def _strip_cost_price(form):
     return True
 
 
+def _history_blocking_delete(product):
+    """Describe why a product cannot be deleted, or None if it can.
+
+    StockBatch.product_id, SaleItem.product_id and PurchaseOrderItem.product_id
+    are all NOT NULL, so deleting a product that has any of them raises a
+    constraint violation as SQLAlchemy tries to null the foreign keys - a 500
+    with no explanation. Beyond the crash, deleting a product that has traded
+    would erase the history behind every report that mentions it.
+    """
+    from sales.models import SaleItem
+    from purchases.models import PurchaseOrderItem, StockBatch
+
+    reasons = []
+    if StockBatch.query.filter_by(product_id=product.id).count():
+        reasons.append('stock history')
+    if SaleItem.query.filter_by(product_id=product.id).count():
+        reasons.append('recorded sales')
+    if PurchaseOrderItem.query.filter_by(product_id=product.id).count():
+        reasons.append('purchase orders')
+
+    if not reasons:
+        return None
+    if len(reasons) == 1:
+        return reasons[0]
+    return ', '.join(reasons[:-1]) + ' and ' + reasons[-1]
+
+
 def _scoped_catalogue(form):
     """Resolve brand/item group/category from the form, scoped to the caller's business.
 
@@ -100,6 +176,11 @@ def add_product():
         form.quantity_in_stock.data = 0
 
     if form.validate_on_submit():
+        allowed, message = limits.can_add_product()
+        if not allowed:
+            flash(message, 'warning')
+            return render_template('products/add_edit.html', form=form, action='Add')
+
         brand, item_group, category = _scoped_catalogue(form)
         if not brand or not item_group:
             flash('Select a valid brand and item group.', 'danger')
@@ -160,6 +241,7 @@ def edit_product(product_id):
 
         existing_sku, existing_qty = product.sku, product.quantity_in_stock
         existing_cost = product.cost_price
+        existing_unit_price = product.unit_price
         form.populate_obj(product)
 
         # populate_obj skips the deleted field, but be explicit: a user who cannot
@@ -185,6 +267,17 @@ def edit_product(product_id):
         # Stock is owned by StockBatch/goods receipt, never by this form
         product.quantity_in_stock = existing_qty
 
+        # "Who changed this price" is the question this log exists to answer, so
+        # record the before and after rather than just that an edit happened.
+        if product.unit_price != existing_unit_price:
+            audit.log('product.price_change', entity_type='product', entity_id=product.id,
+                      sku=product.sku, field='unit_price',
+                      old=str(existing_unit_price), new=str(product.unit_price))
+        if may_see_cost and product.cost_price != existing_cost:
+            audit.log('product.price_change', entity_type='product', entity_id=product.id,
+                      sku=product.sku, field='cost_price',
+                      old=str(existing_cost), new=str(product.cost_price))
+
         db.session.commit()
         flash('Product updated successfully!', 'success')
         return redirect(url_for('products.list_products'))
@@ -198,9 +291,48 @@ def edit_product(product_id):
 @permission_required('products.delete')
 def delete_product(product_id):
     product = Product.query.filter_by(id=product_id, business_id=current_user.business_id).first_or_404()
+
+    blocker = _history_blocking_delete(product)
+    if blocker:
+        flash(f'{product.name} cannot be deleted because it has {blocker}. '
+              'Deactivate it instead so it stops appearing in new sales and orders.', 'warning')
+        return redirect(url_for('products.list_products'))
+
+    audit.log('product.delete', entity_type='product', entity_id=product.id,
+              sku=product.sku, name=product.name, stock_at_deletion=product.quantity_in_stock)
     db.session.delete(product)
     db.session.commit()
     flash('Product deleted!', 'info')
+    return redirect(url_for('products.list_products'))
+
+
+@products_bp.route('/deactivate/<int:product_id>', methods=['POST'])
+@login_required
+@permission_required('products.edit')
+def toggle_product_active(product_id):
+    """Retire a product without destroying its history.
+
+    is_active has existed on the model since the variant restructure and nothing
+    ever read or wrote it. This is what a wholesaler actually wants when they
+    stop stocking something: it disappears from new sales and orders, while past
+    sales, purchase orders and stock batches stay intact and reportable.
+    """
+    product = Product.query.filter_by(id=product_id, business_id=current_user.business_id).first_or_404()
+
+    if not product.is_active:
+        # Switching one back on consumes the allowance exactly as creating one
+        # does. Without this, a business over its cap could rotate through an
+        # unlimited catalogue fifty products at a time.
+        allowed, message = limits.can_add_product()
+        if not allowed:
+            flash(message, 'warning')
+            return redirect(url_for('products.list_products'))
+
+    product.is_active = not bool(product.is_active)
+    audit.log('product.reactivate' if product.is_active else 'product.deactivate',
+              entity_type='product', entity_id=product.id, sku=product.sku)
+    db.session.commit()
+    flash(f'{product.name} {"reactivated" if product.is_active else "deactivated"}.', 'success')
     return redirect(url_for('products.list_products'))
 
 @products_bp.route('/upload', methods=['GET', 'POST'])
@@ -226,10 +358,23 @@ def upload_products():
         # share one path on disk - one overwriting, reading or deleting the
         # other's file, and importing another tenant's products.
         # (mkstemp also replaces the hardcoded /tmp, which does not exist on Windows.)
+        # Checked before anything is written to disk. The cleanup that removes
+        # filepath lives in a `finally` further down, so returning between
+        # mkstemp and that try left an orphaned file behind on every rejected
+        # upload from a business sitting at its cap.
+        plan = limits.effective_plan(biz)
+        remaining = None
+        if plan is not None and plan.max_products is not None:
+            remaining = max(0, plan.max_products - limits.active_product_count(biz))
+            if remaining == 0:
+                flash(limits.can_add_product(biz)[1], 'warning')
+                return redirect(url_for('products.list_products'))
+
         suffix = os.path.splitext(secure_filename(form.file.data.filename))[1] or '.xlsx'
         descriptor, filepath = tempfile.mkstemp(prefix='product-upload-', suffix=suffix)
         os.close(descriptor)
-        added, skipped, errors = 0, 0, []
+
+        added, skipped, errors, over_limit = 0, 0, [], 0
         wb = None
         try:
             form.file.data.save(filepath)
@@ -254,6 +399,10 @@ def upload_products():
                 sku = (str(sku).strip() if sku else '') or generate_sku(brand, group, str(name), biz)
                 if Product.query.filter_by(sku=sku, business_id=biz).first():
                     skipped += 1
+                    continue
+
+                if remaining is not None and added >= remaining:
+                    over_limit += 1
                     continue
 
                 db.session.add(Product(
@@ -292,6 +441,9 @@ def upload_products():
                 os.remove(filepath)
 
         flash(f'{added} product(s) added, {skipped} skipped as duplicates.', 'success')
+        if over_limit:
+            flash(f'{over_limit} product(s) were not added because the {plan.name} plan covers '
+                  f'{plan.max_products} active products. Upgrade to import the rest.', 'warning')
         if added:
             flash('Cost prices were left at 0 — set them so margin reporting is accurate.',
                   'warning')
@@ -318,10 +470,21 @@ def bulk_action():
 
     products = Product.query.filter(Product.id.in_(ids), Product.business_id == current_user.business_id).all()
     if action == 'delete':
-        for product in products:
-            db.session.delete(product)
-        db.session.commit()
-        flash(f'{len(products)} products deleted.', 'success')
+        # Same rule as the single delete: anything that has traded is kept.
+        deletable = [p for p in products if not _history_blocking_delete(p)]
+        blocked = [p for p in products if p not in deletable]
+
+        if deletable:
+            audit.log('product.bulk_delete', entity_type='product',
+                      count=len(deletable), skus=[p.sku for p in deletable])
+            for product in deletable:
+                db.session.delete(product)
+            db.session.commit()
+            flash(f'{len(deletable)} product(s) deleted.', 'success')
+        if blocked:
+            flash(f'{len(blocked)} product(s) kept because they have sales, orders or stock '
+                  f'history: {", ".join(p.name for p in blocked[:5])}'
+                  f'{"..." if len(blocked) > 5 else ""}. Deactivate them instead.', 'warning')
         return redirect(url_for('products.list_products'))
     elif action in ('export_csv', 'export_excel'):
         # The export is the easiest way to walk out with margins, so it obeys the
@@ -514,8 +677,15 @@ def delete_item_group(item_group_id):
 @login_required
 @permission_required('suppliers.view')
 def list_suppliers():
-    suppliers = Supplier.query.filter_by(business_id=current_user.business_id).order_by(Supplier.name).all()
-    return render_template('products/suppliers.html', suppliers=suppliers)
+    term = listing.search_term()
+    sort = listing.sort_key(SUPPLIER_SORTS, 'name')
+    query = listing.apply_search(
+        Supplier.query.filter_by(business_id=current_user.business_id), term,
+        [Supplier.name, Supplier.contact, Supplier.phone, Supplier.email])
+    suppliers = listing.apply_sort(query, SUPPLIER_SORTS, sort).all()
+    return render_template('products/suppliers.html', suppliers=suppliers,
+                           q=term, sort=sort, sort_options=SUPPLIER_SORT_LABELS,
+                           is_filtered=listing.is_filtered('q'))
 
 @products_bp.route('/suppliers/add', methods=['GET', 'POST'])
 @login_required
@@ -555,6 +725,19 @@ def edit_supplier(supplier_id):
 @permission_required('suppliers.manage')
 def delete_supplier(supplier_id):
     supplier = Supplier.query.filter_by(id=supplier_id, business_id=current_user.business_id).first_or_404()
+
+    # PurchaseOrder.supplier_id is nullable with no cascade, so deleting a
+    # supplier silently nulls its orders - and the price-comparison history
+    # requires a supplier, so those orders vanish from it. Same rule as
+    # products: history is never destroyed to tidy a list.
+    orders = PurchaseOrder.query.filter_by(supplier_id=supplier.id).count()
+    if orders:
+        flash(f'{supplier.name} cannot be deleted: {orders} purchase '
+              f'{"order" if orders == 1 else "orders"} reference them. '
+              'Their price history would be lost.', 'warning')
+        return redirect(url_for('products.list_suppliers'))
+
+    audit.log('supplier.delete', entity_type='supplier', entity_id=supplier.id, name=supplier.name)
     db.session.delete(supplier)
     db.session.commit()
     flash('Supplier deleted!', 'info')
