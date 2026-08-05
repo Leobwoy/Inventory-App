@@ -1,4 +1,4 @@
-# TrackTrack - Wholesale Inventory, Sales & Purchase System
+# TrackTrack - Wholesale/Retail Inventory, Sales & Purchase System
 
 A premium, production-ready Flask web application for tracking products, managing suppliers, recording multi-item sales transactions, coordinating purchases, and visualizing real-time metrics. The frontend features a state-of-the-art **glassmorphic dark UI** with dynamic charts and responsive design, while the backend leverages **PostgreSQL** with strict transactional controls.
 
