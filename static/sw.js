@@ -25,7 +25,7 @@
  */
 
 // Bump to invalidate everything. Old caches are deleted on activate.
-const CACHE_VERSION = 'tracktrack-v2';
+const CACHE_VERSION = 'tracktrack-v4';
 const OFFLINE_URL = '/offline';
 
 // The shell: enough to render a styled page with icons and no network.
@@ -41,6 +41,7 @@ const PRECACHE = [
     '/static/vendor/bootstrap-icons/bootstrap-icons.min.css',
     '/static/vendor/bootstrap-icons/fonts/bootstrap-icons.woff2',
     '/static/logo.png',
+    '/static/logo-wordmark.png',
     '/static/icons/icon-192.png',
     '/static/manifest.json',
 ];

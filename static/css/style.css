@@ -1,3 +1,14 @@
+/* The `hidden` attribute must actually hide.
+
+   Browsers implement it as `[hidden] { display: none }`, and every Bootstrap
+   display utility is `!important` - so `class="d-flex" hidden` renders the
+   element in full. That is how the "No connection" banner and the discount
+   summary on the sale form ended up permanently visible, each of them stating
+   something untrue. One rule here beats remembering it at every call site. */
+[hidden] {
+    display: none !important;
+}
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
