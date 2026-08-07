@@ -1,0 +1,124 @@
+{% extends 'base.html' %}
+{% block title %}Subscription | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header"><h2>Subscription</h2></div>
+
+<div class="glass-card mb-4">
+  <div class="card-toolbar">
+    <h5 class="mb-0">Your plan</h5>
+    {% if subscription and subscription.status == 'trialing' %}
+    <span class="badge bg-info">Trial &mdash; {{ subscription.days_left }} days left</span>
+    {% elif subscription and subscription.status == 'active' %}
+    <span class="badge bg-success">Active</span>
+    {% else %}
+    <span class="badge bg-secondary">{{ subscription.status if subscription else 'None' }}</span>
+    {% endif %}
+  </div>
+
+  <div class="row g-4">
+    <div class="col-md-4">
+      <div class="text-muted small">Currently on</div>
+      {# effective_plan, not subscription.plan: a lapsed subscription still names
+         what was bought, and showing that would tell them they have access they
+         do not. #}
+      <div class="fs-4 fw-bold">{{ plan.name if plan else 'Kiosk' }}</div>
+      {% if subscription and subscription.paid_through %}
+      <div class="text-muted small mt-1">Paid through {{ subscription.paid_through.strftime('%d %b %Y') }}</div>
+      {% endif %}
+    </div>
+    <div class="col-md-4">
+      <div class="text-muted small">Staff accounts</div>
+      <div class="fs-4 fw-bold">
+        {{ users_used }}{% if plan and plan.max_users %} <span class="text-muted fs-6">of {{ plan.max_users }}</span>{% endif %}
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="text-muted small">Active products</div>
+      <div class="fs-4 fw-bold">
+        {{ products_used }}{% if plan and plan.max_products %} <span class="text-muted fs-6">of {{ plan.max_products }}</span>{% endif %}
+      </div>
+    </div>
+  </div>
+
+  <p class="text-muted small mt-4 mb-0">
+    <i class="bi bi-info-circle me-1"></i>
+    Mobile money in Ghana cannot charge you automatically, so nothing renews on
+    its own and nothing is ever taken without you sending it. We will remind you
+    before your plan runs out.
+  </p>
+</div>
+
+<div class="glass-card mb-4">
+  <div class="card-toolbar"><h5 class="mb-0">Plans</h5></div>
+  <div class="table-responsive">
+    <table class="table table-hover table-cards align-middle">
+      <thead>
+        <tr><th>Plan</th><th class="text-end">Monthly</th><th class="text-end">Annual</th>
+            <th class="text-center">Staff</th><th class="text-center">Products</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for option in plans %}
+        <tr>
+          <td data-label="Plan" class="fw-medium">
+            {{ option.name }}
+            {% if plan and option.id == plan.id %}<span class="badge bg-primary ms-1">Current</span>{% endif %}
+          </td>
+          <td data-label="Monthly" class="text-end">
+            {% if option.price_monthly_ghs is none %}<span class="text-muted">Contact us</span>
+            {% elif option.price_monthly_ghs == 0 %}Free
+            {% else %}&#8373;{{ '%.0f'|format(option.price_monthly_ghs) }}{% endif %}
+          </td>
+          <td data-label="Annual" class="text-end">
+            {% if option.price_annual_ghs %}&#8373;{{ '%.0f'|format(option.price_annual_ghs) }}
+            <div class="text-muted" style="font-size:0.7rem;">2 months free</div>
+            {% else %}<span class="text-muted">&mdash;</span>{% endif %}
+          </td>
+          <td data-label="Staff" class="text-center">{{ option.max_users or 'Unlimited' }}</td>
+          <td data-label="Products" class="text-center">{{ option.max_products or 'Unlimited' }}</td>
+          <td data-label="" class="cell-actions text-end">
+            {# The current plan gets Renew, not nothing. Mobile money cannot
+               charge anyone automatically, so renewing is the single most
+               common thing a paying customer comes here to do - hiding the
+               button on the plan they are already on hides exactly that. #}
+            {% if option.price_monthly_ghs %}
+            <a href="{{ url_for('billing.upgrade', plan_code=option.code) }}"
+               class="btn btn-sm {{ 'btn-outline-primary' if plan and option.id == plan.id else 'btn-primary' }}">
+              {{ 'Renew' if plan and option.id == plan.id else 'Choose' }}
+            </a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="glass-card">
+  <div class="card-toolbar"><h5 class="mb-0">Payments</h5></div>
+  {% if payments %}
+  <div class="table-responsive">
+    <table class="table table-hover table-cards align-middle">
+      <thead><tr><th>Date</th><th>Reference</th><th class="text-end">Amount</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for payment in payments %}
+        <tr>
+          <td data-label="Date" class="text-muted">{{ payment.created_at.strftime('%d %b %Y') }}</td>
+          <td data-label="Reference" class="font-monospace" style="font-size:0.8rem;">{{ payment.provider_ref }}</td>
+          <td data-label="Amount" class="text-end">&#8373;{{ '%.2f'|format(payment.amount_ghs) }}</td>
+          <td data-label="Status">
+            {% if payment.status == 'paid' %}<span class="badge bg-success">Confirmed</span>
+            {% elif payment.status == 'pending' %}<span class="badge bg-warning text-dark">Awaiting confirmation</span>
+            {% else %}<span class="badge bg-danger">{{ payment.status|title }}</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="text-center py-4 text-muted">No payments yet.</div>
+  {% endif %}
+</div>
+{% endblock %}

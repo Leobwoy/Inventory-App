@@ -1,0 +1,117 @@
+{% extends 'base.html' %}
+{% block title %}Pay for {{ plan.name }} | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>{{ plan.name }}</h2>
+  <div class="page-header-actions">
+    <a href="{{ url_for('billing.overview') }}" class="btn btn-outline-secondary">
+      <i class="bi bi-arrow-left me-1"></i> Back
+    </a>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-6">
+    <div class="glass-card h-100">
+      <div class="card-toolbar"><h5 class="mb-0">1. Send the money</h5></div>
+      <div class="text-center py-3">
+        <div class="text-muted small">Send to</div>
+        <div class="fs-3 fw-bold font-monospace">{{ instructions.number }}</div>
+        <div class="fs-5">{{ instructions.account_name }}</div>
+        <div class="badge bg-secondary mt-2">{{ instructions.network }} Mobile Money</div>
+      </div>
+      <hr>
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="text-muted">Amount</div>
+        <div class="fs-4 fw-bold text-success" id="amount-due"
+             data-monthly="{{ '%.2f'|format(plan.price_monthly_ghs) if plan.price_monthly_ghs else '' }}"
+             data-annual="{{ '%.2f'|format(plan.price_annual_ghs) if plan.price_annual_ghs else '' }}">
+          &#8373;{{ '%.2f'|format(instructions.amount) }}
+        </div>
+      </div>
+      <p class="text-muted small mt-3 mb-0">
+        Your network will text you a transaction ID once it goes through.
+        You will need it in step 2.
+      </p>
+    </div>
+  </div>
+
+  <div class="col-lg-6">
+    <div class="glass-card h-100">
+      <div class="card-toolbar"><h5 class="mb-0">2. Tell us you have paid</h5></div>
+      <form method="post">
+        {{ form.hidden_tag() }}
+
+        <div class="mb-3">
+          <label class="form-label">{{ form.cycle.label.text }}</label>
+          <div>
+            {# Only cycles this plan is actually priced for. Offering annual on
+               a plan with no annual price sends someone to pay an amount that
+               does not exist. #}
+            {% for option in form.cycle %}
+            {% if (option.data == 'annual' and plan.price_annual_ghs)
+                  or (option.data == 'monthly' and plan.price_monthly_ghs) %}
+            <div class="form-check form-check-inline">
+              {{ option(class_='form-check-input') }}
+              <label class="form-check-label" for="{{ option.id }}">
+                {{ option.label.text }}
+                {% if option.data == 'annual' and plan.price_annual_ghs %}
+                <span class="text-muted small">&#8373;{{ '%.0f'|format(plan.price_annual_ghs) }}</span>
+                {% elif option.data == 'monthly' and plan.price_monthly_ghs %}
+                <span class="text-muted small">&#8373;{{ '%.0f'|format(plan.price_monthly_ghs) }}</span>
+                {% endif %}
+              </label>
+            </div>
+            {% endif %}
+            {% endfor %}
+          </div>
+          {% for error in form.cycle.errors %}
+          <div class="text-danger small mt-1">{{ error }}</div>
+          {% endfor %}
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.reference.id }}">{{ form.reference.label.text }}</label>
+          {{ form.reference(class_='form-control' + (' is-invalid' if form.reference.errors else ''),
+                            placeholder='e.g. MP260805.1423.A12345') }}
+          {% for error in form.reference.errors %}<div class="invalid-feedback">{{ error }}</div>{% endfor %}
+          <div class="form-text">Copy it exactly from the text message.</div>
+        </div>
+
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.payer_note.id }}">{{ form.payer_note.label.text }}</label>
+          {{ form.payer_note(class_='form-control', placeholder='Optional, helps us find it') }}
+        </div>
+
+        {# Said plainly, because the gap between paying and the plan switching on
+           is exactly where a customer decides they have been cheated. #}
+        <div class="alert alert-warning small">
+          <i class="bi bi-clock-history me-1"></i>
+          Your plan switches on once we have matched this against our mobile money
+          record &mdash; usually within a few hours. Nothing changes until then.
+        </div>
+
+        {{ form.submit(class_='btn btn-primary w-100') }}
+      </form>
+
+      <script>
+        // The amount on the left is what the customer is about to send from
+        // their phone. Leaving it on the monthly figure while Annual is
+        // selected is not a cosmetic bug - it is telling someone to send the
+        // wrong money.
+        (function () {
+          var due = document.getElementById('amount-due');
+          if (!due) { return; }
+          document.querySelectorAll('input[name="cycle"]').forEach(function (radio) {
+            radio.addEventListener('change', function () {
+              var price = due.dataset[radio.value];
+              if (price) { due.textContent = '₵' + price; }
+            });
+          });
+        })();
+      </script>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -68,6 +68,26 @@ tier has no expiry — it sleeps when idle and wakes on the next request.
    Render injects `PORT` itself; the Dockerfile already binds to it, so do not
    set it by hand.
 
+   Then, to take mobile money payments, add these too:
+
+   | Name | Value |
+   |---|---|
+   | `MOMO_NUMBER` | the wallet customers send to, e.g. `0244000111` |
+   | `MOMO_NAME` | the name that shows when they send, so they know it is you |
+   | `MOMO_NETWORK` | `MTN`, `Telecel` or `AirtelTigo` (defaults to `MTN`) |
+   | `PLATFORM_ADMIN_EMAILS` | your own login email — comma-separated for more than one |
+
+   **`PLATFORM_ADMIN_EMAILS` is the one that matters.** It decides who can
+   confirm that a payment arrived, which is the same as deciding what a business
+   has paid for. It is an environment variable rather than a permission on
+   purpose: a business Owner holds every permission inside their own business,
+   so anything expressed as a permission would be self-grantable — and a
+   customer could switch on their own paid plan. Leave it unset and nobody can
+   confirm anything, including you.
+
+   The wallet number is configuration and not code because it is a personal
+   phone number and this repository is public.
+
    Generate the key on your machine and paste the output:
 
    ```bash

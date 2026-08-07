@@ -104,6 +104,13 @@
             <div class="nav-section-label">Administration</div>
             {% if current_user.can('settings.manage') %}
             <a class="nav-link" href="/auth/settings" id="nav-settings"><i class="bi bi-gear-fill"></i> Settings</a>
+            <a class="nav-link" href="/billing/" id="nav-billing"><i class="bi bi-credit-card"></i> Subscription</a>
+            {% endif %}
+            {% if is_platform_admin %}
+            {# Platform, not tenant: this decides what a business has paid for,
+               so it is gated on who runs TrackTrack rather than on a permission
+               an Owner already holds inside their own business. #}
+            <a class="nav-link" href="/billing/admin/payments" id="nav-payments"><i class="bi bi-cash-stack"></i> Confirm payments</a>
             {% endif %}
             {% if current_user.can('users.manage') %}
             <a class="nav-link" href="/auth/users" id="nav-users"><i class="bi bi-people-fill"></i> Staff</a>
