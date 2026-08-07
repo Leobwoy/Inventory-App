@@ -1,0 +1,60 @@
+{% extends 'platform/base.html' %}
+{% block title %}Businesses | TrackTrack Console{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-4">Businesses</h1>
+
+<div class="panel">
+  <form method="get" class="mb-3">
+    <div class="input-group">
+      <input type="search" name="q" value="{{ q }}" class="form-control"
+             placeholder="Search by name">
+      <button class="btn btn-outline-light" type="submit">Search</button>
+    </div>
+  </form>
+
+  {% if rows %}
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead><tr class="muted small">
+        <th>Business</th><th>Plan</th><th>Status</th>
+        <th class="text-center">Staff</th><th class="text-center">Products</th>
+        <th>Joined</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for row in rows %}
+        <tr>
+          <td class="fw-medium">{{ row.business.name }}</td>
+          {# The plan in effect, not the one on the subscription row: a lapsed
+             subscription still names what was bought. #}
+          <td>{{ row.plan.name if row.plan else '-' }}</td>
+          <td>
+            {% if row.subscription and row.subscription.status == 'active' %}
+            <span class="badge bg-success">Active</span>
+            {% elif row.subscription and row.subscription.status == 'trialing' %}
+            <span class="badge bg-info">Trial</span>
+            {% else %}
+            <span class="badge bg-secondary">
+              {{ row.subscription.status if row.subscription else 'None' }}
+            </span>
+            {% endif %}
+          </td>
+          <td class="text-center">{{ row.users }}</td>
+          <td class="text-center">{{ row.products }}</td>
+          <td class="muted small">
+            {{ row.business.created_at.strftime('%d %b %Y') if row.business.created_at else '-' }}
+          </td>
+          <td class="text-end">
+            <a href="{{ url_for('platform.business_detail', business_id=row.business.id) }}"
+               class="btn btn-sm btn-outline-light">Open</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="muted text-center py-4">No businesses match that.</div>
+  {% endif %}
+</div>
+{% endblock %}

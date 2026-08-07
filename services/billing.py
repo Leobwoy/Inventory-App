@@ -117,8 +117,13 @@ def confirm(transaction, confirmed_by, note=None):
     transaction.status = 'paid'
     transaction.subscription_id = subscription.id
 
+    # business_id and user_id passed explicitly. audit.log otherwise infers them
+    # from current_user, and the console has no current_user - so a payment
+    # confirmed there was silently not recorded at all. Money moving with no
+    # trail is the one thing this table exists to prevent.
     audit.log('billing.payment_confirmed', entity_type='business',
               entity_id=transaction.business_id,
+              business_id=transaction.business_id, user_id=None,
               provider=transaction.provider, reference=transaction.provider_ref,
               amount=str(transaction.amount_ghs), plan=plan.code,
               paid_through=subscription.paid_through.isoformat(),
@@ -137,6 +142,7 @@ def reject(transaction, rejected_by, reason):
     transaction.status = 'rejected'
     audit.log('billing.payment_rejected', entity_type='business',
               entity_id=transaction.business_id,
+              business_id=transaction.business_id, user_id=None,
               reference=transaction.provider_ref, reason=reason,
               rejected_by=rejected_by)
 

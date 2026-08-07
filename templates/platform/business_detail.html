@@ -1,0 +1,110 @@
+{% extends 'platform/base.html' %}
+{% block title %}{{ business.name }} | TrackTrack Console{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h4 mb-0">{{ business.name }}</h1>
+  <a href="{{ url_for('platform.businesses') }}" class="btn btn-sm btn-outline-light">Back</a>
+</div>
+
+<div class="row g-3">
+  <div class="col-lg-7">
+    <div class="panel">
+      <h2 class="h6 mb-3">Account</h2>
+      <div class="row g-3">
+        <div class="col-6">
+          <div class="muted small">Owner</div>
+          <div>{{ owner.name if owner else '-' }}</div>
+          <div class="muted small">{{ owner.email if owner else '' }}</div>
+        </div>
+        <div class="col-6">
+          <div class="muted small">Contact</div>
+          <div>{{ business.contact_number or '-' }}</div>
+          <div class="muted small">{{ business.address or '' }}</div>
+        </div>
+        <div class="col-4">
+          <div class="muted small">Plan in effect</div>
+          <div class="fw-bold">{{ plan.name if plan else '-' }}</div>
+        </div>
+        <div class="col-4">
+          <div class="muted small">Staff</div>
+          <div class="fw-bold">{{ users }}</div>
+        </div>
+        <div class="col-4">
+          <div class="muted small">Products</div>
+          <div class="fw-bold">{{ products }}</div>
+        </div>
+        {% if subscription and subscription.paid_through %}
+        <div class="col-12">
+          <div class="muted small">Paid through</div>
+          <div>{{ subscription.paid_through.strftime('%d %b %Y') }}</div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="h6 mb-3">Payments</h2>
+      {% if payments %}
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr class="muted small">
+            <th>Date</th><th>Reference</th><th class="text-end">Amount</th><th>Status</th>
+          </tr></thead>
+          <tbody>
+            {% for payment in payments %}
+            <tr>
+              <td class="muted small">{{ payment.created_at.strftime('%d %b %Y') }}</td>
+              <td class="font-monospace small">{{ payment.provider_ref }}</td>
+              <td class="text-end">&#8373;{{ '%.2f'|format(payment.amount_ghs) }}</td>
+              <td>
+                {% if payment.status == 'paid' %}<span class="badge bg-success">Confirmed</span>
+                {% elif payment.status == 'pending' %}<span class="badge bg-warning text-dark">Pending</span>
+                {% else %}<span class="badge bg-danger">{{ payment.status|title }}</span>{% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="muted py-3">No payments.</div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="panel">
+      <h2 class="h6 mb-1">Change plan by hand</h2>
+      <p class="muted small">
+        For what money cannot express: comping an early customer, correcting a
+        mistake, extending someone whose payment went astray. Written to this
+        business's own activity log, so they can see it too.
+      </p>
+      <form method="post">
+        {{ form.hidden_tag() }}
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.plan_code.id }}">{{ form.plan_code.label.text }}</label>
+          {{ form.plan_code(class_='form-select') }}
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.status.id }}">{{ form.status.label.text }}</label>
+          {{ form.status(class_='form-select') }}
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.days.id }}">{{ form.days.label.text }}</label>
+          {{ form.days(class_='form-control', placeholder='Leave blank to keep the current date') }}
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="{{ form.reason.id }}">{{ form.reason.label.text }}</label>
+          {{ form.reason(class_='form-control', placeholder='e.g. comped pilot customer') }}
+          {% for error in form.reason.errors %}
+          <div class="text-danger small mt-1">{{ error }}</div>
+          {% endfor %}
+        </div>
+        {{ form.submit(class_='btn btn-success w-100') }}
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock %}

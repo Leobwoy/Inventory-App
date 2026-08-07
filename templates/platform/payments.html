@@ -1,0 +1,79 @@
+{% extends 'platform/base.html' %}
+{% block title %}Payments | TrackTrack Console{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+  <h1 class="h4 mb-0">Payments</h1>
+  <div>
+    {% for option in ['pending', 'paid', 'rejected', 'all'] %}
+    <a href="{{ url_for('platform.payments', state=option) }}"
+       class="btn btn-sm {{ 'btn-success' if state == option else 'btn-outline-light' }}">
+      {{ option|title }}
+    </a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if transactions %}
+{% for payment in transactions %}
+<div class="panel">
+  <div class="d-flex justify-content-between flex-wrap gap-3">
+    <div>
+      <a href="{{ url_for('platform.business_detail', business_id=payment.business_id) }}"
+         class="fs-5 fw-bold">
+        {% if payment.business_id in businesses %}{{ businesses[payment.business_id].name }}
+        {% else %}Business #{{ payment.business_id }}{% endif %}
+      </a>
+      <div class="muted small">Claimed {{ payment.created_at.strftime('%d %b %Y, %H:%M') }}</div>
+      <div class="mt-2 muted small">Transaction ID</div>
+      <div class="font-monospace">{{ payment.provider_ref }}</div>
+      <div class="muted small mt-2">
+        {{ payment.plan.name if payment.plan else 'Plan not recorded' }} &middot;
+        {{ payment.period_start }} &rarr; {{ payment.period_end }}
+      </div>
+    </div>
+    <div class="text-end">
+      <div class="fs-3 fw-bold text-success">&#8373;{{ '%.2f'|format(payment.amount_ghs) }}</div>
+      {% if payment.status == 'pending' %}
+      <span class="badge bg-warning text-dark">Awaiting confirmation</span>
+      {% elif payment.status == 'paid' %}
+      <span class="badge bg-success">Confirmed</span>
+      {% else %}
+      <span class="badge bg-danger">{{ payment.status|title }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if payment.status == 'pending' %}
+  <hr style="border-color: var(--console-line);">
+  <p class="muted small">
+    Check this transaction ID against the mobile money statement first. A
+    reference typed into a form is a claim, not a payment.
+  </p>
+  <div class="row g-2">
+    <div class="col-md-6">
+      <form method="post" action="{{ url_for('platform.act_on_payment', transaction_id=payment.id, action='confirm') }}">
+        {{ form.hidden_tag() }}
+        <div class="input-group">
+          {{ form.note(class_='form-control', rows=1, placeholder='Note (optional)') }}
+          <button type="submit" class="btn btn-success">Confirm</button>
+        </div>
+      </form>
+    </div>
+    <div class="col-md-6">
+      <form method="post" action="{{ url_for('platform.act_on_payment', transaction_id=payment.id, action='reject') }}">
+        {{ form.hidden_tag() }}
+        <div class="input-group">
+          {{ form.note(class_='form-control', rows=1, placeholder='Reason for rejecting') }}
+          <button type="submit" class="btn btn-outline-danger">Reject</button>
+        </div>
+      </form>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<div class="panel muted text-center py-5">Nothing here.</div>
+{% endif %}
+{% endblock %}

@@ -26,7 +26,11 @@ PASSWORD = 'Str0ngPass!23'
 
 # Truncated between tests. Order is irrelevant with CASCADE, but role, permission
 # and role_permission are deliberately absent: they are seeded reference data.
+# Every table holding rows a test creates. A new table missing from this list
+# leaks between tests, and the failure lands in whichever test happens to run
+# second - not in the one that wrote the row.
 DATA_TABLES = [
+    'platform_admin',
     'payment_transaction', 'subscription',
     'user_permission', 'audit_log', 'sale_item', 'sale', 'stock_batch',
     'purchase_order_item', 'purchase_order', 'purchase', 'product',

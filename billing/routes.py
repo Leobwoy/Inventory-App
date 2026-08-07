@@ -7,27 +7,16 @@ button would let a business switch on its own paid plan.
 """
 from decimal import Decimal
 
-from flask import (abort, current_app, flash, redirect, render_template,
-                   request, url_for)
+from flask import current_app, flash, redirect, render_template, url_for
 from flask_login import current_user, login_required
 
 from auth.decorators import permission_required
 from billing import billing_bp, providers
-from billing.forms import ConfirmPaymentForm, MomoPaymentForm, RejectPaymentForm
+from billing.forms import MomoPaymentForm
 from billing.models import PaymentTransaction, Plan, Subscription
 from extensions import db
 from services import billing as billing_service
 from services import limits
-
-
-def _platform_admin_only():
-    """404, not 403.
-
-    A 403 confirms the page exists and that someone else may use it. There is
-    nothing to gain from telling a tenant that.
-    """
-    if not providers.is_platform_admin(current_user):
-        abort(404)
 
 
 @billing_bp.route('/')
@@ -124,73 +113,3 @@ def upgrade(plan_code):
 
     return render_template('billing/upgrade.html', plan=plan, form=form,
                            instructions=provider.instructions(plan, form.cycle.data or 'monthly'))
-
-
-# --- platform side ----------------------------------------------------------
-
-@billing_bp.route('/admin/payments')
-@login_required
-def admin_payments():
-    """Claimed payments waiting to be checked against the wallet statement."""
-    _platform_admin_only()
-    pending = billing_service.pending_payments()
-    businesses = {}
-    if pending:
-        from auth.models import Business
-        ids = {t.business_id for t in pending}
-        businesses = {b.id: b for b in Business.query.filter(Business.id.in_(ids)).all()}
-
-    return render_template('billing/admin_payments.html',
-                           pending=pending, businesses=businesses,
-                           confirm_form=ConfirmPaymentForm(),
-                           reject_form=RejectPaymentForm())
-
-
-@billing_bp.route('/admin/payments/<int:transaction_id>/confirm', methods=['POST'])
-@login_required
-def confirm_payment(transaction_id):
-    _platform_admin_only()
-    form = ConfirmPaymentForm()
-    transaction = PaymentTransaction.query.get_or_404(transaction_id)
-
-    if not form.validate_on_submit():
-        flash('Could not confirm that payment.', 'danger')
-        return redirect(url_for('billing.admin_payments'))
-
-    try:
-        changed = billing_service.confirm(transaction, confirmed_by=current_user.email,
-                                          note=form.note.data or None)
-        db.session.commit()
-    except Exception as error:
-        db.session.rollback()
-        current_app.logger.exception('confirming a payment failed')
-        flash(f'Could not confirm that payment: {error}', 'danger')
-        return redirect(url_for('billing.admin_payments'))
-
-    flash('Payment confirmed and the plan is active.' if changed
-          else 'That payment was already confirmed.', 'success')
-    return redirect(url_for('billing.admin_payments'))
-
-
-@billing_bp.route('/admin/payments/<int:transaction_id>/reject', methods=['POST'])
-@login_required
-def reject_payment(transaction_id):
-    _platform_admin_only()
-    form = RejectPaymentForm()
-    transaction = PaymentTransaction.query.get_or_404(transaction_id)
-
-    if not form.validate_on_submit():
-        flash('A reason is required to reject a payment.', 'danger')
-        return redirect(url_for('billing.admin_payments'))
-
-    try:
-        billing_service.reject(transaction, rejected_by=current_user.email,
-                               reason=form.reason.data.strip())
-        db.session.commit()
-    except Exception as error:
-        db.session.rollback()
-        flash(f'Could not reject that payment: {error}', 'danger')
-        return redirect(url_for('billing.admin_payments'))
-
-    flash('Payment rejected. The claim is kept on record.', 'info')
-    return redirect(url_for('billing.admin_payments'))
