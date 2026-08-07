@@ -1,0 +1,71 @@
+{% extends 'base.html' %}
+{% block title %}Payments to confirm | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header"><h2>Payments to confirm</h2></div>
+
+<div class="glass-card">
+  <p class="text-muted small">
+    Each of these is a customer saying they sent money. Check the transaction ID
+    against the mobile money statement before confirming &mdash; a reference typed
+    into a form is a claim, not a payment.
+  </p>
+
+  {% if pending %}
+  {% for payment in pending %}
+  <div class="glass-card mb-3">
+    <div class="d-flex justify-content-between flex-wrap gap-3">
+      <div>
+        <div class="fw-medium fs-5">
+          {% if payment.business_id in businesses %}{{ businesses[payment.business_id].name }}
+          {% else %}Business #{{ payment.business_id }}{% endif %}
+        </div>
+        <div class="text-muted small">Claimed {{ payment.created_at.strftime('%d %b %Y, %H:%M') }}</div>
+        <div class="mt-2">
+          <span class="text-muted small">Transaction ID</span><br>
+          <span class="font-monospace">{{ payment.provider_ref }}</span>
+        </div>
+        <div class="text-muted small mt-2">
+          Covers {{ payment.period_start }} &rarr; {{ payment.period_end }}
+        </div>
+      </div>
+      <div class="text-end">
+        <div class="fs-3 fw-bold text-success">&#8373;{{ '%.2f'|format(payment.amount_ghs) }}</div>
+      </div>
+    </div>
+
+    <hr>
+    <div class="row g-3">
+      <div class="col-md-6">
+        {# POST with a CSRF token, not a link: confirming grants a paid plan, and
+           a GET would let it happen by someone merely following a URL. #}
+        <form method="post" action="{{ url_for('billing.confirm_payment', transaction_id=payment.id) }}">
+          {{ confirm_form.hidden_tag() }}
+          <div class="input-group">
+            {{ confirm_form.note(class_='form-control', rows=1, placeholder='Note (optional)') }}
+            <button type="submit" class="btn btn-success">
+              <i class="bi bi-check2 me-1"></i> Confirm
+            </button>
+          </div>
+        </form>
+      </div>
+      <div class="col-md-6">
+        <form method="post" action="{{ url_for('billing.reject_payment', transaction_id=payment.id) }}">
+          {{ reject_form.hidden_tag() }}
+          <div class="input-group">
+            {{ reject_form.reason(class_='form-control', placeholder='Reason for rejecting') }}
+            <button type="submit" class="btn btn-outline-danger">Reject</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div class="text-center py-5 text-muted">
+    <i class="bi bi-check2-circle fs-1 d-block mb-3"></i>
+    Nothing waiting.
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

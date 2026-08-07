@@ -115,6 +115,9 @@ def create_app():
     from api import api_bp
     app.register_blueprint(api_bp)
 
+    from billing import billing_bp
+    app.register_blueprint(billing_bp)
+
     from auth.cli import create_owner_command, reconcile_stock_command
     app.cli.add_command(create_owner_command)
     app.cli.add_command(reconcile_stock_command)
@@ -134,7 +137,10 @@ def create_app():
         def has_feature(code):
             return limits.has_feature(code)
 
-        return {'has_feature': has_feature, 'uom': uom}
+        from billing import providers
+
+        return {'has_feature': has_feature, 'uom': uom,
+                'is_platform_admin': providers.is_platform_admin(current_user)}
 
     @app.route('/sw.js')
     def service_worker():

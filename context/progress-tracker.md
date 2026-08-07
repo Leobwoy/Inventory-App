@@ -217,8 +217,18 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   brand until Friday", or a customer price tier. That is a distinct feature: it needs a
   price-rule model, a date window, and a resolution order when rules overlap. Raised by
   the user; not scoped or scheduled yet.
-- **Paystack merchant registration.** Requires a registered Ghanaian business and a
-  corporate bank account. Long lead time; gates Stage 2B regardless of code readiness.
+- **Paystack deferred indefinitely (B5).** It needs a registered Ghanaian business and a
+  corporate bank account, and registering costs money the project does not have. Switching
+  aggregator does not help — Hubtel, ExpressPay, theTeller, Flutterwave and MTN's own API
+  all require the same, because Bank of Ghana KYC rules govern merchant settlement rather
+  than the companies being awkward.
+  **Collection is manual mobile money instead**, and the gap is smaller than it looks:
+  mobile money in Ghana has no reusable authorisation, so even a finished Paystack
+  integration needs the customer to actively pay again every month. Automation only changes
+  *who presses confirm* — worth 1.95% eventually, not worth blocking every customer on a
+  company registration today. Register when TrackTrack has paid for it.
+  Taking business payments into a personal wallet is a bridge, not a destination: wallets
+  have monthly ceilings and mixing business with personal money is unpleasant at tax time.
 - **Deployed 2026-08-05** to Render + Neon (Frankfurt). `DEPLOY.md` has the walkthrough.
   Production config:
   `SECRET_KEY` is now **required** in production (it silently fell back to a default
