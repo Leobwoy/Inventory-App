@@ -8,9 +8,8 @@ Update this file after every meaningful implementation change.
 
 ## Current Goal
 
-- **Stage 2.4 — PWA and offline sales.** See the approved plan for the full unit
-  breakdown. Sub-units in order: 2.4a self-host assets, 2.4b installable shell,
-  2.4c offline sale capture, 2.4d sync and conflict handling.
+- **Stage 2.5 — Notification centre and expiry alerts.** Stage 2.4 is complete (a–d) and
+  the app is **deployed and live** at `https://inventory-app-svrn.onrender.com`.
 
 ## Completed
 
@@ -202,13 +201,12 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
 
 ## Next Up
 
-1. **Stage 2.4** — PWA and offline (current goal above)
-2. **Stage 2.5** — Notification centre and expiry alerts (expiry opt-in per item group)
-3. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
-4. **Stage 2.7** — Smart reorder
-5. **Stage 2.8** — Dashboard rebuild
-6. **Stage 2B** — Paystack billing flow
-7. **Stage 3** — Interface revamp (light theme, self-hosted assets, barcode sale entry,
+1. **Stage 2.5** — Notification centre and expiry alerts (expiry opt-in per item group)
+2. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
+3. **Stage 2.7** — Smart reorder
+4. **Stage 2.8** — Dashboard rebuild
+5. **Stage 2B** — Paystack billing flow
+6. **Stage 3** — Interface revamp (light theme, self-hosted assets, barcode sale entry,
    branded invoices)
 
 ## Open Questions
@@ -221,7 +219,8 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   the user; not scoped or scheduled yet.
 - **Paystack merchant registration.** Requires a registered Ghanaian business and a
   corporate bank account. Long lead time; gates Stage 2B regardless of code readiness.
-- **Deployment.** `DEPLOY.md` has the full walkthrough. Production config is ready:
+- **Deployed 2026-08-05** to Render + Neon (Frankfurt). `DEPLOY.md` has the walkthrough.
+  Production config:
   `SECRET_KEY` is now **required** in production (it silently fell back to a default
   written in this repository, which anyone reading the code could use to forge a session),
   secure cookie flags are set, `ProxyFix` handles Koyeb's TLS termination, and the engine

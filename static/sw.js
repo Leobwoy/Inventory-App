@@ -20,8 +20,10 @@
  * only possible because Stage 2.4a moved them off the CDN: a worker cannot
  * reliably cache another origin's responses.
  *
- * Offline *recording* of sales is Stage 2.4c and is not here yet. This worker
- * makes the app installable and survivable, not yet usable, without a signal.
+ * Offline *recording* of sales is static/js/offline-sales.js, which queues them
+ * in IndexedDB and syncs through /api/v1/sales. This worker's job is narrower:
+ * make the app installable, and make losing the signal produce an explanation
+ * rather than a browser error.
  */
 
 // Bump to invalidate everything. Old caches are deleted on activate.
