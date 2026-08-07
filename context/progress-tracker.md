@@ -79,7 +79,7 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   name, address, contact, logo, expiry alert window and the discount ceiling. This is what
   makes the Stage 1.5 discount system reachable: `max_discount_percent` defaults to 0, so
   until now discounting was finished, tested code that no business could switch on.
-  Logo bytes live in the row, not on disk — Koyeb rebuilds the container on every deploy,
+  Logo bytes live in the row, not on disk — the host rebuilds the container on every deploy,
   and there is no object store. `logo_path` dropped; nothing ever wrote to it.
 - **F-35 Discounts are visible, not just enforced.** `SaleItem.list_price` records what the
   product listed for on the day, so a discount survives later repricing — it cannot be
@@ -195,9 +195,7 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
 
 ## In Progress
 
-- **Deploy to Neon + Koyeb (Stage 0.4).** Nothing else is blocked on code. A PWA needs
-  HTTPS to install, so this is what turns the offline work into something a pilot user can
-  actually put on a phone.
+- Nothing. Stage 2.4 and the manual mobile money billing flow are committed.
 
 ## Next Up
 
@@ -233,7 +231,7 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   Production config:
   `SECRET_KEY` is now **required** in production (it silently fell back to a default
   written in this repository, which anyone reading the code could use to forge a session),
-  secure cookie flags are set, `ProxyFix` handles Koyeb's TLS termination, and the engine
+  secure cookie flags are set, `ProxyFix` handles Render's TLS termination, and the engine
   pre-pings because Neon drops idle connections.
 - **Free-tier retention.** What happens to a business sitting on Kiosk for two years with
   500 deactivated products? A retention question, tied to the Ghana Data Protection Act
@@ -249,8 +247,8 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   after 15 min (~1 min cold start); $7/month removes it. See `DEPLOY.md`.
 - **Dependency pinning.** Now bounded (floor excludes the Werkzeug CVEs, ceiling stops an
   unannounced major). Exact pins with a lockfile remain the right end state.
-- **Free-tier cold start.** Both Neon and Koyeb idle out; the first request after a quiet
-  spell takes 10-30s. Fine for a demo you warn people about, and the first thing worth
+- **Free-tier cold start.** Both Neon and Render idle out; the first request after a quiet
+  spell takes up to a minute on Render. Fine for a demo you warn people about, and the first thing worth
   paying to remove before real pilot users. See `DEPLOY.md`.
 
 ## Architecture Decisions
@@ -261,7 +259,7 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
 | D2 | Credit ledger moved from roadmap Phase 2 into Phase 1 | Ghanaian wholesale runs on trade credit; "who owes me what" outranks supplier analytics |
 | D3 | Offline is a Phase 1 requirement | Absent from the original roadmap; patchy connectivity and metered data are the defining market constraints |
 | D4 | No Viewer role; authorization is per user | `UserPermission` is the single source of truth, roles are presets the Owner then edits per person |
-| D5 | Koyeb + Neon, Frankfurt | Free with no expiry clock. Render's free Postgres self-deletes after 30 days. AWS has no free Postgres or persistent server and new accounts close after 6 months |
+| D5 | Render + Neon, Frankfurt | Koyeb was the original choice and was acquired by Mistral, leaving no way to create a service. Render's *free Postgres* self-deletes after 30 days, which is why it lost first time — irrelevant now, because Neon holds the data and Render only runs the container. AWS has no free Postgres or persistent server and new accounts close after 6 months |
 | D6 | Supplier scorecards sequenced last | They need 20–30 completed POs before they display anything |
 | D7 | Onboarding friction is a first-class problem | 12+ required fields per product is the most likely cause of real-world abandonment |
 | — | `User.email` is **globally** unique | Built per-tenant first, then reverted. An email must identify a *person*, or every recovery flow inherits the ambiguity — and with shared family or `info@` addresses, a reset scoped to an email hands one person another's credentials. If multi-business users become real, the answer is a `Membership` table or tenant-slug login, not per-tenant emails |

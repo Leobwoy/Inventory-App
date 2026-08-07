@@ -93,6 +93,12 @@ class PaymentTransaction(db.Model):
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     subscription_id = db.Column(db.Integer, db.ForeignKey('subscription.id'))
 
+    # What was bought. Stored rather than inferred from the amount: prices
+    # change, and a payment confirmed after a price rise would otherwise match
+    # no plan at all - or the wrong one, if two plans ever share a price.
+    plan_id = db.Column(db.Integer, db.ForeignKey('plan.id'))
+    plan = db.relationship('Plan')
+
     provider = db.Column(db.String(30), nullable=False)
     provider_ref = db.Column(db.String(120), nullable=False, unique=True)
     amount_ghs = db.Column(db.Numeric(10, 2), nullable=False)

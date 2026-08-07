@@ -80,6 +80,20 @@ def upgrade(plan_code):
     if form.validate_on_submit():
         reference = form.reference.data.strip()
 
+        # Length runs before the strip, so "  ab  " passes a four-character
+        # minimum and becomes two. Check what will actually be stored.
+        if len(reference) < 4:
+            form.reference.errors.append('That does not look like a transaction ID.')
+            return render_template('billing/upgrade.html', plan=plan, form=form,
+                                   instructions=provider.instructions(plan, form.cycle.data))
+
+        # A cycle the plan has no price for cannot be paid for. The radio hides
+        # it, but hiding a control is not enforcing anything.
+        if billing_service.price_of(plan, form.cycle.data) is None:
+            form.cycle.errors.append('That billing cycle is not available for this plan.')
+            return render_template('billing/upgrade.html', plan=plan, form=form,
+                                   instructions=provider.instructions(plan, 'monthly'))
+
         # provider_ref is unique platform-wide, so the same transaction ID
         # cannot buy two subscriptions - including for two different businesses.
         if PaymentTransaction.query.filter_by(provider_ref=reference).first():

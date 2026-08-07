@@ -42,6 +42,7 @@ def start_payment(business_id, plan, cycle, provider_code, reference):
     transaction = PaymentTransaction(
         business_id=business_id,
         subscription_id=subscription.id if subscription else None,
+        plan_id=plan.id,
         provider=provider_code,
         provider_ref=reference,
         amount_ghs=Decimal(amount),
@@ -73,13 +74,34 @@ def confirm(transaction, confirmed_by, note=None):
     Idempotent: confirming twice does not buy a second month. The guard matters
     because the obvious human error here is double-clicking, and the obvious
     machine one is a webhook delivered twice.
+
+    Only a *pending* transaction may be confirmed. Checking for 'paid' alone
+    would leave a rejected claim confirmable - so refusing a fraudulent payment
+    and then confirming it by accident would grant the plan anyway.
     """
-    if transaction.status == 'paid':
+    if transaction.status != 'pending':
         return False
 
-    subscription = Subscription.query.filter_by(business_id=transaction.business_id).first()
+    # Lock the subscription before reading paid_through, because what follows is
+    # read-then-write on a shared row (invariant 8). Two confirmations landing
+    # together would otherwise both extend from the same starting point, and one
+    # customer's paid month would vanish.
+    subscription = (Subscription.query
+                    .filter_by(business_id=transaction.business_id)
+                    .with_for_update()
+                    .first())
     if subscription is None:
         raise ValueError('That business has no subscription to activate.')
+
+    # Re-read the transaction under a lock and check again: between the caller's
+    # read and this line another request may have confirmed it.
+    locked = (PaymentTransaction.query
+              .filter_by(id=transaction.id)
+              .with_for_update()
+              .one())
+    if locked.status != 'pending':
+        return False
+    transaction = locked
 
     plan = _plan_for(transaction)
     days = (transaction.period_end - transaction.period_start).days
@@ -120,11 +142,17 @@ def reject(transaction, rejected_by, reason):
 
 
 def _plan_for(transaction):
-    """The plan a transaction was raised against, matched on what it cost.
+    """The plan a transaction was raised against.
 
-    PaymentTransaction records the amount rather than the plan, so the plan is
-    recovered from the price and cycle the period length implies.
+    Read from the transaction, which records it. The fallback matches on price
+    and exists only for rows written before plan_id did - a lookup that breaks
+    the moment a price changes, which is exactly why the column was added.
     """
+    if transaction.plan_id:
+        plan = Plan.query.get(transaction.plan_id)
+        if plan:
+            return plan
+
     days = (transaction.period_end - transaction.period_start).days
     annual = days > 60
     for plan in Plan.query.filter_by(is_public=True).all():

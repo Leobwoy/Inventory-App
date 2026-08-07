@@ -24,7 +24,9 @@
       <hr>
       <div class="d-flex justify-content-between align-items-center">
         <div class="text-muted">Amount</div>
-        <div class="fs-4 fw-bold text-success">
+        <div class="fs-4 fw-bold text-success" id="amount-due"
+             data-monthly="{{ '%.2f'|format(plan.price_monthly_ghs) if plan.price_monthly_ghs else '' }}"
+             data-annual="{{ '%.2f'|format(plan.price_annual_ghs) if plan.price_annual_ghs else '' }}">
           &#8373;{{ '%.2f'|format(instructions.amount) }}
         </div>
       </div>
@@ -44,7 +46,12 @@
         <div class="mb-3">
           <label class="form-label">{{ form.cycle.label.text }}</label>
           <div>
+            {# Only cycles this plan is actually priced for. Offering annual on
+               a plan with no annual price sends someone to pay an amount that
+               does not exist. #}
             {% for option in form.cycle %}
+            {% if (option.data == 'annual' and plan.price_annual_ghs)
+                  or (option.data == 'monthly' and plan.price_monthly_ghs) %}
             <div class="form-check form-check-inline">
               {{ option(class_='form-check-input') }}
               <label class="form-check-label" for="{{ option.id }}">
@@ -56,8 +63,12 @@
                 {% endif %}
               </label>
             </div>
+            {% endif %}
             {% endfor %}
           </div>
+          {% for error in form.cycle.errors %}
+          <div class="text-danger small mt-1">{{ error }}</div>
+          {% endfor %}
         </div>
 
         <div class="mb-3">
@@ -83,6 +94,23 @@
 
         {{ form.submit(class_='btn btn-primary w-100') }}
       </form>
+
+      <script>
+        // The amount on the left is what the customer is about to send from
+        // their phone. Leaving it on the monthly figure while Annual is
+        // selected is not a cosmetic bug - it is telling someone to send the
+        // wrong money.
+        (function () {
+          var due = document.getElementById('amount-due');
+          if (!due) { return; }
+          document.querySelectorAll('input[name="cycle"]').forEach(function (radio) {
+            radio.addEventListener('change', function () {
+              var price = due.dataset[radio.value];
+              if (price) { due.textContent = '₵' + price; }
+            });
+          });
+        })();
+      </script>
     </div>
   </div>
 </div>

@@ -15,6 +15,7 @@ What these tests protect is the boundary that makes it safe: a customer can
 """
 import datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -144,7 +145,10 @@ def test_an_annual_claim_covers_a_year(shop):
 
 def test_a_tenant_cannot_reach_the_confirmation_screen(shop):
     """A tenant Owner holds every permission inside their own business, so this
-    cannot be gated on a permission - they would simply grant it to themselves."""
+    cannot be gated on a permission - they would simply grant it to themselves.
+
+    404 rather than 403: a 403 confirms the page exists and that someone else
+    may use it, which is information a tenant has no use for."""
     client, _business_id = shop
     assert client.get('/billing/admin/payments').status_code == 404
 
@@ -160,13 +164,6 @@ def test_a_tenant_cannot_confirm_their_own_payment(shop):
     assert response.status_code == 404
     assert PaymentTransaction.query.one().status == 'pending'
     assert Subscription.query.filter_by(business_id=business_id).one().status == 'trialing'
-
-
-def test_the_screen_hides_rather_than_forbids(shop):
-    """404, not 403: a 403 confirms the page exists and that someone else may
-    use it, which is information a tenant has no use for."""
-    client, _business_id = shop
-    assert client.get('/billing/admin/payments').status_code == 404
 
 
 def test_no_platform_admins_configured_means_nobody_qualifies(shop, monkeypatch):
@@ -226,7 +223,7 @@ def test_paying_early_adds_time_rather_than_replacing_it(platform_admin):
                 data={'note': ''}, follow_redirects=True)
 
     extended = Subscription.query.filter_by(business_id=business_id).one().paid_through
-    assert extended > existing + datetime.timedelta(days=29)
+    assert extended >= existing + datetime.timedelta(days=billing_service.MONTH_DAYS)
 
 
 def test_a_confirmation_is_audited(platform_admin):
@@ -291,3 +288,190 @@ def test_the_manual_provider_never_confirms_on_its_own():
     assert confirmed is False
     assert provider.automatic is False
     assert 'confirmation' in message.lower()
+
+
+def test_the_platform_admin_sees_the_link_and_a_tenant_does_not(shop, monkeypatch):
+    """How the one platform admin actually reaches the screen: they log in like
+    anyone else, and the link appears because their email is in the variable."""
+    client, business_id = shop
+    from auth.models import User
+    email = User.query.filter_by(business_id=business_id).first().email
+
+    monkeypatch.delenv('PLATFORM_ADMIN_EMAILS', raising=False)
+    assert '/billing/admin/payments' not in client.get('/').get_data(as_text=True)
+
+    monkeypatch.setenv('PLATFORM_ADMIN_EMAILS', email)
+    body = client.get('/').get_data(as_text=True)
+    assert '/billing/admin/payments' in body
+    assert 'Confirm payments' in body
+    assert client.get('/billing/admin/payments').status_code == 200
+
+
+def test_the_email_match_ignores_case_and_spacing(shop, monkeypatch):
+    """A comma-separated list typed into a hosting dashboard will have stray
+    spaces and capitals in it, and failing closed on that would lock the only
+    platform admin out of their own confirmation screen."""
+    client, business_id = shop
+    from auth.models import User
+    email = User.query.filter_by(business_id=business_id).first().email
+
+    monkeypatch.setenv('PLATFORM_ADMIN_EMAILS', f'  {email.upper()} , someone@else.com ')
+    assert client.get('/billing/admin/payments').status_code == 200
+
+
+# --- what the review round found ---------------------------------------------
+
+def test_the_plan_is_read_from_the_transaction_not_from_todays_price(platform_admin):
+    """confirm() used to recover the plan by matching the recorded amount against
+    current prices. That breaks the first time a price moves: a customer who paid
+    GHS 199 for Depot and is confirmed after Depot rises to GHS 249 matches no
+    plan at all, and gets an error instead of the thing they paid for."""
+    client, business_id = platform_admin
+    claim(client)
+    transaction = PaymentTransaction.query.one()
+    assert transaction.plan_id is not None
+
+    # The price list moves between claiming and confirming.
+    depot = Plan.query.filter_by(code='standard').one()
+    depot.price_monthly_ghs = Decimal('249.00')
+    db.session.commit()
+
+    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
+                data={'note': ''}, follow_redirects=True)
+
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    assert subscription.plan.code == 'standard'
+    assert subscription.status == 'active'
+    # Charged what was agreed, not what the plan costs now.
+    assert PaymentTransaction.query.one().amount_ghs == Decimal('199.00')
+
+
+def test_a_rejected_payment_cannot_then_be_confirmed(platform_admin):
+    """Guarding only against 'paid' left a rejected claim confirmable - so
+    refusing a fraudulent payment and then confirming it by mistake would grant
+    the plan anyway."""
+    client, business_id = platform_admin
+    claim(client)
+    transaction = PaymentTransaction.query.one()
+
+    client.post(f'/billing/admin/payments/{transaction.id}/reject',
+                data={'reason': 'no such transaction'}, follow_redirects=True)
+    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
+                data={'note': ''}, follow_redirects=True)
+
+    assert PaymentTransaction.query.one().status == 'rejected'
+    assert Subscription.query.filter_by(business_id=business_id).one().status == 'trialing'
+
+
+def test_a_reference_that_is_mostly_spaces_is_refused(shop):
+    """Length runs before the strip, so '  ab  ' satisfies a four-character
+    minimum and is stored as two."""
+    client, _business_id = shop
+    response = client.post('/billing/upgrade/standard', data={
+        'cycle': 'monthly', 'reference': '  ab  ', 'payer_note': '',
+    }, follow_redirects=True)
+
+    assert 'does not look like a transaction ID' in response.get_data(as_text=True)
+    assert PaymentTransaction.query.count() == 0
+
+
+def test_a_cycle_the_plan_has_no_price_for_is_refused(shop):
+    """The radio hides it, but hiding a control is not enforcing anything."""
+    client, _business_id = shop
+    depot = Plan.query.filter_by(code='standard').one()
+    depot.price_annual_ghs = None
+    db.session.commit()
+
+    response = client.post('/billing/upgrade/standard', data={
+        'cycle': 'annual', 'reference': 'MP-NO-ANNUAL', 'payer_note': '',
+    }, follow_redirects=True)
+
+    assert 'not available for this plan' in response.get_data(as_text=True)
+    assert PaymentTransaction.query.count() == 0
+
+
+def test_the_current_plan_can_be_renewed(platform_admin):
+    """Mobile money cannot charge anyone automatically, so renewing is the most
+    common thing a paying customer comes to this page to do. Hiding the button
+    on the plan they are already on hid exactly that."""
+    client, business_id = platform_admin
+    claim(client)
+    transaction = PaymentTransaction.query.one()
+    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
+                data={'note': ''}, follow_redirects=True)
+
+    body = client.get('/billing/').get_data(as_text=True)
+    assert 'Renew' in body
+    assert url_for_upgrade('standard') in body
+
+
+def url_for_upgrade(code):
+    return f'/billing/upgrade/{code}'
+
+
+def test_the_upgrade_page_carries_both_prices_for_the_amount_to_follow():
+    """The amount shown is what the customer is about to send from their phone.
+    Leaving it on the monthly figure while Annual is selected is not cosmetic -
+    it tells someone to send the wrong money."""
+    source = (Path(__file__).resolve().parent.parent
+              / 'templates' / 'billing' / 'upgrade.html').read_text(encoding='utf-8')
+
+    assert 'data-monthly=' in source and 'data-annual=' in source
+    assert "input[name=\"cycle\"]" in source
+    assert 'due.dataset[radio.value]' in source
+
+
+def test_a_stale_in_memory_transaction_cannot_be_confirmed_twice(platform_admin, app):
+    """Two independent sessions, which is the realistic version of the race.
+
+    A second request loads the transaction, someone confirms it from the first,
+    and the second request then acts on an object that says 'pending' while the
+    row no longer does. confirm() re-reads it under a lock for exactly this, so
+    the second attempt must find it settled and refuse rather than granting a
+    second month.
+    """
+    from sqlalchemy.orm import Session
+
+    client, business_id = platform_admin
+    claim(client)
+    transaction_id = PaymentTransaction.query.one().id
+
+    first = Session(bind=db.engine)
+    second = Session(bind=db.engine)
+    try:
+        # Both sessions read the row while it is still pending.
+        stale = second.get(PaymentTransaction, transaction_id)
+        assert stale.status == 'pending'
+
+        # The first confirms and commits.
+        client.post(f'/billing/admin/payments/{transaction_id}/confirm',
+                    data={'note': ''}, follow_redirects=True)
+        after_first = Subscription.query.filter_by(business_id=business_id).one().paid_through
+
+        # The second acts on what it read, which is now out of date.
+        db.session.expire_all()
+        again = billing_service.confirm(
+            PaymentTransaction.query.get(transaction_id),
+            confirmed_by='second-request')
+        db.session.commit()
+
+        assert again is False, 'a settled transaction was confirmed a second time'
+        assert Subscription.query.filter_by(business_id=business_id).one().paid_through == after_first
+    finally:
+        first.close()
+        second.close()
+
+
+def test_confirming_takes_a_lock_before_reading_the_period():
+    """Extending paid_through is read-then-write on a shared row (invariant 8).
+    Without the lock two confirmations landing together both extend from the
+    same starting point, and one customer's paid month disappears."""
+    import re
+    source = (Path(__file__).resolve().parent.parent
+              / 'services' / 'billing.py').read_text(encoding='utf-8')
+    body = source.split('def confirm(')[1].split('def reject(')[0]
+    body = re.sub(r'#.*', '', body)
+
+    assert body.count('with_for_update()') == 2, (
+        'both the subscription and the transaction must be locked')
+    assert body.index('with_for_update()') < body.index('_extend_from(subscription)')

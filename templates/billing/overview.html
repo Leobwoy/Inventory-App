@@ -77,9 +77,15 @@
           <td data-label="Staff" class="text-center">{{ option.max_users or 'Unlimited' }}</td>
           <td data-label="Products" class="text-center">{{ option.max_products or 'Unlimited' }}</td>
           <td data-label="" class="cell-actions text-end">
-            {% if option.price_monthly_ghs and (not plan or option.id != plan.id) %}
+            {# The current plan gets Renew, not nothing. Mobile money cannot
+               charge anyone automatically, so renewing is the single most
+               common thing a paying customer comes here to do - hiding the
+               button on the plan they are already on hides exactly that. #}
+            {% if option.price_monthly_ghs %}
             <a href="{{ url_for('billing.upgrade', plan_code=option.code) }}"
-               class="btn btn-sm btn-primary">Choose</a>
+               class="btn btn-sm {{ 'btn-outline-primary' if plan and option.id == plan.id else 'btn-primary' }}">
+              {{ 'Renew' if plan and option.id == plan.id else 'Choose' }}
+            </a>
             {% endif %}
           </td>
         </tr>
