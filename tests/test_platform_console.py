@@ -308,3 +308,22 @@ def test_the_cli_will_not_settle_a_payment_twice(app, tenant):
     again = runner.invoke(confirm_payment_command, ['MP-CLI-3'], input='y\n')
 
     assert 'already paid' in again.output
+
+
+def test_the_cli_refuses_identity_fields_the_columns_cannot_hold(app):
+    """email is 120 characters and name is 100. Letting Postgres be the one to
+    complain produces a StringDataRightTruncation traceback rather than a
+    sentence anyone can act on."""
+    from platform_console.cli import create_platform_admin_command
+
+    runner = app.test_cli_runner()
+    long_email = runner.invoke(create_platform_admin_command,
+                               ['--email', 'a' * 120 + '@example.com', '--name', 'X',
+                                '--password', 'a-long-enough-password'])
+    long_name = runner.invoke(create_platform_admin_command,
+                              ['--email', 'ok@example.com', '--name', 'N' * 101,
+                               '--password', 'a-long-enough-password'])
+
+    assert 'too long' in long_email.output
+    assert 'too long' in long_name.output
+    assert PlatformAdmin.query.count() == 0

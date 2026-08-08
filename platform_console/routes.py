@@ -170,8 +170,10 @@ def act_on_payment(transaction_id, action):
             if not reason:
                 flash('A reason is required to reject a payment.', 'danger')
                 return redirect(url_for('platform.payments'))
-            billing_service.reject(transaction, rejected_by=admin.email, reason=reason)
-            message = 'Payment rejected. The claim is kept on record.'
+            changed = billing_service.reject(transaction, rejected_by=admin.email,
+                                             reason=reason)
+            message = ('Payment rejected. The claim is kept on record.' if changed
+                       else 'That payment was already settled.')
         else:
             flash('Unknown action.', 'danger')
             return redirect(url_for('platform.payments'))

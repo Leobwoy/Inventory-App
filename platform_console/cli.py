@@ -35,6 +35,12 @@ def create_platform_admin_command(email, name, password):
         raise click.ClickException(f'{email!r} does not look like an email address.')
     if not name:
         raise click.ClickException('A name is required; it is shown in the console header.')
+    # The columns are 120 and 100. Letting Postgres be the one to complain
+    # produces a StringDataRightTruncation traceback rather than a sentence.
+    if len(email) > 120:
+        raise click.ClickException('That email is too long (120 characters maximum).')
+    if len(name) > 100:
+        raise click.ClickException('That name is too long (100 characters maximum).')
     if PlatformAdmin.query.filter_by(email=email).first():
         raise click.ClickException(f'{email} already has a console account.')
     if len(password) < 12:
@@ -147,6 +153,9 @@ def reject_payment_command(reference, reason, by):
     click.echo(f'GHS {transaction.amount_ghs} claimed with reference {reference}')
     click.confirm('Reject this payment?', abort=True)
 
-    billing_service.reject(transaction, rejected_by=by, reason=reason)
+    # The pre-check above is for the reader; this is the one that decides,
+    # because the row can change between the two.
+    if not billing_service.reject(transaction, rejected_by=by, reason=reason):
+        raise click.ClickException('That payment was settled before this could run.')
     db.session.commit()
     click.echo('Rejected. The claim is kept on record.')

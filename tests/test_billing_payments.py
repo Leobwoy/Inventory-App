@@ -377,14 +377,18 @@ def test_the_upgrade_page_carries_both_prices_for_the_amount_to_follow():
     assert 'due.dataset[radio.value]' in source
 
 
-def test_a_stale_in_memory_transaction_cannot_be_confirmed_twice(shop, console, app):
-    """Two independent sessions, which is the realistic version of the race.
+def test_a_stale_in_memory_transaction_cannot_be_confirmed_twice(shop, console):
+    """The realistic version of the race, and the only thing that exercises the
+    re-read under lock.
 
-    A second request loads the transaction, someone confirms it from the first,
-    and the second request then acts on an object that says 'pending' while the
-    row no longer does. confirm() re-reads it under a lock for exactly this, so
-    the second attempt must find it settled and refuse rather than granting a
-    second month.
+    A request loads the transaction while it is pending, someone confirms it
+    elsewhere, and the request then acts on an object that still *believes* it
+    is pending. The entry guard reads that stale copy and lets it through; only
+    the locked re-read inside confirm() catches it.
+
+    The previous version of this test reloaded the row through db.session after
+    expire_all(), so the object was not stale at all - the entry guard caught it
+    and the lock was never reached.
     """
     from sqlalchemy.orm import Session
 
@@ -392,30 +396,28 @@ def test_a_stale_in_memory_transaction_cannot_be_confirmed_twice(shop, console, 
     claim(client)
     transaction_id = PaymentTransaction.query.one().id
 
-    first = Session(bind=db.engine)
-    second = Session(bind=db.engine)
+    # A second session, so this copy is not touched by anything the first does.
+    other = Session(bind=db.engine)
     try:
-        # Both sessions read the row while it is still pending.
-        stale = second.get(PaymentTransaction, transaction_id)
+        stale = other.get(PaymentTransaction, transaction_id)
         assert stale.status == 'pending'
 
-        # The first confirms and commits.
+        # Confirmed and committed by someone else entirely.
         console.post(f'/platform/payments/{transaction_id}/confirm',
-                    data={'note': ''}, follow_redirects=True)
+                     data={'note': ''}, follow_redirects=True)
         after_first = Subscription.query.filter_by(business_id=business_id).one().paid_through
 
-        # The second acts on what it read, which is now out of date.
-        db.session.expire_all()
-        again = billing_service.confirm(
-            PaymentTransaction.query.get(transaction_id),
-            confirmed_by='second-request')
+        # The copy still says pending, which is the whole point.
+        assert stale.status == 'pending', 'the fixture stopped being stale'
+
+        again = billing_service.confirm(stale, confirmed_by='second-request')
         db.session.commit()
 
         assert again is False, 'a settled transaction was confirmed a second time'
         assert Subscription.query.filter_by(business_id=business_id).one().paid_through == after_first
+        assert PaymentTransaction.query.one().status == 'paid'
     finally:
-        first.close()
-        second.close()
+        other.close()
 
 
 def test_confirming_takes_a_lock_before_reading_the_period():
@@ -431,3 +433,50 @@ def test_confirming_takes_a_lock_before_reading_the_period():
     assert body.count('with_for_update()') == 2, (
         'both the subscription and the transaction must be locked')
     assert body.index('with_for_update()') < body.index('_extend_from(subscription)')
+
+
+def test_a_stale_transaction_cannot_be_rejected_after_it_was_confirmed(shop, console):
+    """Rejection needs the same locked re-read as confirmation, and for the same
+    reason: a rejection racing a confirmation must not both land, or a business
+    that paid ends up with its payment marked refused."""
+    from sqlalchemy.orm import Session
+
+    client, business_id = shop
+    claim(client)
+    transaction_id = PaymentTransaction.query.one().id
+
+    other = Session(bind=db.engine)
+    try:
+        stale = other.get(PaymentTransaction, transaction_id)
+        assert stale.status == 'pending'
+
+        console.post(f'/platform/payments/{transaction_id}/confirm',
+                     data={'note': ''}, follow_redirects=True)
+
+        assert stale.status == 'pending', 'the fixture stopped being stale'
+        acted = billing_service.reject(stale, rejected_by='second-request',
+                                       reason='racing the confirmation')
+        db.session.commit()
+
+        assert acted is False
+        assert PaymentTransaction.query.one().status == 'paid'
+        assert Subscription.query.filter_by(business_id=business_id).one().status == 'active'
+    finally:
+        other.close()
+
+
+def test_rejecting_twice_writes_one_record(shop, console):
+    """A second rejection is not a second event, and should not read as one in
+    the audit trail."""
+    from auth.models import AuditLog
+
+    client, _business_id = shop
+    claim(client)
+    transaction = PaymentTransaction.query.one()
+
+    for _ in range(2):
+        console.post(f'/platform/payments/{transaction.id}/reject',
+                     data={'note': 'not on the statement'}, follow_redirects=True)
+
+    assert PaymentTransaction.query.one().status == 'rejected'
+    assert AuditLog.query.filter_by(action='billing.payment_rejected').count() == 1
