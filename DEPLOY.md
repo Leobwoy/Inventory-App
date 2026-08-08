@@ -75,18 +75,44 @@ tier has no expiry — it sleeps when idle and wakes on the next request.
    | `MOMO_NUMBER` | the wallet customers send to, e.g. `0244000111` |
    | `MOMO_NAME` | the name that shows when they send, so they know it is you |
    | `MOMO_NETWORK` | `MTN`, `Telecel` or `AirtelTigo` (defaults to `MTN`) |
-   | `PLATFORM_ADMIN_EMAILS` | your own login email — comma-separated for more than one |
-
-   **`PLATFORM_ADMIN_EMAILS` is the one that matters.** It decides who can
-   confirm that a payment arrived, which is the same as deciding what a business
-   has paid for. It is an environment variable rather than a permission on
-   purpose: a business Owner holds every permission inside their own business,
-   so anything expressed as a permission would be self-grantable — and a
-   customer could switch on their own paid plan. Leave it unset and nobody can
-   confirm anything, including you.
 
    The wallet number is configuration and not code because it is a personal
    phone number and this repository is public.
+
+### 2b. Your console account
+
+Confirming payments happens in a separate console at `/platform/login`, with its
+own accounts. You do **not** need a business to use it — the person who runs
+TrackTrack is not a customer of it.
+
+There is no signup page, deliberately: the set of people who can confirm
+payments should be exactly the set who can already deploy the app. So the first
+account is made from a shell.
+
+Render's free tier has no shell, so run it from your machine against the live
+database:
+
+```bash
+DATABASE_URL="<your Neon string>" flask create-platform-admin
+```
+
+It prompts for email, name and password — nothing sensitive on the command line.
+Use at least 12 characters; that account can change what every business has paid
+for.
+
+Then sign in at `https://<your-app>.onrender.com/platform/login`.
+
+**If you ever cannot get to the console**, the same job can be done from a
+terminal:
+
+```bash
+DATABASE_URL="<your Neon string>" flask pending-payments
+DATABASE_URL="<your Neon string>" flask confirm-payment <reference>
+DATABASE_URL="<your Neon string>" flask reject-payment <reference>
+```
+
+The reference is what the customer submitted — for mobile money, the transaction
+ID their network texted them. `pending-payments` lists them.
 
    Generate the key on your machine and paste the output:
 

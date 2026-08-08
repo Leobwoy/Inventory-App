@@ -15,17 +15,31 @@ from auth.models import AuditLog
 from extensions import db
 
 
-def log(action, entity_type=None, entity_id=None, business_id=None, user_id=None, **details):
+#: Distinguishes "not supplied, work it out" from "deliberately nobody".
+#: Passing user_id=None used to mean the first, so a platform action performed
+#: while a tenant session happened to exist would have been signed with that
+#: tenant's user - crediting a customer with a decision they did not make.
+OMITTED = object()
+
+
+def log(action, entity_type=None, entity_id=None, business_id=OMITTED,
+        user_id=OMITTED, **details):
     """Record an audited action. Does not commit - the caller owns the transaction.
 
     `details` is free-form context stored as JSON: the before/after of a price
     change, the quantity of a stock adjustment, which permissions changed.
+
+    Pass `user_id=None` explicitly for an action nobody inside the business took
+    - a platform admin confirming a payment, or a scheduled job. Omit it and the
+    signed-in user is used.
     """
     try:
-        if business_id is None and getattr(current_user, 'is_authenticated', False):
-            business_id = current_user.business_id
-        if user_id is None and getattr(current_user, 'is_authenticated', False):
-            user_id = current_user.id
+        if business_id is OMITTED:
+            business_id = (current_user.business_id
+                           if getattr(current_user, 'is_authenticated', False) else None)
+        if user_id is OMITTED:
+            user_id = (current_user.id
+                       if getattr(current_user, 'is_authenticated', False) else None)
         if business_id is None:
             return None
 

@@ -1,0 +1,101 @@
+{% extends 'platform/base.html' %}
+{% block title %}Overview | TrackTrack Console{% endblock %}
+
+{% block content %}
+<h1 class="h4 mb-4">Overview</h1>
+
+<div class="row g-3 mb-2">
+  <div class="col-6 col-lg-3">
+    <div class="panel">
+      <div class="muted small">Waiting on you</div>
+      <div class="stat {{ 'text-warning' if pending else '' }}">{{ pending|length }}</div>
+      <div class="muted small">payments to confirm</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="panel">
+      <div class="muted small">Paying customers</div>
+      <div class="stat">{{ paying_count }}</div>
+      <div class="muted small">of {{ total_businesses }} businesses</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="panel">
+      <div class="muted small">Monthly value</div>
+      <div class="stat text-success">&#8373;{{ '%.0f'|format(monthly_value) }}</div>
+      {# Not "revenue". Nothing here renews by itself, so this is what is on
+         plan today, not what will arrive next month. #}
+      <div class="muted small">on plan today</div>
+    </div>
+  </div>
+  <div class="col-6 col-lg-3">
+    <div class="panel">
+      <div class="muted small">New this month</div>
+      <div class="stat">{{ new_this_month }}</div>
+      <div class="muted small">signups in 30 days</div>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="d-flex justify-content-between align-items-center mb-3">
+    <h2 class="h6 mb-0">Payments to confirm</h2>
+    <a href="{{ url_for('platform.payments') }}" class="small">See all</a>
+  </div>
+
+  {% if pending %}
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead><tr class="muted small">
+        <th>Business</th><th>Transaction ID</th><th class="text-end">Amount</th>
+        <th>Claimed</th><th></th>
+      </tr></thead>
+      <tbody>
+        {% for payment in pending[:8] %}
+        <tr>
+          <td>{{ businesses[payment.business_id].name if payment.business_id in businesses
+                 else 'Business #' ~ payment.business_id }}</td>
+          <td class="font-monospace small">{{ payment.provider_ref }}</td>
+          <td class="text-end text-success">&#8373;{{ '%.2f'|format(payment.amount_ghs) }}</td>
+          <td class="muted small">{{ payment.created_at.strftime('%d %b, %H:%M') }}</td>
+          <td class="text-end">
+            <a href="{{ url_for('platform.payments') }}" class="btn btn-sm btn-success">Review</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="muted py-3">Nothing waiting.</div>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <h2 class="h6 mb-3">Trials ending within 3 days</h2>
+  {% if expiring %}
+  {# The one list here that is a prompt rather than a report: these are the
+     people to call, and after this window they quietly drop to Kiosk. #}
+  <div class="table-responsive">
+    <table class="table align-middle mb-0">
+      <thead><tr class="muted small"><th>Business</th><th>Ends</th><th></th></tr></thead>
+      <tbody>
+        {% for subscription in expiring %}
+        <tr>
+          <td>{{ businesses[subscription.business_id].name if subscription.business_id in businesses
+                 else 'Business #' ~ subscription.business_id }}</td>
+          <td class="muted small">{{ subscription.trial_ends_at.strftime('%d %b %Y') }}</td>
+          <td class="text-end">
+            <a href="{{ url_for('platform.business_detail', business_id=subscription.business_id) }}"
+               class="btn btn-sm btn-outline-light">Open</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="muted py-3">No trials ending soon.</div>
+  {% endif %}
+</div>
+{% endblock %}

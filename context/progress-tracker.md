@@ -227,6 +227,22 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   company registration today. Register when TrackTrack has paid for it.
   Taking business payments into a personal wallet is a bridge, not a destination: wallets
   have monthly ceilings and mixing business with personal money is unpleasant at tax time.
+- **B6 — the vendor console (`platform_console/`).** Confirming a payment decides what a
+  business has paid for, so it cannot be a permission: a tenant Owner controls every
+  permission inside their own business and would grant it to themselves. The first attempt
+  used an email whitelist against the tenant login, which meant running TrackTrack required
+  registering a business you do not own — the user pushed back and was right. A platform
+  admin now has **its own table, its own login and its own session key**, so a tenant
+  session grants nothing there and a console session grants nothing here. No signup page:
+  accounts come from `flask create-platform-admin`, so whoever can confirm payments is
+  exactly whoever can already deploy. `flask confirm-payment` is the fallback when the
+  browser is not an option. Console covers payments, a customer list, and changing a plan
+  by hand (comping, corrections) — every change audited into the affected business's own
+  log, so the business can see it too.
+- **Console login throttling.** `/platform/login` has no rate limiting. It is a single
+  unadvertised account with a 12-character minimum, so the exposure is small, but a proper
+  limiter needs a storage backend (Flask-Limiter with Redis, or a database table) and the
+  free tier has neither. Decide before the console is worth attacking.
 - **Deployed 2026-08-05** to Render + Neon (Frankfurt). `DEPLOY.md` has the walkthrough.
   Production config:
   `SECRET_KEY` is now **required** in production (it silently fell back to a default

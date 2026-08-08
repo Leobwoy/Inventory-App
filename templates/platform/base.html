@@ -1,0 +1,84 @@
+{# The console's own shell.
+
+   Deliberately not extending the tenant base.html. That template branches on
+   current_user, renders a business sidebar and gates items on plan features -
+   none of which mean anything here. Sharing it would mean every change to the
+   tenant navigation had to be reasoned about twice.
+
+   Visually distinct on purpose too: it should be obvious at a glance which side
+   of the product you are looking at. #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Console | TrackTrack{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap/bootstrap.min.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='vendor/bootstrap-icons/bootstrap-icons.min.css') }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='logo.png') }}">
+  {# Not indexed, not followed. A vendor console has no business in a search
+     result. Obscurity is not the protection - the login is - but there is no
+     reason to publish it either. #}
+  <meta name="robots" content="noindex, nofollow">
+  <style>
+    :root {
+      --console-bg: #0b1120; --console-panel: #131c2f; --console-line: #24314c;
+      --console-text: #e2e8f0; --console-muted: #8fa0bd; --console-accent: #22c55e;
+    }
+    body { background: var(--console-bg); color: var(--console-text); min-height: 100vh; }
+    .console-bar {
+      background: var(--console-panel); border-bottom: 2px solid var(--console-accent);
+      padding: 0.75rem 1.25rem;
+    }
+    .console-bar a { color: var(--console-muted); text-decoration: none; margin-right: 1.25rem; }
+    .console-bar a:hover, .console-bar a.active { color: var(--console-text); }
+    .console-mark { font-weight: 700; color: var(--console-text); margin-right: 2rem; }
+    .console-mark .tag {
+      background: var(--console-accent); color: #05230f; font-size: 0.65rem;
+      padding: 0.1rem 0.4rem; border-radius: 0.25rem; margin-left: 0.4rem;
+      vertical-align: middle; letter-spacing: 0.03em;
+    }
+    .panel {
+      background: var(--console-panel); border: 1px solid var(--console-line);
+      border-radius: 0.6rem; padding: 1.25rem; margin-bottom: 1.25rem;
+    }
+    .stat { font-size: 1.75rem; font-weight: 700; }
+    .muted { color: var(--console-muted); }
+    .table { color: var(--console-text); }
+    .table > :not(caption) > * > * { background: transparent; border-color: var(--console-line); }
+    .form-control, .form-select, .form-control:focus, .form-select:focus {
+      background: #0e1626; border-color: var(--console-line); color: var(--console-text);
+    }
+    .form-control::placeholder { color: #5b6b88; }
+    a { color: #7dd3fc; }
+  </style>
+</head>
+<body>
+{% if platform_admin %}
+<div class="console-bar d-flex align-items-center flex-wrap">
+  <span class="console-mark">TrackTrack<span class="tag">CONSOLE</span></span>
+  <a href="{{ url_for('platform.dashboard') }}">Overview</a>
+  <a href="{{ url_for('platform.payments') }}">Payments</a>
+  <a href="{{ url_for('platform.businesses') }}">Businesses</a>
+  <span class="ms-auto muted small d-flex align-items-center gap-2">
+    {{ platform_admin.name }}
+    {# A form, because signing out is a state change and GET carries no token. #}
+    <form method="post" action="{{ url_for('platform.logout') }}" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-link btn-sm p-0 align-baseline"
+              style="color: var(--console-muted);">Sign out</button>
+    </form>
+  </span>
+</div>
+{% endif %}
+
+<div class="container-fluid py-4" style="max-width: 1200px;">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+    <div class="alert alert-{{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+  {% block content %}{% endblock %}
+</div>
+</body>
+</html>

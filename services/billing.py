@@ -117,8 +117,13 @@ def confirm(transaction, confirmed_by, note=None):
     transaction.status = 'paid'
     transaction.subscription_id = subscription.id
 
+    # business_id and user_id passed explicitly. audit.log otherwise infers them
+    # from current_user, and the console has no current_user - so a payment
+    # confirmed there was silently not recorded at all. Money moving with no
+    # trail is the one thing this table exists to prevent.
     audit.log('billing.payment_confirmed', entity_type='business',
               entity_id=transaction.business_id,
+              business_id=transaction.business_id, user_id=None,
               provider=transaction.provider, reference=transaction.provider_ref,
               amount=str(transaction.amount_ghs), plan=plan.code,
               paid_through=subscription.paid_through.isoformat(),
@@ -131,14 +136,29 @@ def reject(transaction, rejected_by, reason):
 
     A rejected claim is the record of someone saying money arrived when it did
     not, and that is exactly the history worth keeping.
+
+    Returns True when this call is the one that rejected it. Mirrors confirm():
+    the state is re-read under a lock rather than trusted from the caller's
+    copy, so a rejection racing a confirmation cannot both land, and a second
+    rejection does not write a second audit entry for the same event.
     """
-    if transaction.status == 'paid':
-        raise ValueError('That payment was already confirmed.')
-    transaction.status = 'rejected'
+    if transaction.status != 'pending':
+        return False
+
+    locked = (PaymentTransaction.query
+              .filter_by(id=transaction.id)
+              .with_for_update()
+              .one())
+    if locked.status != 'pending':
+        return False
+
+    locked.status = 'rejected'
     audit.log('billing.payment_rejected', entity_type='business',
-              entity_id=transaction.business_id,
-              reference=transaction.provider_ref, reason=reason,
+              entity_id=locked.business_id,
+              business_id=locked.business_id, user_id=None,
+              reference=locked.provider_ref, reason=reason,
               rejected_by=rejected_by)
+    return True
 
 
 def _plan_for(transaction):

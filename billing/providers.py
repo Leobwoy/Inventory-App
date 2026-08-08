@@ -107,23 +107,3 @@ def active():
 
 def get(code):
     return PROVIDERS.get(code)
-
-
-def platform_admin_emails():
-    """Who may confirm a payment.
-
-    Deliberately an environment variable rather than a permission or a column.
-    Confirming payment is a *platform* action, not a tenant one - it decides
-    what a business has paid for. A tenant Owner holds every permission inside
-    their own business, so anything expressed as a permission would be
-    self-grantable, and a business could switch its own plan on.
-    """
-    raw = os.environ.get('PLATFORM_ADMIN_EMAILS', '')
-    return {email.strip().lower() for email in raw.split(',') if email.strip()}
-
-
-def is_platform_admin(user):
-    if not user or not getattr(user, 'is_authenticated', False):
-        return False
-    admins = platform_admin_emails()
-    return bool(admins) and (user.email or '').strip().lower() in admins

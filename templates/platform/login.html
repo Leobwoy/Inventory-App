@@ -1,0 +1,39 @@
+{% extends 'platform/base.html' %}
+{% block title %}Sign in | TrackTrack Console{% endblock %}
+
+{% block content %}
+<div style="max-width: 24rem; margin: 4rem auto;">
+  <div class="text-center mb-4">
+    <img src="{{ url_for('static', filename='logo.png') }}" alt="TrackTrack"
+         style="height: 56px; width: 56px; object-fit: contain;">
+    <h1 class="h4 mt-3 mb-1">TrackTrack Console</h1>
+    <div class="muted small">For whoever runs the platform</div>
+  </div>
+
+  <div class="panel">
+    <form method="post">
+      {{ form.hidden_tag() }}
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.email.id }}">{{ form.email.label.text }}</label>
+        {{ form.email(class_='form-control', autocomplete='username') }}
+        {% for error in form.email.errors %}
+        <div class="text-danger small mt-1">{{ error }}</div>
+        {% endfor %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.password.id }}">{{ form.password.label.text }}</label>
+        {{ form.password(class_='form-control', autocomplete='current-password') }}
+        {% for error in form.password.errors %}
+        <div class="text-danger small mt-1">{{ error }}</div>
+        {% endfor %}
+      </div>
+      {{ form.submit(class_='btn btn-success w-100') }}
+    </form>
+  </div>
+
+  <p class="muted small text-center">
+    This is not the app. Businesses sign in at
+    <a href="{{ url_for('auth.login') }}">the main login</a>.
+  </p>
+</div>
+{% endblock %}

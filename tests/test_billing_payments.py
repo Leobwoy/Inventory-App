@@ -36,16 +36,6 @@ def shop(register, monkeypatch):
     return client, business_id
 
 
-@pytest.fixture
-def platform_admin(shop, monkeypatch, app):
-    """The owner of the shop, also named as a platform admin."""
-    client, business_id = shop
-    from auth.models import User
-    email = User.query.filter_by(business_id=business_id).first().email
-    monkeypatch.setenv('PLATFORM_ADMIN_EMAILS', email)
-    return client, business_id
-
-
 def claim(client, plan_code='standard', reference='MP260805.1423.A1', cycle='monthly'):
     return client.post(f'/billing/upgrade/{plan_code}', data={
         'cycle': cycle, 'reference': reference, 'payer_note': '0244999888',
@@ -147,10 +137,14 @@ def test_a_tenant_cannot_reach_the_confirmation_screen(shop):
     """A tenant Owner holds every permission inside their own business, so this
     cannot be gated on a permission - they would simply grant it to themselves.
 
-    404 rather than 403: a 403 confirms the page exists and that someone else
-    may use it, which is information a tenant has no use for."""
+    The screen used to live in the tenant app behind an email whitelist. It is
+    now a separate console with its own accounts, and a tenant session opens
+    neither: the old route is gone, and the new one does not know them."""
     client, _business_id = shop
+
     assert client.get('/billing/admin/payments').status_code == 404
+    assert client.get('/platform/', follow_redirects=False).status_code == 302
+    assert client.post('/platform/payments/1/confirm', data={}).status_code == 404
 
 
 def test_a_tenant_cannot_confirm_their_own_payment(shop):
@@ -158,7 +152,7 @@ def test_a_tenant_cannot_confirm_their_own_payment(shop):
     claim(client)
     transaction = PaymentTransaction.query.one()
 
-    response = client.post(f'/billing/admin/payments/{transaction.id}/confirm',
+    response = client.post(f'/platform/payments/{transaction.id}/confirm',
                            data={'note': ''}, follow_redirects=True)
 
     assert response.status_code == 404
@@ -166,23 +160,14 @@ def test_a_tenant_cannot_confirm_their_own_payment(shop):
     assert Subscription.query.filter_by(business_id=business_id).one().status == 'trialing'
 
 
-def test_no_platform_admins_configured_means_nobody_qualifies(shop, monkeypatch):
-    """A blank environment variable must not read as "everyone"."""
-    monkeypatch.delenv('PLATFORM_ADMIN_EMAILS', raising=False)
-    from auth.models import User
-    _client, business_id = shop
-    assert not providers.is_platform_admin(User.query.filter_by(business_id=business_id).first())
 
-
-# --- confirming -------------------------------------------------------------
-
-def test_confirming_activates_the_plan(platform_admin):
-    client, business_id = platform_admin
+def test_confirming_activates_the_plan(shop, console):
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
 
-    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
-                data={'note': 'seen on statement'}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/confirm',
+                 data={'note': 'seen on statement'}, follow_redirects=True)
 
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     assert PaymentTransaction.query.one().status == 'paid'
@@ -192,25 +177,25 @@ def test_confirming_activates_the_plan(platform_admin):
     assert limits.has_feature('credit_ledger', business_id)
 
 
-def test_confirming_twice_does_not_buy_a_second_month(platform_admin):
+def test_confirming_twice_does_not_buy_a_second_month(shop, console):
     """The obvious human error here is a double click, and the obvious machine
     one is a webhook delivered twice."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
 
-    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
-                data={'note': ''}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/confirm',
+                 data={'note': ''}, follow_redirects=True)
     first = Subscription.query.filter_by(business_id=business_id).one().paid_through
 
-    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
-                data={'note': ''}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/confirm',
+                 data={'note': ''}, follow_redirects=True)
     assert Subscription.query.filter_by(business_id=business_id).one().paid_through == first
 
 
-def test_paying_early_adds_time_rather_than_replacing_it(platform_admin):
+def test_paying_early_adds_time_rather_than_replacing_it(shop, console):
     """Renewing a week before expiry must not throw that week away."""
-    client, business_id = platform_admin
+    client, business_id = shop
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.status = 'active'
     subscription.paid_through = datetime.datetime.utcnow() + datetime.timedelta(days=10)
@@ -219,62 +204,62 @@ def test_paying_early_adds_time_rather_than_replacing_it(platform_admin):
 
     claim(client, reference='MP-EARLY')
     transaction = PaymentTransaction.query.filter_by(provider_ref='MP-EARLY').one()
-    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
-                data={'note': ''}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/confirm',
+                 data={'note': ''}, follow_redirects=True)
 
     extended = Subscription.query.filter_by(business_id=business_id).one().paid_through
     assert extended >= existing + datetime.timedelta(days=billing_service.MONTH_DAYS)
 
 
-def test_a_confirmation_is_audited(platform_admin):
+def test_a_confirmation_is_audited(shop, console):
     """Money moved because a person said so, and whose word it was has to be
     answerable later."""
     from auth.models import AuditLog
-    client, _business_id = platform_admin
+    client, _business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
-    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
-                data={'note': 'matched'}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/confirm',
+                 data={'note': 'matched'}, follow_redirects=True)
 
     entry = AuditLog.query.filter_by(action='billing.payment_confirmed').one()
     assert 'MP260805.1423.A1' in entry.details_json
     assert 'standard' in entry.details_json
 
 
-def test_rejecting_keeps_the_claim_on_record(platform_admin):
+def test_rejecting_keeps_the_claim_on_record(shop, console):
     """A rejected claim is the record of someone saying money arrived when it
     did not, which is exactly the history worth keeping."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
 
-    client.post(f'/billing/admin/payments/{transaction.id}/reject',
-                data={'reason': 'no such transaction'}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/reject',
+                 data={'note': 'no such transaction'}, follow_redirects=True)
 
     assert PaymentTransaction.query.one().status == 'rejected'
     assert Subscription.query.filter_by(business_id=business_id).one().status == 'trialing'
 
 
-def test_a_confirmed_payment_cannot_be_rejected_afterwards(platform_admin):
-    client, _business_id = platform_admin
+def test_a_confirmed_payment_cannot_be_rejected_afterwards(shop, console):
+    client, _business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
-    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
-                data={'note': ''}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/confirm',
+                 data={'note': ''}, follow_redirects=True)
 
-    client.post(f'/billing/admin/payments/{transaction.id}/reject',
-                data={'reason': 'changed my mind'}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/reject',
+                 data={'note': 'changed my mind'}, follow_redirects=True)
     assert PaymentTransaction.query.one().status == 'paid'
 
 
-def test_nothing_renews_itself(platform_admin):
+def test_nothing_renews_itself(shop, console):
     """Mobile money has no reusable authorisation in Ghana, so the app must
     never imply it will take money again on its own."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
-    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
-                data={'note': ''}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/confirm',
+                 data={'note': ''}, follow_redirects=True)
 
     assert Subscription.query.filter_by(business_id=business_id).one().auto_renew is False
 
@@ -290,43 +275,14 @@ def test_the_manual_provider_never_confirms_on_its_own():
     assert 'confirmation' in message.lower()
 
 
-def test_the_platform_admin_sees_the_link_and_a_tenant_does_not(shop, monkeypatch):
-    """How the one platform admin actually reaches the screen: they log in like
-    anyone else, and the link appears because their email is in the variable."""
-    client, business_id = shop
-    from auth.models import User
-    email = User.query.filter_by(business_id=business_id).first().email
-
-    monkeypatch.delenv('PLATFORM_ADMIN_EMAILS', raising=False)
-    assert '/billing/admin/payments' not in client.get('/').get_data(as_text=True)
-
-    monkeypatch.setenv('PLATFORM_ADMIN_EMAILS', email)
-    body = client.get('/').get_data(as_text=True)
-    assert '/billing/admin/payments' in body
-    assert 'Confirm payments' in body
-    assert client.get('/billing/admin/payments').status_code == 200
 
 
-def test_the_email_match_ignores_case_and_spacing(shop, monkeypatch):
-    """A comma-separated list typed into a hosting dashboard will have stray
-    spaces and capitals in it, and failing closed on that would lock the only
-    platform admin out of their own confirmation screen."""
-    client, business_id = shop
-    from auth.models import User
-    email = User.query.filter_by(business_id=business_id).first().email
-
-    monkeypatch.setenv('PLATFORM_ADMIN_EMAILS', f'  {email.upper()} , someone@else.com ')
-    assert client.get('/billing/admin/payments').status_code == 200
-
-
-# --- what the review round found ---------------------------------------------
-
-def test_the_plan_is_read_from_the_transaction_not_from_todays_price(platform_admin):
+def test_the_plan_is_read_from_the_transaction_not_from_todays_price(shop, console):
     """confirm() used to recover the plan by matching the recorded amount against
     current prices. That breaks the first time a price moves: a customer who paid
     GHS 199 for Depot and is confirmed after Depot rises to GHS 249 matches no
     plan at all, and gets an error instead of the thing they paid for."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
     assert transaction.plan_id is not None
@@ -336,8 +292,8 @@ def test_the_plan_is_read_from_the_transaction_not_from_todays_price(platform_ad
     depot.price_monthly_ghs = Decimal('249.00')
     db.session.commit()
 
-    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
-                data={'note': ''}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/confirm',
+                 data={'note': ''}, follow_redirects=True)
 
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     assert subscription.plan.code == 'standard'
@@ -346,18 +302,18 @@ def test_the_plan_is_read_from_the_transaction_not_from_todays_price(platform_ad
     assert PaymentTransaction.query.one().amount_ghs == Decimal('199.00')
 
 
-def test_a_rejected_payment_cannot_then_be_confirmed(platform_admin):
+def test_a_rejected_payment_cannot_then_be_confirmed(shop, console):
     """Guarding only against 'paid' left a rejected claim confirmable - so
     refusing a fraudulent payment and then confirming it by mistake would grant
     the plan anyway."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
 
-    client.post(f'/billing/admin/payments/{transaction.id}/reject',
-                data={'reason': 'no such transaction'}, follow_redirects=True)
-    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
-                data={'note': ''}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/reject',
+                 data={'note': 'no such transaction'}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/confirm',
+                 data={'note': ''}, follow_redirects=True)
 
     assert PaymentTransaction.query.one().status == 'rejected'
     assert Subscription.query.filter_by(business_id=business_id).one().status == 'trialing'
@@ -390,15 +346,15 @@ def test_a_cycle_the_plan_has_no_price_for_is_refused(shop):
     assert PaymentTransaction.query.count() == 0
 
 
-def test_the_current_plan_can_be_renewed(platform_admin):
+def test_the_current_plan_can_be_renewed(shop, console):
     """Mobile money cannot charge anyone automatically, so renewing is the most
     common thing a paying customer comes to this page to do. Hiding the button
     on the plan they are already on hid exactly that."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
-    client.post(f'/billing/admin/payments/{transaction.id}/confirm',
-                data={'note': ''}, follow_redirects=True)
+    console.post(f'/platform/payments/{transaction.id}/confirm',
+                 data={'note': ''}, follow_redirects=True)
 
     body = client.get('/billing/').get_data(as_text=True)
     assert 'Renew' in body
@@ -421,45 +377,47 @@ def test_the_upgrade_page_carries_both_prices_for_the_amount_to_follow():
     assert 'due.dataset[radio.value]' in source
 
 
-def test_a_stale_in_memory_transaction_cannot_be_confirmed_twice(platform_admin, app):
-    """Two independent sessions, which is the realistic version of the race.
+def test_a_stale_in_memory_transaction_cannot_be_confirmed_twice(shop, console):
+    """The realistic version of the race, and the only thing that exercises the
+    re-read under lock.
 
-    A second request loads the transaction, someone confirms it from the first,
-    and the second request then acts on an object that says 'pending' while the
-    row no longer does. confirm() re-reads it under a lock for exactly this, so
-    the second attempt must find it settled and refuse rather than granting a
-    second month.
+    A request loads the transaction while it is pending, someone confirms it
+    elsewhere, and the request then acts on an object that still *believes* it
+    is pending. The entry guard reads that stale copy and lets it through; only
+    the locked re-read inside confirm() catches it.
+
+    The previous version of this test reloaded the row through db.session after
+    expire_all(), so the object was not stale at all - the entry guard caught it
+    and the lock was never reached.
     """
     from sqlalchemy.orm import Session
 
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction_id = PaymentTransaction.query.one().id
 
-    first = Session(bind=db.engine)
-    second = Session(bind=db.engine)
+    # A second session, so this copy is not touched by anything the first does.
+    other = Session(bind=db.engine)
     try:
-        # Both sessions read the row while it is still pending.
-        stale = second.get(PaymentTransaction, transaction_id)
+        stale = other.get(PaymentTransaction, transaction_id)
         assert stale.status == 'pending'
 
-        # The first confirms and commits.
-        client.post(f'/billing/admin/payments/{transaction_id}/confirm',
-                    data={'note': ''}, follow_redirects=True)
+        # Confirmed and committed by someone else entirely.
+        console.post(f'/platform/payments/{transaction_id}/confirm',
+                     data={'note': ''}, follow_redirects=True)
         after_first = Subscription.query.filter_by(business_id=business_id).one().paid_through
 
-        # The second acts on what it read, which is now out of date.
-        db.session.expire_all()
-        again = billing_service.confirm(
-            PaymentTransaction.query.get(transaction_id),
-            confirmed_by='second-request')
+        # The copy still says pending, which is the whole point.
+        assert stale.status == 'pending', 'the fixture stopped being stale'
+
+        again = billing_service.confirm(stale, confirmed_by='second-request')
         db.session.commit()
 
         assert again is False, 'a settled transaction was confirmed a second time'
         assert Subscription.query.filter_by(business_id=business_id).one().paid_through == after_first
+        assert PaymentTransaction.query.one().status == 'paid'
     finally:
-        first.close()
-        second.close()
+        other.close()
 
 
 def test_confirming_takes_a_lock_before_reading_the_period():
@@ -475,3 +433,50 @@ def test_confirming_takes_a_lock_before_reading_the_period():
     assert body.count('with_for_update()') == 2, (
         'both the subscription and the transaction must be locked')
     assert body.index('with_for_update()') < body.index('_extend_from(subscription)')
+
+
+def test_a_stale_transaction_cannot_be_rejected_after_it_was_confirmed(shop, console):
+    """Rejection needs the same locked re-read as confirmation, and for the same
+    reason: a rejection racing a confirmation must not both land, or a business
+    that paid ends up with its payment marked refused."""
+    from sqlalchemy.orm import Session
+
+    client, business_id = shop
+    claim(client)
+    transaction_id = PaymentTransaction.query.one().id
+
+    other = Session(bind=db.engine)
+    try:
+        stale = other.get(PaymentTransaction, transaction_id)
+        assert stale.status == 'pending'
+
+        console.post(f'/platform/payments/{transaction_id}/confirm',
+                     data={'note': ''}, follow_redirects=True)
+
+        assert stale.status == 'pending', 'the fixture stopped being stale'
+        acted = billing_service.reject(stale, rejected_by='second-request',
+                                       reason='racing the confirmation')
+        db.session.commit()
+
+        assert acted is False
+        assert PaymentTransaction.query.one().status == 'paid'
+        assert Subscription.query.filter_by(business_id=business_id).one().status == 'active'
+    finally:
+        other.close()
+
+
+def test_rejecting_twice_writes_one_record(shop, console):
+    """A second rejection is not a second event, and should not read as one in
+    the audit trail."""
+    from auth.models import AuditLog
+
+    client, _business_id = shop
+    claim(client)
+    transaction = PaymentTransaction.query.one()
+
+    for _ in range(2):
+        console.post(f'/platform/payments/{transaction.id}/reject',
+                     data={'note': 'not on the statement'}, follow_redirects=True)
+
+    assert PaymentTransaction.query.one().status == 'rejected'
+    assert AuditLog.query.filter_by(action='billing.payment_rejected').count() == 1
