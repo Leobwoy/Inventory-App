@@ -23,7 +23,11 @@
   <style>
     :root {
       --console-bg: #0b1120; --console-panel: #131c2f; --console-line: #24314c;
-      --console-text: #e2e8f0; --console-muted: #8fa0bd; --console-accent: #22c55e;
+      /* --console-muted is small text - labels, dates, helper lines - so the
+         7:1 AAA threshold for normal text applies to it. #8fa0bd measured 6.42
+         on the panel, which the contrast test caught and a by-eye check did
+         not. #9db0cc clears it at 7.71 and is barely a visible change. */
+      --console-text: #e2e8f0; --console-muted: #9db0cc; --console-accent: #22c55e;
     }
     body { background: var(--console-bg); color: var(--console-text); min-height: 100vh; }
     .console-bar {
@@ -58,6 +62,10 @@
       --bs-table-hover-color: var(--console-text);
       --bs-table-hover-bg: rgba(255, 255, 255, 0.06);
       --bs-table-active-color: var(--console-text);
+      /* Paired with the colour above. Setting one and not the other is the
+         worse half of both options: nothing uses .table-active today, but
+         whoever adds it would get console text on Bootstrap's light default. */
+      --bs-table-active-bg: rgba(255, 255, 255, 0.08);
       color: var(--console-text);
     }
     /* The header row carries .muted, which the cell rule would otherwise
@@ -70,10 +78,15 @@
     a { color: #7dd3fc; }
     /* Bootstrap's semantic colours are chosen for a white page. On this one
        .text-success (#198754) lands at 4.16:1 - under WCAG AA - and it is the
-       headline figure on the dashboard. Brightened for a dark background. */
-    .text-success { color: #4ade80 !important; }
-    .text-danger  { color: #f87171 !important; }
-    .text-warning { color: #fbbf24 !important; }
+       headline figure on the dashboard.
+
+       Measured against --console-panel (#131c2f) rather than the page, because
+       that is what almost all of this text actually sits on and it is the
+       lighter of the two. All three clear 7:1, so the set is consistently AAA
+       rather than one of them scraping AA. */
+    .text-success { color: #4ade80 !important; }   /* 9.76:1 */
+    .text-danger  { color: #fca5a5 !important; }   /* 8.96:1, was #f87171 at 6.15 */
+    .text-warning { color: #fbbf24 !important; }   /* 10.19:1 */
   </style>
 </head>
 <body>

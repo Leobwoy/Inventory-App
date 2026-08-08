@@ -332,30 +332,89 @@ def test_the_cli_refuses_identity_fields_the_columns_cannot_hold(app):
 
 # --- the console has to be legible ------------------------------------------
 
-def test_the_console_sets_the_table_variables_bootstrap_actually_reads():
+def _console_css():
+    import re
+    source = (Path(__file__).resolve().parent.parent
+              / 'templates' / 'platform' / 'base.html').read_text(encoding='utf-8')
+    return re.sub(r'\{#.*?#\}|/\*.*?\*/', '', source, flags=re.S)
+
+
+def _rule(css, selector):
+    """The declarations inside one CSS rule."""
+    import re
+    match = re.search(re.escape(selector) + r'\s*\{([^}]*)\}', css)
+    assert match, f'no {selector} rule in the console stylesheet'
+    return match.group(1)
+
+
+def _declared(body, name):
+    import re
+    match = re.search(re.escape(name) + r'\s*:\s*([^;]+);', body)
+    return match.group(1).strip() if match else None
+
+
+def _contrast(foreground, background):
+    """WCAG relative contrast between two #rrggbb colours."""
+    def luminance(colour):
+        channels = [int(colour[i:i + 2], 16) / 255 for i in (1, 3, 5)]
+        adjusted = [c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+                    for c in channels]
+        return (0.2126 * adjusted[0] + 0.7152 * adjusted[1] + 0.0722 * adjusted[2])
+
+    lighter, darker = sorted((luminance(foreground), luminance(background)), reverse=True)
+    return (lighter + 0.05) / (darker + 0.05)
+
+
+def test_the_console_table_uses_its_own_palette_not_bootstraps():
     """Bootstrap 5.3 colours table cells from --bs-table-color, set on the cells
     themselves - so a `color` on .table never reaches them. The console rendered
     every table in Bootstrap's default near-black on a near-black panel, and the
-    text was invisible until someone underlined it in a screenshot to show me."""
-    import re
-    source = (Path(__file__).resolve().parent.parent
-              / 'templates' / 'platform' / 'base.html').read_text(encoding='utf-8')
-    css = re.sub(r'\{#.*?#\}', '', source, flags=re.S)
+    text was invisible until someone underlined it in a screenshot to show me.
 
-    assert '--bs-table-color:' in css
-    assert '--bs-table-bg:' in css
-    # Hover swaps the colour too, so it needs the same treatment.
-    assert '--bs-table-hover-color:' in css
+    Asserts what the variables are set *to*. An earlier version of this test
+    only checked the property names were present, which would have passed for
+    `--bs-table-color: black`.
+    """
+    table = _rule(_console_css(), '.table')
+
+    assert _declared(table, '--bs-table-color') == 'var(--console-text)'
+    assert _declared(table, '--bs-table-bg') == 'transparent'
+    assert _declared(table, '--bs-table-border-color') == 'var(--console-line)'
+    # Hover and active swap the colour too, and each needs its background set
+    # alongside - one without the other leaves console text on a light default.
+    for state in ('hover', 'striped', 'active'):
+        assert _declared(table, f'--bs-table-{state}-color') == 'var(--console-text)'
+        assert _declared(table, f'--bs-table-{state}-bg'), f'{state} sets a colour but no background'
 
 
-def test_the_console_overrides_bootstraps_light_page_semantics():
-    """text-success is #198754, chosen for a white page. On this one it lands at
-    4.16:1 - under WCAG AA - and it is the headline figure on the dashboard."""
-    import re
-    source = (Path(__file__).resolve().parent.parent
-              / 'templates' / 'platform' / 'base.html').read_text(encoding='utf-8')
-    css = re.sub(r'\{#.*?#\}', '', source, flags=re.S)
+def test_every_console_text_colour_clears_wcag_aaa():
+    """Measured against --console-panel, not the page: almost all of this text
+    sits on a panel, and the panel is the lighter of the two.
 
-    for name in ('text-success', 'text-danger', 'text-warning'):
-        assert re.search(rf'\.{name}\s*\{{[^}}]*color:[^}}]*!important', css), (
-            f'.{name} still uses the light-page default')
+    text-success shipped as Bootstrap's #198754 and measured 4.16:1 - under AA -
+    while being the headline money figure on the dashboard. text-danger then sat
+    at 6.15, passing AA but short of the rest.
+    """
+    css = _console_css()
+    root = _rule(css, ':root')
+    panel = _declared(root, '--console-panel')
+    assert panel and panel.startswith('#'), 'panel colour is not a plain hex'
+
+    checked = {
+        '--console-text': _declared(root, '--console-text'),
+        '--console-muted': _declared(root, '--console-muted'),
+        '.text-success': _declared(_rule(css, '.text-success'), 'color').split()[0],
+        '.text-danger': _declared(_rule(css, '.text-danger'), 'color').split()[0],
+        '.text-warning': _declared(_rule(css, '.text-warning'), 'color').split()[0],
+    }
+
+    failures = []
+    for name, colour in checked.items():
+        assert colour and colour.startswith('#'), f'{name} is not a plain hex colour'
+        ratio = _contrast(colour, panel)
+        # AAA for normal text. These are small figures and error messages read
+        # on a phone in daylight, so AA is not the bar worth setting.
+        if ratio < 7.0:
+            failures.append(f'{name} {colour} is {ratio:.2f}:1 on {panel}')
+
+    assert not failures, 'below WCAG AAA on the console panel: ' + '; '.join(failures)
