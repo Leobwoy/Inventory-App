@@ -10,6 +10,7 @@ these tests protect is that the two never meet: a tenant session grants nothing
 here, and a console session grants nothing there.
 """
 import datetime
+from pathlib import Path
 
 import pytest
 
@@ -327,3 +328,34 @@ def test_the_cli_refuses_identity_fields_the_columns_cannot_hold(app):
     assert 'too long' in long_email.output
     assert 'too long' in long_name.output
     assert PlatformAdmin.query.count() == 0
+
+
+# --- the console has to be legible ------------------------------------------
+
+def test_the_console_sets_the_table_variables_bootstrap_actually_reads():
+    """Bootstrap 5.3 colours table cells from --bs-table-color, set on the cells
+    themselves - so a `color` on .table never reaches them. The console rendered
+    every table in Bootstrap's default near-black on a near-black panel, and the
+    text was invisible until someone underlined it in a screenshot to show me."""
+    import re
+    source = (Path(__file__).resolve().parent.parent
+              / 'templates' / 'platform' / 'base.html').read_text(encoding='utf-8')
+    css = re.sub(r'\{#.*?#\}', '', source, flags=re.S)
+
+    assert '--bs-table-color:' in css
+    assert '--bs-table-bg:' in css
+    # Hover swaps the colour too, so it needs the same treatment.
+    assert '--bs-table-hover-color:' in css
+
+
+def test_the_console_overrides_bootstraps_light_page_semantics():
+    """text-success is #198754, chosen for a white page. On this one it lands at
+    4.16:1 - under WCAG AA - and it is the headline figure on the dashboard."""
+    import re
+    source = (Path(__file__).resolve().parent.parent
+              / 'templates' / 'platform' / 'base.html').read_text(encoding='utf-8')
+    css = re.sub(r'\{#.*?#\}', '', source, flags=re.S)
+
+    for name in ('text-success', 'text-danger', 'text-warning'):
+        assert re.search(rf'\.{name}\s*\{{[^}}]*color:[^}}]*!important', css), (
+            f'.{name} still uses the light-page default')

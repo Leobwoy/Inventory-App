@@ -44,13 +44,36 @@
     }
     .stat { font-size: 1.75rem; font-weight: 700; }
     .muted { color: var(--console-muted); }
-    .table { color: var(--console-text); }
-    .table > :not(caption) > * > * { background: transparent; border-color: var(--console-line); }
+    /* Bootstrap 5.3 sets cell colour on the cells themselves, from
+       --bs-table-color, so a `color` on .table never reaches them - the text
+       rendered in Bootstrap's default near-black on a near-black panel and was
+       invisible. Set the variables it actually reads, rather than fighting the
+       cascade with !important the way style.css ended up doing. */
+    .table {
+      --bs-table-color: var(--console-text);
+      --bs-table-bg: transparent;
+      --bs-table-border-color: var(--console-line);
+      --bs-table-striped-color: var(--console-text);
+      --bs-table-striped-bg: rgba(255, 255, 255, 0.03);
+      --bs-table-hover-color: var(--console-text);
+      --bs-table-hover-bg: rgba(255, 255, 255, 0.06);
+      --bs-table-active-color: var(--console-text);
+      color: var(--console-text);
+    }
+    /* The header row carries .muted, which the cell rule would otherwise
+       override along with everything else. */
+    .table .muted, .table thead th { color: var(--console-muted); }
     .form-control, .form-select, .form-control:focus, .form-select:focus {
       background: #0e1626; border-color: var(--console-line); color: var(--console-text);
     }
     .form-control::placeholder { color: #5b6b88; }
     a { color: #7dd3fc; }
+    /* Bootstrap's semantic colours are chosen for a white page. On this one
+       .text-success (#198754) lands at 4.16:1 - under WCAG AA - and it is the
+       headline figure on the dashboard. Brightened for a dark background. */
+    .text-success { color: #4ade80 !important; }
+    .text-danger  { color: #f87171 !important; }
+    .text-warning { color: #fbbf24 !important; }
   </style>
 </head>
 <body>
