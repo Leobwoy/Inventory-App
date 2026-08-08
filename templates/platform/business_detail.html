@@ -86,14 +86,23 @@
         <div class="mb-3">
           <label class="form-label" for="{{ form.plan_code.id }}">{{ form.plan_code.label.text }}</label>
           {{ form.plan_code(class_='form-select') }}
+          {% for error in form.plan_code.errors %}
+          <div class="text-danger small mt-1">{{ error }}</div>
+          {% endfor %}
         </div>
         <div class="mb-3">
           <label class="form-label" for="{{ form.status.id }}">{{ form.status.label.text }}</label>
           {{ form.status(class_='form-select') }}
+          {% for error in form.status.errors %}
+          <div class="text-danger small mt-1">{{ error }}</div>
+          {% endfor %}
         </div>
         <div class="mb-3">
           <label class="form-label" for="{{ form.days.id }}">{{ form.days.label.text }}</label>
           {{ form.days(class_='form-control', placeholder='Leave blank to keep the current date') }}
+          {% for error in form.days.errors %}
+          <div class="text-danger small mt-1">{{ error }}</div>
+          {% endfor %}
         </div>
         <div class="mb-3">
           <label class="form-label" for="{{ form.reason.id }}">{{ form.reason.label.text }}</label>

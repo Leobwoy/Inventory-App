@@ -55,7 +55,11 @@
       <form method="post" action="{{ url_for('platform.act_on_payment', transaction_id=payment.id, action='confirm') }}">
         {{ form.hidden_tag() }}
         <div class="input-group">
-          {{ form.note(class_='form-control', rows=1, placeholder='Note (optional)') }}
+          {# Unique per card: the page renders this field once per payment, and
+             a repeated id is invalid and breaks every label that points at it. #}
+          {{ form.note(class_='form-control', rows=1, placeholder='Note (optional)',
+                       id='confirm-note-' ~ payment.id,
+                       **{'aria-label': 'Note on confirming this payment'}) }}
           <button type="submit" class="btn btn-success">Confirm</button>
         </div>
       </form>
@@ -64,7 +68,9 @@
       <form method="post" action="{{ url_for('platform.act_on_payment', transaction_id=payment.id, action='reject') }}">
         {{ form.hidden_tag() }}
         <div class="input-group">
-          {{ form.note(class_='form-control', rows=1, placeholder='Reason for rejecting') }}
+          {{ form.note(class_='form-control', rows=1, placeholder='Reason for rejecting',
+                       id='reject-reason-' ~ payment.id,
+                       **{'aria-label': 'Reason for rejecting this payment'}) }}
           <button type="submit" class="btn btn-outline-danger">Reject</button>
         </div>
       </form>

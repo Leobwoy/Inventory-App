@@ -12,6 +12,7 @@ from flask import (current_app, flash, redirect, render_template, request,
 from sqlalchemy import func
 
 from auth.models import Business, User
+from products.models import Product
 from billing.models import PaymentTransaction, Plan, Subscription
 from extensions import db
 from platform_console import platform_bp
@@ -23,9 +24,14 @@ from services import billing as billing_service
 from services import limits
 
 
-@platform_bp.app_context_processor
+@platform_bp.context_processor
 def console_context():
-    """`platform_admin` in every template, so a layout can branch on it."""
+    """`platform_admin`, for console templates only.
+
+    Blueprint-scoped rather than app-wide: as an app context processor this ran
+    a PlatformAdmin lookup on every render of every tenant page, to populate a
+    variable no tenant template reads.
+    """
     return {'platform_admin': current_admin()}
 
 
@@ -55,8 +61,10 @@ def login():
     return render_template('platform/login.html', form=form)
 
 
-@platform_bp.route('/logout')
+@platform_bp.route('/logout', methods=['POST'])
 def logout():
+    """POST, not a link: a GET logout can be triggered by anything that renders
+    a URL on your behalf, and CSRF protection does not apply to GET."""
     sign_out()
     return redirect(url_for('platform.login'))
 
@@ -87,24 +95,30 @@ def dashboard():
                 .order_by(Subscription.trial_ends_at.asc())
                 .all())
 
-    paying = (Subscription.query
-              .filter(Subscription.status.in_(('active', 'grace')),
-                      Subscription.paid_through.isnot(None),
-                      Subscription.paid_through > now)
-              .all())
-    monthly_value = sum(
-        (Decimal(s.plan.price_monthly_ghs or 0) for s in paying), Decimal('0'))
+    # Counted and summed in SQL. Walking the rows to read s.plan is a query per
+    # subscription, and this is the page that loads most often.
+    paying_count, monthly_value = (
+        db.session.query(func.count(Subscription.id),
+                         func.coalesce(func.sum(Plan.price_monthly_ghs), 0))
+        .join(Plan, Plan.id == Subscription.plan_id)
+        .filter(Subscription.status.in_(('active', 'grace')),
+                Subscription.paid_through.isnot(None),
+                Subscription.paid_through > now)
+        .one())
 
-    businesses = {b.id: b for b in Business.query.all()}
+    # Only the businesses these two lists actually name, not every tenant.
+    named = {t.business_id for t in pending} | {s.business_id for s in expiring}
+    businesses = ({b.id: b for b in Business.query.filter(Business.id.in_(named)).all()}
+                  if named else {})
 
     return render_template(
         'platform/dashboard.html',
         pending=pending,
         expiring=expiring,
         businesses=businesses,
-        total_businesses=len(businesses),
-        paying_count=len(paying),
-        monthly_value=monthly_value,
+        total_businesses=Business.query.count(),
+        paying_count=paying_count,
+        monthly_value=Decimal(monthly_value),
         new_this_month=Business.query.filter(
             Business.created_at >= now - datetime.timedelta(days=30)).count(),
     )
@@ -162,10 +176,16 @@ def act_on_payment(transaction_id, action):
             flash('Unknown action.', 'danger')
             return redirect(url_for('platform.payments'))
         db.session.commit()
-    except Exception as error:
+    except ValueError as error:
+        # A domain refusal carries text written for a reader. Anything else is a
+        # fault, and its message belongs in the log rather than on the screen.
+        db.session.rollback()
+        flash(str(error), 'danger')
+        return redirect(url_for('platform.payments'))
+    except Exception:
         db.session.rollback()
         current_app.logger.exception('a console payment action failed')
-        flash(f'Could not complete that: {error}', 'danger')
+        flash('Something went wrong and nothing was changed.', 'danger')
         return redirect(url_for('platform.payments'))
 
     flash(message, 'success')
@@ -183,15 +203,32 @@ def businesses():
     if term:
         query = query.filter(Business.name.ilike(f'%{term}%'))
 
-    rows = []
-    for business in query.order_by(Business.created_at.desc()).limit(200).all():
-        rows.append({
-            'business': business,
-            'plan': limits.effective_plan(business.id),
-            'subscription': Subscription.query.filter_by(business_id=business.id).first(),
-            'users': limits.active_user_count(business.id),
-            'products': limits.active_product_count(business.id),
-        })
+    found = query.order_by(Business.created_at.desc()).limit(200).all()
+    ids = [b.id for b in found]
+
+    # Grouped once for the page. Per-business counts meant four round trips a
+    # row, which at 200 rows is 800 queries to draw one table.
+    user_counts = dict(
+        db.session.query(User.business_id, func.count(User.id))
+        .filter(User.business_id.in_(ids), User.is_active.isnot(False))
+        .group_by(User.business_id).all()) if ids else {}
+    product_counts = dict(
+        db.session.query(Product.business_id, func.count(Product.id))
+        .filter(Product.business_id.in_(ids), Product.is_active.is_(True))
+        .group_by(Product.business_id).all()) if ids else {}
+    subscriptions = {s.business_id: s for s in Subscription.query.filter(
+        Subscription.business_id.in_(ids)).all()} if ids else {}
+
+    rows = [{
+        'business': business,
+        # Still per-business: effective_plan reads a subscription's dates and
+        # has no batched form. It is memoised per request, so this costs one
+        # lookup per business rather than two queries.
+        'plan': limits.effective_plan(business.id),
+        'subscription': subscriptions.get(business.id),
+        'users': user_counts.get(business.id, 0),
+        'products': product_counts.get(business.id, 0),
+    } for business in found]
 
     return render_template('platform/businesses.html', rows=rows, q=term)
 
@@ -225,11 +262,18 @@ def business_detail(business_id):
         if form.days.data:
             subscription.paid_through = (datetime.datetime.utcnow()
                                          + datetime.timedelta(days=int(form.days.data)))
-        audit.log('billing.plan_changed_by_platform', entity_type='business',
-                  entity_id=business_id, business_id=business_id, user_id=None,
-                  before=before, after=(plan.code, subscription.status),
-                  reason=form.reason.data, changed_by=current_admin().email)
-        db.session.commit()
+        try:
+            audit.log('billing.plan_changed_by_platform', entity_type='business',
+                      entity_id=business_id, business_id=business_id, user_id=None,
+                      before=before, after=(plan.code, subscription.status),
+                      reason=form.reason.data, changed_by=current_admin().email)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('a console plan change failed')
+            flash('Something went wrong and nothing was changed.', 'danger')
+            return redirect(url_for('platform.business_detail', business_id=business_id))
+
         flash(f'{business.name} is now on {plan.name}.', 'success')
         return redirect(url_for('platform.business_detail', business_id=business_id))
 

@@ -129,11 +129,13 @@ def create_app():
     from platform_console.cli import (confirm_payment_command,
                                       create_platform_admin_command,
                                       list_platform_admins_command,
-                                      pending_payments_command)
+                                      pending_payments_command,
+                                      reject_payment_command)
     app.cli.add_command(create_platform_admin_command)
     app.cli.add_command(list_platform_admins_command)
     app.cli.add_command(pending_payments_command)
     app.cli.add_command(confirm_payment_command)
+    app.cli.add_command(reject_payment_command)
 
     from flask_login import login_required, current_user
     from auth.decorators import permission_required

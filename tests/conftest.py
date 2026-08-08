@@ -115,6 +115,38 @@ def client(app):
     return app.test_client()
 
 
+CONSOLE_PASSWORD = 'console-password-1234'
+
+
+@pytest.fixture
+def platform_account(app):
+    """An account for the vendor console. Not a User, and not in any business."""
+    from platform_console.models import PlatformAdmin
+    from extensions import db
+
+    admin = PlatformAdmin(email='runs@tracktrack.example.com', name='Platform Owner')
+    admin.set_password(CONSOLE_PASSWORD)
+    db.session.add(admin)
+    db.session.commit()
+    return admin
+
+
+@pytest.fixture
+def console(app, platform_account):
+    """A client signed in to the console and to nothing else.
+
+    Asserts the sign-in worked: a silently failed login here would turn every
+    console assertion into a test of the login redirect instead.
+    """
+    client = app.test_client()
+    response = client.post('/platform/login',
+                           data={'email': platform_account.email,
+                                 'password': CONSOLE_PASSWORD},
+                           follow_redirects=False)
+    assert response.status_code == 302, 'console sign-in failed'
+    return client
+
+
 # --------------------------------------------------------------------------
 # Builders
 # --------------------------------------------------------------------------

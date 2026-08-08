@@ -107,8 +107,12 @@ terminal:
 
 ```bash
 DATABASE_URL="<your Neon string>" flask pending-payments
-DATABASE_URL="<your Neon string>" flask confirm-payment <transaction-id>
+DATABASE_URL="<your Neon string>" flask confirm-payment <reference>
+DATABASE_URL="<your Neon string>" flask reject-payment <reference>
 ```
+
+The reference is what the customer submitted — for mobile money, the transaction
+ID their network texted them. `pending-payments` lists them.
 
    Generate the key on your machine and paste the output:
 

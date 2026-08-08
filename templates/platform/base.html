@@ -60,9 +60,14 @@
   <a href="{{ url_for('platform.dashboard') }}">Overview</a>
   <a href="{{ url_for('platform.payments') }}">Payments</a>
   <a href="{{ url_for('platform.businesses') }}">Businesses</a>
-  <span class="ms-auto muted small">
+  <span class="ms-auto muted small d-flex align-items-center gap-2">
     {{ platform_admin.name }}
-    <a href="{{ url_for('platform.logout') }}" class="ms-2">Sign out</a>
+    {# A form, because signing out is a state change and GET carries no token. #}
+    <form method="post" action="{{ url_for('platform.logout') }}" class="d-inline">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button type="submit" class="btn btn-link btn-sm p-0 align-baseline"
+              style="color: var(--console-muted);">Sign out</button>
+    </form>
   </span>
 </div>
 {% endif %}

@@ -239,6 +239,10 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   browser is not an option. Console covers payments, a customer list, and changing a plan
   by hand (comping, corrections) — every change audited into the affected business's own
   log, so the business can see it too.
+- **Console login throttling.** `/platform/login` has no rate limiting. It is a single
+  unadvertised account with a 12-character minimum, so the exposure is small, but a proper
+  limiter needs a storage backend (Flask-Limiter with Redis, or a database table) and the
+  free tier has neither. Decide before the console is worth attacking.
 - **Deployed 2026-08-05** to Render + Neon (Frankfurt). `DEPLOY.md` has the walkthrough.
   Production config:
   `SECRET_KEY` is now **required** in production (it silently fell back to a default

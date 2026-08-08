@@ -36,37 +36,6 @@ def shop(register, monkeypatch):
     return client, business_id
 
 
-CONSOLE_PASSWORD = 'console-password-1234'
-
-
-@pytest.fixture
-def console(app):
-    """A client signed in to the vendor console.
-
-    Separate from the tenant client on purpose: confirming a payment is not
-    something anyone inside a business can do, so these tests cannot reach it
-    with a tenant session even by accident.
-    """
-    from platform_console.models import PlatformAdmin
-
-    admin = PlatformAdmin(email='runs@tracktrack.example.com', name='Platform Owner')
-    admin.set_password(CONSOLE_PASSWORD)
-    db.session.add(admin)
-    db.session.commit()
-
-    client = app.test_client()
-    client.post('/platform/login',
-                data={'email': admin.email, 'password': CONSOLE_PASSWORD},
-                follow_redirects=True)
-    return client
-
-
-@pytest.fixture
-def platform_admin(shop):
-    """The tenant side of a scenario that also needs the console."""
-    return shop
-
-
 def claim(client, plan_code='standard', reference='MP260805.1423.A1', cycle='monthly'):
     return client.post(f'/billing/upgrade/{plan_code}', data={
         'cycle': cycle, 'reference': reference, 'payer_note': '0244999888',
@@ -192,8 +161,8 @@ def test_a_tenant_cannot_confirm_their_own_payment(shop):
 
 
 
-def test_confirming_activates_the_plan(platform_admin, console):
-    client, business_id = platform_admin
+def test_confirming_activates_the_plan(shop, console):
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
 
@@ -208,10 +177,10 @@ def test_confirming_activates_the_plan(platform_admin, console):
     assert limits.has_feature('credit_ledger', business_id)
 
 
-def test_confirming_twice_does_not_buy_a_second_month(platform_admin, console):
+def test_confirming_twice_does_not_buy_a_second_month(shop, console):
     """The obvious human error here is a double click, and the obvious machine
     one is a webhook delivered twice."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
 
@@ -224,9 +193,9 @@ def test_confirming_twice_does_not_buy_a_second_month(platform_admin, console):
     assert Subscription.query.filter_by(business_id=business_id).one().paid_through == first
 
 
-def test_paying_early_adds_time_rather_than_replacing_it(platform_admin, console):
+def test_paying_early_adds_time_rather_than_replacing_it(shop, console):
     """Renewing a week before expiry must not throw that week away."""
-    client, business_id = platform_admin
+    client, business_id = shop
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.status = 'active'
     subscription.paid_through = datetime.datetime.utcnow() + datetime.timedelta(days=10)
@@ -242,11 +211,11 @@ def test_paying_early_adds_time_rather_than_replacing_it(platform_admin, console
     assert extended >= existing + datetime.timedelta(days=billing_service.MONTH_DAYS)
 
 
-def test_a_confirmation_is_audited(platform_admin, console):
+def test_a_confirmation_is_audited(shop, console):
     """Money moved because a person said so, and whose word it was has to be
     answerable later."""
     from auth.models import AuditLog
-    client, _business_id = platform_admin
+    client, _business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
     console.post(f'/platform/payments/{transaction.id}/confirm',
@@ -257,10 +226,10 @@ def test_a_confirmation_is_audited(platform_admin, console):
     assert 'standard' in entry.details_json
 
 
-def test_rejecting_keeps_the_claim_on_record(platform_admin, console):
+def test_rejecting_keeps_the_claim_on_record(shop, console):
     """A rejected claim is the record of someone saying money arrived when it
     did not, which is exactly the history worth keeping."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
 
@@ -271,8 +240,8 @@ def test_rejecting_keeps_the_claim_on_record(platform_admin, console):
     assert Subscription.query.filter_by(business_id=business_id).one().status == 'trialing'
 
 
-def test_a_confirmed_payment_cannot_be_rejected_afterwards(platform_admin, console):
-    client, _business_id = platform_admin
+def test_a_confirmed_payment_cannot_be_rejected_afterwards(shop, console):
+    client, _business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
     console.post(f'/platform/payments/{transaction.id}/confirm',
@@ -283,10 +252,10 @@ def test_a_confirmed_payment_cannot_be_rejected_afterwards(platform_admin, conso
     assert PaymentTransaction.query.one().status == 'paid'
 
 
-def test_nothing_renews_itself(platform_admin, console):
+def test_nothing_renews_itself(shop, console):
     """Mobile money has no reusable authorisation in Ghana, so the app must
     never imply it will take money again on its own."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
     console.post(f'/platform/payments/{transaction.id}/confirm',
@@ -308,12 +277,12 @@ def test_the_manual_provider_never_confirms_on_its_own():
 
 
 
-def test_the_plan_is_read_from_the_transaction_not_from_todays_price(platform_admin, console):
+def test_the_plan_is_read_from_the_transaction_not_from_todays_price(shop, console):
     """confirm() used to recover the plan by matching the recorded amount against
     current prices. That breaks the first time a price moves: a customer who paid
     GHS 199 for Depot and is confirmed after Depot rises to GHS 249 matches no
     plan at all, and gets an error instead of the thing they paid for."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
     assert transaction.plan_id is not None
@@ -333,11 +302,11 @@ def test_the_plan_is_read_from_the_transaction_not_from_todays_price(platform_ad
     assert PaymentTransaction.query.one().amount_ghs == Decimal('199.00')
 
 
-def test_a_rejected_payment_cannot_then_be_confirmed(platform_admin, console):
+def test_a_rejected_payment_cannot_then_be_confirmed(shop, console):
     """Guarding only against 'paid' left a rejected claim confirmable - so
     refusing a fraudulent payment and then confirming it by mistake would grant
     the plan anyway."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
 
@@ -377,11 +346,11 @@ def test_a_cycle_the_plan_has_no_price_for_is_refused(shop):
     assert PaymentTransaction.query.count() == 0
 
 
-def test_the_current_plan_can_be_renewed(platform_admin, console):
+def test_the_current_plan_can_be_renewed(shop, console):
     """Mobile money cannot charge anyone automatically, so renewing is the most
     common thing a paying customer comes to this page to do. Hiding the button
     on the plan they are already on hid exactly that."""
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction = PaymentTransaction.query.one()
     console.post(f'/platform/payments/{transaction.id}/confirm',
@@ -408,7 +377,7 @@ def test_the_upgrade_page_carries_both_prices_for_the_amount_to_follow():
     assert 'due.dataset[radio.value]' in source
 
 
-def test_a_stale_in_memory_transaction_cannot_be_confirmed_twice(platform_admin, console, app):
+def test_a_stale_in_memory_transaction_cannot_be_confirmed_twice(shop, console, app):
     """Two independent sessions, which is the realistic version of the race.
 
     A second request loads the transaction, someone confirms it from the first,
@@ -419,7 +388,7 @@ def test_a_stale_in_memory_transaction_cannot_be_confirmed_twice(platform_admin,
     """
     from sqlalchemy.orm import Session
 
-    client, business_id = platform_admin
+    client, business_id = shop
     claim(client)
     transaction_id = PaymentTransaction.query.one().id
 

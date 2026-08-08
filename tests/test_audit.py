@@ -289,3 +289,31 @@ def test_the_date_filter_still_filters(register, app):
     results = body.split('<tbody>', 1)[1].split('</tbody>', 1)[0]
     assert 'sale.create' in results
     assert 'sale.void' not in results
+
+
+def test_an_explicit_none_user_is_not_replaced_by_the_signed_in_one(register):
+    """`user_id=None` means "nobody in this business did this" - a platform
+    admin confirming a payment, or a scheduled job. It used to be
+    indistinguishable from "not supplied", so such an action performed while a
+    tenant session happened to exist would have been signed with that tenant's
+    user, crediting a customer with a decision they did not make."""
+    from auth.models import AuditLog
+    from extensions import db
+    from services import audit
+
+    client, business_id = register()
+    # Inside a request, so current_user is a real signed-in tenant.
+    with client.application.test_request_context():
+        from flask_login import login_user
+        from auth.models import User
+        login_user(User.query.filter_by(business_id=business_id).first())
+
+        audit.log('test.platform_action', business_id=business_id, user_id=None)
+        audit.log('test.tenant_action', business_id=business_id)
+        db.session.commit()
+
+    platform_entry = AuditLog.query.filter_by(action='test.platform_action').one()
+    tenant_entry = AuditLog.query.filter_by(action='test.tenant_action').one()
+
+    assert platform_entry.user_id is None, 'an explicit None was overwritten'
+    assert tenant_entry.user_id is not None, 'omitting it should still infer the user'

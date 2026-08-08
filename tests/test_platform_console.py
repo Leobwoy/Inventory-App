@@ -18,26 +18,10 @@ from billing.models import PaymentTransaction, Plan, Subscription
 from extensions import db
 from platform_console.models import PlatformAdmin
 
-CONSOLE_PASSWORD = 'console-password-1234'
-
-
 @pytest.fixture
-def admin(app):
-    account = PlatformAdmin(email='runs@tracktrack.example.com', name='Platform Owner')
-    account.set_password(CONSOLE_PASSWORD)
-    db.session.add(account)
-    db.session.commit()
-    return account
-
-
-@pytest.fixture
-def console(app, admin):
-    """A client signed in to the console, and to nothing else."""
-    client = app.test_client()
-    client.post('/platform/login',
-                data={'email': admin.email, 'password': CONSOLE_PASSWORD},
-                follow_redirects=True)
-    return client
+def admin(platform_account):
+    """The account behind the shared `console` fixture."""
+    return platform_account
 
 
 @pytest.fixture
@@ -100,6 +84,7 @@ def test_the_console_login_works(console):
 def test_a_wrong_password_says_nothing_useful(app, admin):
     """One message for every failure. 'No such account' tells someone which
     addresses are worth guessing a password for."""
+    from tests.conftest import CONSOLE_PASSWORD          # noqa: F401
     client = app.test_client()
     unknown = client.post('/platform/login',
                           data={'email': 'nobody@example.com', 'password': 'x' * 20},
@@ -125,7 +110,10 @@ def test_a_deactivated_admin_loses_access_immediately(console, admin):
 
 
 def test_signing_out_ends_the_console_session(console):
-    console.get('/platform/logout')
+    # POST: signing out is a state change, and a GET logout can be triggered by
+    # anything that renders a URL on your behalf.
+    assert console.get('/platform/logout').status_code == 405
+    console.post('/platform/logout')
     assert console.get('/platform/', follow_redirects=False).status_code == 302
 
 
@@ -180,7 +168,7 @@ def test_rejecting_requires_a_reason(console, tenant):
 
 def test_the_businesses_list_shows_the_plan_in_effect(console, tenant):
     _client, business_id = tenant
-    business = Business.query.get(business_id)
+    business = db.session.get(Business, business_id)
 
     body = console.get('/platform/businesses').get_data(as_text=True)
     assert business.name in body
@@ -256,3 +244,67 @@ def test_a_rejection_from_the_console_is_recorded_too(console, tenant, admin):
     assert entry.user_id is None                 # nobody in that business did this
     assert admin.email in entry.details_json
     assert 'not on the statement' in entry.details_json
+
+
+# --- the command-line fallback ----------------------------------------------
+
+def test_the_cli_can_confirm_and_reject(app, tenant):
+    """The console needs a browser and a working web layer. When either is
+    unavailable the money still has to be settled, so the same service is
+    reachable from a terminal - and both directions, not just granting."""
+    from platform_console.cli import confirm_payment_command, reject_payment_command
+
+    client, business_id = tenant
+    claim(client, reference='MP-CLI-1')
+    claim(client, plan_code='basic', reference='MP-CLI-2')
+
+    runner = app.test_cli_runner()
+    runner.invoke(confirm_payment_command, ['MP-CLI-1', '--by', 'terminal'], input='y\n')
+    # An empty reason is refused here as it is in the console: a rejection with
+    # nothing stated is a dispute nobody can settle later.
+    blank = runner.invoke(reject_payment_command, ['MP-CLI-2', '--reason', '   '],
+                          input='y\n')
+    assert 'reason is required' in blank.output
+    assert PaymentTransaction.query.filter_by(provider_ref='MP-CLI-2').one().status == 'pending'
+
+    runner.invoke(reject_payment_command,
+                  ['MP-CLI-2', '--reason', 'not on the statement'], input='y\n')
+
+    assert PaymentTransaction.query.filter_by(provider_ref='MP-CLI-1').one().status == 'paid'
+    assert PaymentTransaction.query.filter_by(provider_ref='MP-CLI-2').one().status == 'rejected'
+    assert Subscription.query.filter_by(business_id=business_id).one().status == 'active'
+
+
+def test_the_cli_refuses_a_malformed_console_account(app):
+    """An empty prompt or a typo would otherwise create an account nobody can
+    sign in to, and the failure would only show up at the login screen."""
+    from platform_console.cli import create_platform_admin_command
+
+    runner = app.test_cli_runner()
+    bad_email = runner.invoke(create_platform_admin_command,
+                              ['--email', 'not-an-address', '--name', 'X',
+                               '--password', 'a-long-enough-password'])
+    no_name = runner.invoke(create_platform_admin_command,
+                            ['--email', 'ok@example.com', '--name', '   ',
+                             '--password', 'a-long-enough-password'])
+    short = runner.invoke(create_platform_admin_command,
+                          ['--email', 'ok@example.com', '--name', 'X',
+                           '--password', 'short'])
+
+    assert 'does not look like an email' in bad_email.output
+    assert 'A name is required' in no_name.output
+    assert 'at least 12 characters' in short.output
+    assert PlatformAdmin.query.count() == 0
+
+
+def test_the_cli_will_not_settle_a_payment_twice(app, tenant):
+    from platform_console.cli import confirm_payment_command
+
+    client, _business_id = tenant
+    claim(client, reference='MP-CLI-3')
+
+    runner = app.test_cli_runner()
+    runner.invoke(confirm_payment_command, ['MP-CLI-3'], input='y\n')
+    again = runner.invoke(confirm_payment_command, ['MP-CLI-3'], input='y\n')
+
+    assert 'already paid' in again.output
