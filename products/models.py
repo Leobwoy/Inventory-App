@@ -47,6 +47,10 @@ class ItemGroup(db.Model):
     business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False)
     name = db.Column(db.String(100), nullable=False)
     category_id = db.Column(db.Integer, db.ForeignKey('category.id'))
+    # Opt-in, because most of what this market sells does not meaningfully
+    # expire. Warning about every carton of mineral water teaches people to
+    # ignore warnings, and then the yoghurt goes unread with the rest (D1).
+    track_expiry = db.Column(db.Boolean, nullable=False, default=False)
     category = db.relationship('Category', backref='item_groups', lazy=True)
     products = db.relationship('Product', backref='item_group', lazy=True)
 

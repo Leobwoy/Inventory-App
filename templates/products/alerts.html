@@ -1,0 +1,50 @@
+{% extends 'base.html' %}
+{% block title %}Needs attention | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Needs attention</h2>
+</div>
+
+{% if alerts %}
+{% for alert in alerts %}
+<div class="glass-card mb-3" style="border-left: 3px solid
+     {% if alert.severity == 'critical' %}#dc2626{% else %}#fbbf24{% endif %};">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-1">
+        {% if alert.severity == 'critical' %}
+        <i class="bi bi-exclamation-octagon-fill text-danger"></i>
+        {% else %}
+        <i class="bi bi-exclamation-triangle-fill text-warning"></i>
+        {% endif %}
+        <h5 class="mb-0">{{ alert.title }}</h5>
+      </div>
+      <div class="text-muted">{{ alert.detail }}</div>
+    </div>
+    {# The service hands over a route name and its arguments; turning that into
+       a link is the template's job, and keeps the service usable off-request. #}
+    <a href="{{ url_for(alert.endpoint, **alert.params) }}"
+       class="btn btn-sm btn-outline-primary">Open</a>
+  </div>
+</div>
+{% endfor %}
+{% else %}
+<div class="glass-card text-center py-5 text-muted">
+  <i class="bi bi-check2-circle fs-1 d-block mb-3 text-success"></i>
+  <div class="fs-5">Nothing needs you right now.</div>
+  <p class="small mt-2 mb-0">
+    Stock is above its reorder levels, nothing is near expiry, and no customer
+    is badly overdue.
+  </p>
+</div>
+{% endif %}
+
+<p class="text-muted small mt-4">
+  {# Said plainly, because a list that can be cleared implies the problems can
+     be cleared, and these can only be fixed. #}
+  <i class="bi bi-info-circle me-1"></i>
+  This list is worked out fresh each time you open it. There is nothing to mark
+  as read &mdash; an item leaves when the thing it is about stops being true.
+</p>
+{% endblock %}

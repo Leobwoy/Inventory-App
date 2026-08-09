@@ -186,6 +186,26 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   stranded the other forty-nine. A conflict is terminal — it drops out of the pending
   filter — so the condition is now "every sale reached a terminal state", with `retry` still
   stopping the loop so a sale that cannot go never spins.
+- **2.5 Notification centre and expiry alerts.** `services/notifications.py` plus
+  `/products/alerts` — out of stock, below reorder level, expiring, already expired,
+  customers overdue past 60 days, and a trial or plan about to lapse. Worst first.
+  **Derived, never stored.** Every alert is a fact about the current state, so it is
+  computed on read and leaves when the fact stops being true. There is deliberately no
+  read/unread: a stored alert can be dismissed while the thing it warns about is still
+  happening, and then the screen says all is well with the stock still at zero. The cost is
+  that it cannot describe the past — that would be an events table and a different feature.
+  **Expiry alerting is opt-in per item group (D1).** `ItemGroup.track_expiry`, default off.
+  This market sells mostly things that do not meaningfully expire, and warning about all of
+  it is how people learn to ignore warnings. The `?stock=expiring` product filter honours
+  the same flag, so the page an alert links to shows what the alert counted.
+  The service returns an **endpoint and params, not a built URL**, so it needs no request
+  context and stays usable from a CLI command or the SMS reminders that will want the same
+  list. The sidebar badge is **fetched after load** rather than rendered: computing it costs
+  several queries and the sidebar is on all fifty-odd routes.
+  Found while building it: `Subscription.days_left` used `timedelta.days`, which truncates,
+  so a 14-day trial read "13 days left" from the moment it started. Now `days_until()`,
+  rounding up — part of a day is a day you still have. The existing test tolerated
+  `TRIAL_DAYS - 1`, which was accommodating the bug.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
   `static/js/combobox.js`. No template loads anything from another origin, which is a
@@ -208,6 +228,26 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
    branded invoices)
 
 ## Open Questions
+
+- **There is no password reset (F-43). Live risk.** A business owner who forgets their
+  password today is permanently locked out — there is no recovery flow anywhere, and the
+  console cannot reset one either. `auth/models.py` even comments that email "must identify
+  a person, because every identity-recovery flow depends on it", and then no such flow was
+  built. Blocked on nothing but a decision: sending email needs a provider (Resend, Brevo,
+  Mailgun), an API key, and ideally a domain — `onrender.com` senders land in spam.
+  Write the sending layer behind an interface, the way `billing/providers.py` is done.
+- **Email verification (F-44).** Wanted, and shares the whole dependency above, so it is one
+  unit with password reset: infrastructure → reset → verification, in that order. Must be
+  **soft** — the account works immediately with a "confirm your email" nudge — because a
+  hard gate means one undelivered email costs a customer on a phone with patchy data.
+- **Onboarding and trial messaging (F-45).** New businesses are told nothing about the
+  14-day full-access trial at registration, and there is no activation guidance after it.
+  Planned shape: trial terms on the registration page, a welcome screen, a **setup checklist
+  that ticks itself off from real data** (not a modal tour — those are a lot of JavaScript
+  for something people click past), and a countdown banner. Deliberately does not advertise
+  the free tier at signup; it stays listed on `/billing/` and the *end* of a trial must say
+  plainly what happens next, because a downgrade discovered by surprise loses the customer.
+  Requested 2026-08-08; user has more requirements to add from memory.
 
 - **Promotional discounts do not exist.** Point-of-sale discounting works (a per-line
   price reduction, permission-gated, capped, audited) now that the ceiling is settable.

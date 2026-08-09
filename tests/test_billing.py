@@ -81,7 +81,9 @@ def test_registration_starts_a_trial(business):
     subscription = Subscription.query.filter_by(business_id=business).one()
     assert subscription.status == 'trialing'
     assert subscription.plan.code == 'trial'
-    assert subscription.days_left in (TRIAL_DAYS - 1, TRIAL_DAYS)
+    # Exactly, not "give or take one". The tolerance here was accommodating the
+    # truncation bug that made a fourteen-day trial read as thirteen.
+    assert subscription.days_left == TRIAL_DAYS
 
 
 def test_trial_grants_advanced_features(business):
@@ -352,3 +354,24 @@ def test_a_trial_with_no_end_date_does_not_run_forever(business):
     db.session.commit()
 
     assert limits.effective_plan(business).code == 'free'
+
+
+def test_a_fourteen_day_trial_does_not_start_at_thirteen(business):
+    """timedelta.days truncates, so the microseconds between writing the
+    deadline and reading it were enough to lose a day. A customer who counts is
+    right to feel short-changed by that."""
+    subscription = Subscription.query.filter_by(business_id=business).one()
+    subscription.status = 'trialing'
+    subscription.trial_ends_at = datetime.utcnow() + timedelta(days=TRIAL_DAYS)
+    db.session.commit()
+
+    assert subscription.days_left == TRIAL_DAYS
+
+
+def test_part_of_a_day_still_counts_as_a_day(business):
+    from billing.models import days_until
+
+    now = datetime.utcnow()
+    assert days_until(now + timedelta(hours=1), now) == 1
+    assert days_until(now + timedelta(hours=25), now) == 2
+    assert days_until(now - timedelta(hours=1), now) == 0

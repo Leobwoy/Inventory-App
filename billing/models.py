@@ -7,6 +7,7 @@ matters: a business buys a period, and the system drives reminders towards its
 expiry rather than assuming a charge will succeed on the day.
 """
 import json
+import math
 from datetime import datetime
 
 from extensions import db
@@ -40,6 +41,20 @@ class Plan(db.Model):
 
     def __repr__(self):
         return f'<Plan {self.code}>'
+
+
+def days_until(deadline, now=None):
+    """Whole days remaining, rounded up.
+
+    timedelta.days truncates, so a fourteen-day trial reads "13 days left" from
+    the moment it starts - the microseconds between writing the deadline and
+    reading it are enough. Part of a day is a day you still have, and a customer
+    who counts is right to feel short-changed by the other answer.
+    """
+    remaining = (deadline - (now or datetime.utcnow())).total_seconds()
+    if remaining <= 0:
+        return 0
+    return int(math.ceil(remaining / 86400))
 
 
 class Subscription(db.Model):
@@ -81,7 +96,7 @@ class Subscription(db.Model):
         deadline = self.trial_ends_at if self.status == 'trialing' else self.paid_through
         if not deadline:
             return None
-        return max(0, (deadline - datetime.utcnow()).days)
+        return days_until(deadline)
 
     def __repr__(self):
         return f'<Subscription business={self.business_id} {self.status}>'
