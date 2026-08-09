@@ -75,7 +75,13 @@ def cron_subscriptions():
     supplied = (request.headers.get('X-Cron-Key') or '').strip()
     # Constant time: a plain == leaks the secret one character at a time to
     # anyone patient enough to measure.
-    if not expected or not hmac.compare_digest(expected, supplied):
+    #
+    # Compared as bytes, because compare_digest refuses two strings when either
+    # holds a non-ASCII character - and a secret someone generated with a
+    # passphrase rather than token_urlsafe would then raise, turning the guard
+    # into a 500 that reveals the endpoint is real.
+    if not expected or not hmac.compare_digest(expected.encode('utf-8'),
+                                               supplied.encode('utf-8')):
         abort(404)
 
     summary = subscriptions.reconcile_all()

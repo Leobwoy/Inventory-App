@@ -102,7 +102,7 @@ def alerts():
     from services import notifications
 
     return render_template('products/alerts.html',
-                           alerts=notifications.cached_for(current_user.business_id))
+                           alerts=notifications.for_user(current_user))
 
 
 @products_bp.route('/alerts/count')
@@ -120,7 +120,9 @@ def alert_count():
     from flask import jsonify
     from services import notifications
 
-    alerts = notifications.cached_for(current_user.business_id)
+    # for_user, not cached_for: the badge must count what this person will
+    # actually be shown, or it advertises alerts the page then withholds.
+    alerts = notifications.for_user(current_user)
     response = jsonify({
         'count': len(alerts),
         'critical': sum(1 for a in alerts if a['severity'] == 'critical'),

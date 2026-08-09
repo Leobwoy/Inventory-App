@@ -25,6 +25,9 @@ on:
 jobs:
   reconcile:
     runs-on: ubuntu-latest
+    # Nothing here touches the repository - it makes one outbound request - so
+    # the token it is handed should be able to do nothing at all.
+    permissions: {}
     steps:
       - name: Apply due transitions
         env:
@@ -42,9 +45,15 @@ jobs:
           # that wake-up: the first call often dies before the app is listening.
           # Safe to retry - the endpoint is idempotent, and a transition that has
           # already been applied is no longer due.
+          #
+          # --retry-connrefused is the one that matters here. Waking Render
+          # refuses the connection outright rather than answering with an error
+          # status, and plain --retry does not treat that as retryable - so
+          # without it the retries never happen on the failure they were added
+          # for.
           code=$(curl --silent --show-error \
                       --output response.json --write-out '%{http_code}' \
-                      --max-time 120 --retry 2 --retry-delay 30 \
+                      --max-time 120 --retry 2 --retry-delay 30 --retry-connrefused \
                       --request POST "$APP_URL/api/v1/cron/subscriptions" \
                       --header "X-Cron-Key: $CRON_SECRET")
 

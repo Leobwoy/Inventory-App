@@ -38,7 +38,6 @@ def reconcile_on_use():
     today = datetime.date.today().isoformat()
     if session.get('subscription_checked') == today:
         return
-    session['subscription_checked'] = today
 
     from extensions import db
     from services import subscriptions
@@ -46,6 +45,12 @@ def reconcile_on_use():
     try:
         if subscriptions.reconcile_business(current_user.business_id):
             db.session.commit()
+        # Marked only once the work is done. Marking before it would write the
+        # day off on a connection that blinked, and this business would then be
+        # skipped until tomorrow. The cost of the other order is that a business
+        # whose reconcile fails every time pays one extra query per page - which
+        # is the cheaper mistake, and loud in the log either way.
+        session['subscription_checked'] = today
     except Exception:
         # A failed reconcile must never break the page someone asked for. The
         # scheduled run will pick it up, and access was never waiting on it.

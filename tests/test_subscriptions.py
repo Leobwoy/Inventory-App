@@ -75,14 +75,34 @@ def test_a_lapsed_paid_plan_gets_the_grace_period_first(shop):
 
 def test_grace_runs_out_eventually(shop):
     client, business_id = shop
-    put_on(business_id, 'active',
+    put_on(business_id, 'grace',
            paid_through=NOW - datetime.timedelta(days=GRACE_DAYS + 1))
 
-    # Two steps, because each reconcile applies one transition: the row goes
-    # active -> grace, and the second pass finds the grace period already spent.
-    assert subscriptions.reconcile(sub_for(business_id)) == 'grace'
     assert subscriptions.reconcile(sub_for(business_id)) == 'free'
     assert sub_for(business_id).status == 'free'
+
+
+def test_a_long_lapsed_plan_does_not_stop_off_in_grace(shop):
+    """One step, not two. `effective_plan` treats active and grace alike - both
+    keep the plan until paid_through + grace - so a row that lapsed months ago
+    has no grace left to enter. Parking it there for a day would be this module
+    contradicting the read path it exists to follow, and on a daily schedule
+    that contradiction is exactly what anyone looking would see."""
+    client, business_id = shop
+    put_on(business_id, 'active',
+           paid_through=NOW - datetime.timedelta(days=GRACE_DAYS + 30))
+
+    assert subscriptions.reconcile(sub_for(business_id)) == 'free'
+    assert sub_for(business_id).status == 'free'
+
+
+def test_a_plan_that_lapsed_yesterday_still_gets_its_grace(shop):
+    """The distinction the step above must not flatten."""
+    client, business_id = shop
+    put_on(business_id, 'active', paid_through=NOW - datetime.timedelta(days=1))
+
+    assert subscriptions.reconcile(sub_for(business_id)) == 'grace'
+    assert sub_for(business_id).status == 'grace'
 
 
 def test_grace_that_has_not_run_out_is_left_alone(shop):
@@ -327,6 +347,35 @@ def test_a_failed_lazy_check_still_serves_the_page(shop, monkeypatch):
     assert client.get('/').status_code == 200
 
 
+def test_a_failed_lazy_check_is_tried_again_rather_than_written_off(shop, monkeypatch):
+    """The marker is written after the work, not before it. Written before, a
+    connection that blinked once would skip this business until tomorrow - and
+    the business the lazy trigger is for is the one using the app right now."""
+    client, business_id = shop
+    put_on(business_id, 'trialing', trial_ends_at=NOW - datetime.timedelta(days=1))
+
+    attempts = []
+    real = subscriptions.reconcile_business
+
+    def fail_once(bid, now=None):
+        attempts.append(bid)
+        if len(attempts) == 1:
+            raise RuntimeError('the database blinked')
+        return real(bid, now)
+
+    monkeypatch.setattr(subscriptions, 'reconcile_business', fail_once)
+    with client.session_transaction() as session:
+        session.pop('subscription_checked', None)
+
+    client.get('/')                        # fails, and must not mark the day done
+    with client.session_transaction() as session:
+        assert 'subscription_checked' not in session
+
+    client.get('/')                        # so the next page tries it again
+    assert len(attempts) == 2
+    assert sub_for(business_id).status == 'free'
+
+
 def test_the_lazy_check_ignores_signed_out_visitors(app, monkeypatch):
     """The login page is fetched by people with no business to reconcile.
 
@@ -380,6 +429,20 @@ def test_the_cron_endpoint_refuses_no_secret_at_all(client, monkeypatch):
     assert client.post('/api/v1/cron/subscriptions').status_code == 404
 
 
+def test_a_secret_with_an_accent_in_it_is_refused_not_crashed(client, monkeypatch):
+    """hmac.compare_digest refuses two str arguments when either holds a
+    non-ASCII character. Compared as text, a passphrase secret would therefore
+    raise on every call - turning the guard into a 500, which tells anyone
+    probing that the endpoint is real and that something behind it is broken."""
+    monkeypatch.setenv('CRON_SECRET', 'sécret-phrase-non-ascii')
+
+    assert client.post('/api/v1/cron/subscriptions',
+                       headers={'X-Cron-Key': 'wrong'}).status_code == 404
+    assert client.post('/api/v1/cron/subscriptions',
+                       headers={'X-Cron-Key': 'sécret-phrase-non-ascii'}
+                       ).status_code == 200
+
+
 def test_an_unconfigured_cron_endpoint_does_not_exist(client, monkeypatch):
     """404 rather than 500 or 403. An endpoint nobody has set up should not
     admit that it might work with the right header."""
@@ -391,17 +454,26 @@ def test_an_unconfigured_cron_endpoint_does_not_exist(client, monkeypatch):
                        headers={'X-Cron-Key': 'anything'}).status_code == 404
 
 
-def test_the_cron_endpoint_is_exempt_from_csrf(app):
-    """A scheduler has no session and cannot fetch a token first, so a POST from
-    one would be refused in production. Safe to exempt only because the endpoint
-    takes no input and is idempotent.
+def test_the_cron_endpoint_is_exempt_from_csrf(app, monkeypatch):
+    """A scheduler has no session and cannot fetch a token first, so without the
+    exemption every scheduled run would be refused in production - where CSRF is
+    on, and where the suite's default of off would have hidden it.
 
-    Asserted against the registration rather than by posting without a token:
-    the suite runs with WTF_CSRF_ENABLED=False, so a post would pass either way
-    and this test would still pass with the exemption deleted."""
-    from app import csrf
+    Protection is switched back on for this one test and the post carries no
+    token. The login post first is not decoration: it proves the switch actually
+    took, so a green result here cannot mean "CSRF was off anyway".
+    """
+    monkeypatch.setenv('CRON_SECRET', 'a-secret-worth-keeping')
+    monkeypatch.setitem(app.config, 'WTF_CSRF_ENABLED', True)
+    client = app.test_client()
 
-    assert 'api.routes.cron_subscriptions' in csrf._exempt_views
+    guarded = client.post('/auth/login', data={'email': 'x@y.example.com',
+                                               'password': 'whatever'})
+    assert guarded.status_code == 400, 'CSRF protection did not switch on'
+
+    response = client.post('/api/v1/cron/subscriptions',
+                           headers={'X-Cron-Key': 'a-secret-worth-keeping'})
+    assert response.status_code == 200
 
 
 def test_the_cron_endpoint_is_not_a_way_in(client, register, monkeypatch):

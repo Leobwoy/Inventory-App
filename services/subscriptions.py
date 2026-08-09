@@ -36,7 +36,7 @@ REASONS = {
     ('trialing', 'free'): 'The free trial ended.',
     ('active', 'grace'): 'The paid period ended; the grace period has started.',
     ('grace', 'free'): 'The grace period ended without a renewal.',
-    ('active', 'free'): 'The paid period ended and no end date was recorded.',
+    ('active', 'free'): 'The paid period and the grace period both ended.',
 }
 
 
@@ -61,6 +61,14 @@ def due_transition(subscription, now=None):
 
     if subscription.status == 'active':
         if subscription.paid_through is None:
+            return 'free'
+        # Straight to free when the grace period is already spent, rather than
+        # parking in 'grace' for a day first. `effective_plan` treats active and
+        # grace identically - both keep the plan until paid_through + grace - so
+        # a row that lapsed months ago has no grace left to enter, and saying it
+        # does would be this module disagreeing with the read path it exists to
+        # follow.
+        if subscription.paid_through + _grace_period() < now:
             return 'free'
         if subscription.paid_through < now:
             return 'grace'

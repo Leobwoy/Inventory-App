@@ -4,7 +4,7 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- **Stage 2 — Differentiation.** Stage 0 and Stage 1 complete. Stage 2.1–2.3 complete.
+- **Stage 2 — Differentiation.** Stage 0 and Stage 1 complete. Stage 2.1–2.5 complete.
 
 ## Current Goal
 
@@ -218,6 +218,13 @@ Alerts are **derived, never stored**: every one is a fact about the state of the
 right now, computed on read. There is no read/unread, because a stored alert can be
 dismissed while the thing it warns about is still true — and then the screen says all is
 well while the stock is still at zero. Expiry alerting is opt-in per item group (D1).
+
+Because the page deliberately spans modules, it also crosses permission gates, so
+`notifications.for_user()` filters by permission and **both** the page and the badge count
+go through it — a badge counting what the page then withholds is its own small bug.
+`ALERT_PERMISSIONS` is the map: overdue credit needs `credit.view`, plan and trial alerts
+need `settings.manage`. Stock alerts need only the `products.view` the page already asks
+for. Any new alert kind touching another module must be added there.
 
 ### Stage 2.5b — The subscription lifecycle (`services/subscriptions.py`)
 

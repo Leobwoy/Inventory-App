@@ -81,7 +81,8 @@ def expiring_batches(business_id, within_days=None):
         business = db.session.get(Business, business_id)
         within_days = (business.expiry_alert_days if business else 30) or 30
 
-    horizon = datetime.date.today() + datetime.timedelta(days=within_days)
+    today = datetime.date.today()
+    horizon = today + datetime.timedelta(days=within_days)
     return (StockBatch.query
             .join(Product, Product.id == StockBatch.product_id)
             .join(ItemGroup, ItemGroup.id == Product.item_group_id)
@@ -89,6 +90,11 @@ def expiring_batches(business_id, within_days=None):
             .filter(StockBatch.business_id == business_id,
                     StockBatch.quantity_remaining > 0,
                     StockBatch.expiry_date.isnot(None),
+                    # Not yet expired. Without this the two lists overlap: an
+                    # expired batch is also "within the horizon", so the same
+                    # crate appears as a critical alert and a warning at once,
+                    # and the badge counts it twice.
+                    StockBatch.expiry_date >= today,
                     StockBatch.expiry_date <= horizon,
                     ItemGroup.track_expiry.is_(True))
             .order_by(StockBatch.expiry_date.asc())
@@ -241,6 +247,33 @@ def count_for(business_id):
     if business_id not in cache:
         cache[business_id] = for_business(business_id)
     return len(cache[business_id])
+
+
+#: Alert kinds needing more than the products.view the alerts page asks for.
+#:
+#: The page deliberately spans modules - the question is "what needs me today" -
+#: and that walks straight through two permission gates. A stock clerk holding
+#: only products.view would otherwise read the total owed by customers, and how
+#: long the plan has left, off a screen they are allowed to open, having been
+#: refused both of the pages that figure came from.
+ALERT_PERMISSIONS = {
+    'overdue_credit': 'credit.view',
+    'trial_ending': 'settings.manage',
+    'plan_ending': 'settings.manage',
+}
+
+
+def for_user(user):
+    """The alerts this person may actually see.
+
+    Filtered here rather than in each route so the badge count and the list
+    cannot drift apart. A badge promising three things over a page showing two
+    is a small bug of the kind nobody ever reports - they just stop trusting the
+    number.
+    """
+    return [alert for alert in cached_for(user.business_id)
+            if alert['kind'] not in ALERT_PERMISSIONS
+            or user.can(ALERT_PERMISSIONS[alert['kind']])]
 
 
 def cached_for(business_id):

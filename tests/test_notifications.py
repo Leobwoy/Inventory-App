@@ -11,6 +11,7 @@ market sells mostly things that do not meaningfully expire, and warning about
 all of it is how people learn to ignore warnings.
 """
 import datetime
+from decimal import Decimal
 
 import pytest
 
@@ -50,7 +51,7 @@ def test_expiry_is_silent_until_a_group_asks_for_it(shop, make_product):
     """D1. A wholesaler of bottled water does not want to hear about expiry, and
     telling them anyway is how the one warning that mattered gets ignored with
     the rest."""
-    client, business_id = shop
+    _client, business_id = shop
     product = make_product(business_id, sku='BA-750', name='BelAqua 750ml')
     batch(business_id, product, expires_in_days=5)
 
@@ -63,7 +64,7 @@ def test_expiry_is_silent_until_a_group_asks_for_it(shop, make_product):
 def test_expired_stock_is_worse_than_expiring_stock(shop, make_product):
     """Already past its date and still in the FEFO queue, which means it goes to
     the next customer who buys that product."""
-    client, business_id = shop
+    _client, business_id = shop
     product = make_product(business_id, sku='YG-1', name='Yoghurt 500ml')
     track_expiry(business_id)
     batch(business_id, product, expires_in_days=-3)
@@ -74,10 +75,39 @@ def test_expired_stock_is_worse_than_expiring_stock(shop, make_product):
     assert expired['severity'] == 'critical'
 
 
+def test_expired_stock_is_not_also_counted_as_expiring_soon(shop, make_product):
+    """An expired batch is trivially "within the next 30 days" too, so without a
+    lower bound the same crate is reported twice - once as critical and once as
+    a warning - and the badge counts it twice. Two alerts, one problem, and the
+    warning quietly says there is something else to sell first."""
+    _client, business_id = shop
+    product = make_product(business_id, sku='YG-1', name='Yoghurt 500ml')
+    track_expiry(business_id)
+    batch(business_id, product, expires_in_days=-3)
+
+    assert len(notifications.expired_batches(business_id)) == 1
+    assert notifications.expiring_batches(business_id) == []
+
+    kinds = [a['kind'] for a in notifications.for_business(business_id)]
+    assert 'expired' in kinds
+    assert 'expiring' not in kinds
+
+
+def test_a_batch_expiring_today_is_still_expiring_not_expired(shop, make_product):
+    """The boundary the lower bound sits on. Today's date has not passed."""
+    _client, business_id = shop
+    product = make_product(business_id, sku='YG-1')
+    track_expiry(business_id)
+    batch(business_id, product, expires_in_days=0)
+
+    assert len(notifications.expiring_batches(business_id)) == 1
+    assert notifications.expired_batches(business_id) == []
+
+
 def test_an_emptied_batch_stops_being_a_warning(shop, make_product):
     """Nothing is stored, so selling the stock removes the alert without anyone
     dismissing anything."""
-    client, business_id = shop
+    _client, business_id = shop
     product = make_product(business_id, sku='YG-1', name='Yoghurt 500ml')
     track_expiry(business_id)
     batch(business_id, product, expires_in_days=5)
@@ -93,7 +123,7 @@ def test_the_expiry_window_follows_the_business_setting(shop, make_product):
     """expiry_alert_days exists in Settings and had nothing reading it."""
     from auth.models import Business
 
-    client, business_id = shop
+    _client, business_id = shop
     product = make_product(business_id, sku='YG-1')
     track_expiry(business_id)
     batch(business_id, product, expires_in_days=20)
@@ -113,7 +143,7 @@ def test_the_expiry_window_follows_the_business_setting(shop, make_product):
 def test_out_of_stock_is_separate_from_running_low(shop, make_product):
     """One is a warning; the other is already costing money. Folding them
     together loses exactly that distinction."""
-    client, business_id = shop
+    _client, business_id = shop
     empty = make_product(business_id, sku='E-1', name='Empty Item', stock=0)
     low = make_product(business_id, sku='L-1', name='Low Item', stock=3)
     fine = make_product(business_id, sku='F-1', name='Fine Item', stock=500)
@@ -131,7 +161,7 @@ def test_out_of_stock_is_separate_from_running_low(shop, make_product):
 
 def test_a_deactivated_product_is_not_an_alert(shop, make_product):
     """Retired stock being at zero is the point of retiring it."""
-    client, business_id = shop
+    _client, business_id = shop
     product = make_product(business_id, sku='OLD-1', stock=0)
     product.is_active = False
     db.session.commit()
@@ -140,7 +170,7 @@ def test_a_deactivated_product_is_not_an_alert(shop, make_product):
 
 
 def test_alerts_stay_inside_the_business(shop, register, make_product):
-    client, business_id = shop
+    _client, business_id = shop
     _other, other_id = register(name='Kumasi Drinks', email='owner@kd.example.com')
     make_product(other_id, sku='KD-1', name='Kumasi Special', stock=0)
 
@@ -154,7 +184,7 @@ def test_alerts_stay_inside_the_business(shop, register, make_product):
 def test_the_worst_thing_is_listed_first(shop, make_product):
     """The list answers "what needs me today", so it cannot be ordered by which
     module happened to produce each item."""
-    client, business_id = shop
+    _client, business_id = shop
     empty = make_product(business_id, sku='E-1', name='Empty', stock=0)
     low = make_product(business_id, sku='L-1', name='Low', stock=2)
     low.min_stock_alert = 10
@@ -214,7 +244,7 @@ def test_the_sidebar_asks_for_the_count_rather_than_rendering_it(shop):
 def test_a_trial_about_to_end_is_said_before_it_ends(shop):
     """Someone who discovers a downgrade by finding a feature gone does not come
     back; someone warned three days out has a decision to make."""
-    client, business_id = shop
+    _client, business_id = shop
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.trial_ends_at = datetime.datetime.utcnow() + datetime.timedelta(days=2)
     db.session.commit()
@@ -226,7 +256,7 @@ def test_a_trial_about_to_end_is_said_before_it_ends(shop):
 
 
 def test_a_trial_with_a_fortnight_left_is_not_nagged_about(shop):
-    client, business_id = shop
+    _client, business_id = shop
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.trial_ends_at = datetime.datetime.utcnow() + datetime.timedelta(days=12)
     db.session.commit()
@@ -237,7 +267,7 @@ def test_a_trial_with_a_fortnight_left_is_not_nagged_about(shop):
 
 def test_a_paid_plan_running_out_is_flagged(shop):
     """Mobile money cannot renew on its own, so this one genuinely needs them."""
-    client, business_id = shop
+    _client, business_id = shop
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.status = 'active'
     subscription.plan_id = Plan.query.filter_by(code='standard').one().id
@@ -246,3 +276,86 @@ def test_a_paid_plan_running_out_is_flagged(shop):
 
     alerts = notifications.for_business(business_id)
     assert any(a['kind'] == 'plan_ending' for a in alerts)
+
+
+# --- an alert is only shown to someone allowed to see what it is about -------
+
+def test_a_stock_clerk_is_not_shown_what_customers_owe(shop, make_staff, make_product):
+    """The alerts page spans modules on purpose, and that walks it straight
+    through two permission gates. Someone holding only products.view would
+    otherwise read the total owed off a page they may open, having been refused
+    the ledger it was computed from - and the alert even links them there."""
+    from sales.models import Sale, SaleItem
+
+    _client, business_id = shop
+    product = make_product(business_id, sku='BA-750')
+    long_ago = TODAY - datetime.timedelta(days=90)
+    sale = Sale(business_id=business_id, sale_date=long_ago,
+                customer_name='Mensah Stores')
+    sale.items.append(SaleItem(product_id=product.id, quantity=10,
+                               price_at_sale=Decimal('5.00'),
+                               list_price=Decimal('5.00')))
+    db.session.add(sale)
+    db.session.commit()
+
+    owner_sees = [a['kind'] for a in notifications.for_business(business_id)]
+    assert 'overdue_credit' in owner_sees, 'the alert being withheld must exist'
+
+    clerk = make_staff(business_id, 'Inventory Staff', 'clerk@ab.example.com',
+                       permissions=['products.view'])
+    body = clerk.get('/products/alerts').get_data(as_text=True)
+
+    assert 'overdue' not in body.lower()
+    assert 'outstanding' not in body.lower()
+
+
+def test_a_stock_clerk_is_not_shown_how_long_the_plan_has_left(shop, make_staff):
+    """Same gate, different page: billing is behind settings.manage."""
+    _client, business_id = shop
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.trial_ends_at = datetime.datetime.utcnow() + datetime.timedelta(days=2)
+    db.session.commit()
+
+    assert any(a['kind'] == 'trial_ending'
+               for a in notifications.for_business(business_id))
+
+    clerk = make_staff(business_id, 'Inventory Staff', 'clerk@ab.example.com',
+                       permissions=['products.view'])
+    body = clerk.get('/products/alerts').get_data(as_text=True)
+
+    assert 'trial' not in body.lower()
+
+
+def test_the_badge_counts_only_what_the_page_will_show(shop, make_staff):
+    """A badge promising three things over a page showing two is a small bug of
+    the kind nobody reports - they just stop believing the number."""
+    import json
+
+    _client, business_id = shop
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.trial_ends_at = datetime.datetime.utcnow() + datetime.timedelta(days=2)
+    db.session.commit()
+
+    clerk = make_staff(business_id, 'Inventory Staff', 'clerk@ab.example.com',
+                       permissions=['products.view'])
+    counted = json.loads(clerk.get('/products/alerts/count').data)['count']
+
+    # Nothing here is a stock problem, and the plan is not the clerk's business,
+    # so the honest count is zero rather than "one you may not look at".
+    assert counted == 0
+    assert any(a['kind'] == 'trial_ending'
+               for a in notifications.for_business(business_id))
+
+
+def test_stock_alerts_still_reach_the_person_who_handles_stock(shop, make_staff,
+                                                               make_product):
+    """The filter withholds what is behind another gate, not everything."""
+    _client, business_id = shop
+    make_product(business_id, sku='E-1', name='Empty Item', stock=0)
+
+    clerk = make_staff(business_id, 'Inventory Staff', 'clerk@ab.example.com',
+                       permissions=['products.view'])
+    body = clerk.get('/products/alerts').get_data(as_text=True)
+
+    assert 'Empty Item' in body
+    assert 'out of stock' in body
