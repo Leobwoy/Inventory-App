@@ -1,5 +1,5 @@
-from flask import (Blueprint, Response, abort, current_app, flash, redirect,
-                   render_template, request, url_for)
+from flask import (Blueprint, Response, abort, current_app, flash, jsonify,
+                   redirect, render_template, request, url_for)
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import check_password_hash, generate_password_hash
 from auth.models import User, Business, Role, AuditLog
@@ -22,12 +22,30 @@ auth_bp = Blueprint('auth', __name__)
 
 @auth_bp.before_app_request
 def enforce_password_change():
-    # Only enforce for logged-in users who need to change password
-    if current_user.is_authenticated and getattr(current_user, 'must_change_password', False):
-        # Allow them to access the logout, change password, and static files
-        if request.endpoint not in ['auth.change_password', 'auth.logout', 'static'] and not request.path.startswith('/static/'):
-            flash('You must change your temporary password before accessing the system.', 'warning')
-            return redirect(url_for('auth.change_password'))
+    """Hold a staff member on the password page until they have set their own.
+
+    Their password was typed for them by whoever created the account, so until
+    it is changed the person who typed it can sign in as them.
+    """
+    if not (current_user.is_authenticated
+            and getattr(current_user, 'must_change_password', False)):
+        return
+
+    if (request.endpoint in ('auth.change_password', 'auth.logout', 'static')
+            or request.path.startswith('/static/')):
+        return
+
+    # Background fetches get an answer they can read, not a redirect to a login
+    # form they would try to parse as JSON.
+    if request.blueprint == 'api' or request.path.startswith('/api/'):
+        return jsonify({'error': 'Set your password first.',
+                        'code': 'password_change_required'}), 403
+
+    # Deliberately no flash. The badge counter fetches on every page, and it is
+    # blocked here too - so flashing queued one message per background request,
+    # left them in the session, and the banner arrived two and three at a time.
+    # The page itself says why they are on it, which cannot pile up.
+    return redirect(url_for('auth.change_password'))
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
@@ -147,7 +165,10 @@ def change_password():
         db.session.commit()
         flash('Password updated successfully. You now have access to the system.', 'success')
         return redirect(url_for('index'))
-    return render_template('auth/change_password.html', form=form)
+    # standalone=True, or base.html renders the signed-in layout and this
+    # template's auth_content block is never emitted - which is what happened:
+    # the page came back with a sidebar, the banner, and no form on it at all.
+    return render_template('auth/change_password.html', form=form, standalone=True)
 
 @auth_bp.route('/users')
 @login_required

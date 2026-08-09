@@ -266,9 +266,36 @@ column, so the two columns can no longer disagree.
 
 **435 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
+### F-46 — The first-sign-in password gate had no way through (fixed)
+
+Found by the user on the live site, signing in as their own employee for the first
+time. A staff account is created with `must_change_password=True`, and
+`enforce_password_change` correctly bounced every route to `/auth/change_password` — but
+that template defined only `{% block auth_content %}`, which `base.html` emits solely for
+signed-out users. A signed-in staff member therefore got the sidebar, the banner, and no
+form. No way forward, no way to work. **The same trap as `offline.html` earlier in Stage
+2.4**: the two blocks look interchangeable and are not.
+
+`base.html` now takes a `standalone` flag so a signed-in page can use the centred shell,
+and the route passes it. Three further things came out of it:
+
+- The banner arrived two and three at a time. The alert-badge `fetch` runs on every page
+  and is blocked by the gate too, so each background request queued another flash into the
+  session for the next render. The flash is gone entirely — the page states its own reason,
+  which cannot accumulate.
+- API requests got a 302 to HTML. They now get `403 {"code": "password_change_required"}`,
+  matching the `unauthorized()` handler's reasoning.
+- `.auth-shell` reserves the 60px the fixed mobile header occupies. The card centred over
+  the full viewport, so any card taller than the screen pushed its own heading behind that
+  bar. This also un-clipped the logo on the login page.
+
+**Why it shipped:** every fixture in `conftest.py` sets `must_change_password=False`, so no
+test ever walked through the gate. `tests/test_password_change.py` now covers it, including
+that logout stays reachable — otherwise a mistyped temporary password traps someone.
+
 ## In Progress
 
-- Nothing. Stage 2.5 and the subscription lifecycle are committed.
+- Nothing. Stage 2.5, the subscription lifecycle and F-46 are committed.
 
 ## Next Up
 
