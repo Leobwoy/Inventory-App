@@ -56,9 +56,13 @@ def effective_plan(business_id):
     """The plan whose limits actually apply right now.
 
     A lapsed trial or an expired paid period falls back to Free rather than
-    continuing to grant what was never paid for. The status column is not
-    rewritten here - that belongs to a scheduled job in Stage 2B - so this stays
-    a read-only view that is always correct even if the job has not run.
+    continuing to grant what was never paid for.
+
+    Deliberately read-only: the status column is rewritten by
+    services/subscriptions.py, on a schedule and on use. Keeping that out of
+    here is what makes this correct whether or not the job has run - and on a
+    free instance that sleeps, a run that never happened is a certainty rather
+    than an edge case. If the two ever disagree, this one is right.
     """
     subscription = subscription_for(business_id)
     if subscription is None:

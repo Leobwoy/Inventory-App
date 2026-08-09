@@ -13,3 +13,47 @@ from flask import Blueprint
 billing_bp = Blueprint('billing', __name__, url_prefix='/billing')
 
 from . import routes  # noqa: E402,F401
+
+
+@billing_bp.before_app_request
+def reconcile_on_use():
+    """Bring this business's subscription up to date, at most once a day.
+
+    Throttled through the session rather than run per request: the check would
+    otherwise cost a query on all fifty-odd routes to write something on
+    approximately none of them. Once a day per signed-in user is enough, because
+    a transition only ever becomes due once.
+
+    Nothing here decides access - `limits.effective_plan` already had that right
+    before this existed. This only stops the stored status disagreeing with it.
+    """
+    import datetime
+
+    from flask import session
+    from flask_login import current_user
+
+    if not getattr(current_user, 'is_authenticated', False):
+        return
+
+    today = datetime.date.today().isoformat()
+    if session.get('subscription_checked') == today:
+        return
+
+    from extensions import db
+    from services import subscriptions
+
+    try:
+        if subscriptions.reconcile_business(current_user.business_id):
+            db.session.commit()
+        # Marked only once the work is done. Marking before it would write the
+        # day off on a connection that blinked, and this business would then be
+        # skipped until tomorrow. The cost of the other order is that a business
+        # whose reconcile fails every time pays one extra query per page - which
+        # is the cheaper mistake, and loud in the log either way.
+        session['subscription_checked'] = today
+    except Exception:
+        # A failed reconcile must never break the page someone asked for. The
+        # scheduled run will pick it up, and access was never waiting on it.
+        db.session.rollback()
+        from flask import current_app
+        current_app.logger.exception('lazy subscription reconcile failed')

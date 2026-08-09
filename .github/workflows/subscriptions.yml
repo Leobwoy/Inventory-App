@@ -1,0 +1,79 @@
+# Nudge the deployed app to apply subscription transitions that have come due.
+#
+# GitHub Actions rather than a worker process, because the app runs on a free
+# Render instance that sleeps: a background thread inside it would stop when the
+# instance does, and would be the last thing to notice. An outside caller works
+# whether or not anyone has visited the site.
+#
+# This is a nudge, not the authority. `services/limits.effective_plan` decides
+# what a business may do by reading the dates on every request, so a run that is
+# skipped, late, or fails outright cannot grant a feature or take one away. The
+# worst a missed run does is leave a stale word in the console until the next.
+#
+# GitHub's scheduler is best-effort and drops runs when it is busy, which is
+# exactly why nothing here is allowed to matter that much.
+name: Subscriptions
+
+on:
+  schedule:
+    # 02:10 UTC, daily. Ghana is UTC, so this lands overnight for every tenant.
+    # An odd minute on purpose: the top of the hour is when GitHub queues most
+    # of the world's cron jobs and runs late.
+    - cron: '10 2 * * *'
+  workflow_dispatch:        # so it can be run by hand after an outage
+
+jobs:
+  reconcile:
+    runs-on: ubuntu-latest
+    # Nothing here touches the repository - it makes one outbound request - so
+    # the token it is handed should be able to do nothing at all.
+    permissions: {}
+    steps:
+      - name: Apply due transitions
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$CRON_SECRET" ]; then
+            echo "APP_URL or CRON_SECRET is not set in repository secrets."
+            echo "Nothing was called. Set both under Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+
+          # --max-time, because a sleeping Render instance takes ~50s to wake and
+          # the default would hang a runner for minutes. --retry covers exactly
+          # that wake-up: the first call often dies before the app is listening.
+          # Safe to retry - the endpoint is idempotent, and a transition that has
+          # already been applied is no longer due.
+          #
+          # --retry-connrefused is the one that matters here. Waking Render
+          # refuses the connection outright rather than answering with an error
+          # status, and plain --retry does not treat that as retryable - so
+          # without it the retries never happen on the failure they were added
+          # for.
+          code=$(curl --silent --show-error \
+                      --output response.json --write-out '%{http_code}' \
+                      --max-time 120 --retry 2 --retry-delay 30 --retry-connrefused \
+                      --request POST "$APP_URL/api/v1/cron/subscriptions" \
+                      --header "X-Cron-Key: $CRON_SECRET")
+
+          echo "HTTP $code"
+          cat response.json || true
+          echo
+
+          if [ "$code" = "404" ]; then
+            echo "404 means CRON_SECRET does not match the one set on the server."
+            exit 1
+          fi
+          if [ "$code" != "200" ]; then
+            echo "The run did not complete. Access is unaffected; the next run will retry."
+            exit 1
+          fi
+
+          # A per-business failure is reported in the body with a 200, because the
+          # other businesses were still reconciled. Fail the workflow so it is
+          # visible, rather than a green tick over a business stuck mid-lifecycle.
+          if grep -q '"failed": *\[[^]]' response.json; then
+            echo "Some businesses could not be reconciled - see the list above."
+            exit 1
+          fi

@@ -1,5 +1,5 @@
 from flask_wtf import FlaskForm
-from wtforms import StringField, DecimalField, IntegerField, TextAreaField, FileField, SubmitField, SelectField
+from wtforms import BooleanField, StringField, DecimalField, IntegerField, TextAreaField, FileField, SubmitField, SelectField
 from wtforms.validators import DataRequired, InputRequired, Length, NumberRange, Optional
 from flask_wtf.file import FileAllowed
 
@@ -23,6 +23,9 @@ class BrandForm(FlaskForm):
 class ItemGroupForm(FlaskForm):
     name = StringField('Item Group Name', validators=[DataRequired(), Length(max=100)])
     category_id = SelectField('Category', coerce=int, validators=[Optional()])
+    # Off by default. Most of what this market sells does not meaningfully
+    # expire, and warning about all of it teaches people to ignore warnings.
+    track_expiry = BooleanField('Warn me when this group nears its expiry date')
     submit = SubmitField('Save Item Group')
 
 class ProductForm(FlaskForm):

@@ -67,12 +67,18 @@ def list_products():
         # product already at zero is the most urgent case of that.
         query = query.filter(Product.quantity_in_stock <= Product.min_stock_alert)
     elif stock_filter == 'expiring':
+        # Restricted to groups that opted in, so this matches what the expiry
+        # alert counts. A filter that disagrees with the alert linking to it is
+        # worse than no filter.
         horizon = date.today() + timedelta(days=current_user.business.expiry_alert_days or 30)
         expiring = (db.session.query(StockBatch.product_id)
+                    .join(Product, Product.id == StockBatch.product_id)
+                    .join(ItemGroup, ItemGroup.id == Product.item_group_id)
                     .filter(StockBatch.business_id == business_id,
                             StockBatch.quantity_remaining > 0,
                             StockBatch.expiry_date.isnot(None),
-                            StockBatch.expiry_date <= horizon))
+                            StockBatch.expiry_date <= horizon,
+                            ItemGroup.track_expiry.is_(True)))
         query = query.filter(Product.id.in_(expiring))
 
     query = listing.apply_sort(query, PRODUCT_SORTS, sort)
@@ -82,6 +88,49 @@ def list_products():
         search_query=term, q=term, sort=sort, sort_options=PRODUCT_SORT_LABELS,
         stock=stock_filter, status=status,
         is_filtered=listing.is_filtered('q', 'stock', 'status'))
+
+@products_bp.route('/alerts')
+@login_required
+@permission_required('products.view')
+def alerts():
+    """Everything needing attention, worst first.
+
+    Lives under products because stock is most of it, but it deliberately spans
+    modules - the question is "what needs me today", and that does not sort
+    itself by which part of the app produced it.
+    """
+    from services import notifications
+
+    return render_template('products/alerts.html',
+                           alerts=notifications.for_user(current_user))
+
+
+@products_bp.route('/alerts/count')
+@login_required
+@permission_required('products.view')
+def alert_count():
+    """How many things need attention, for the badge.
+
+    A separate request rather than a context processor. Working this out costs
+    several queries, and the sidebar renders on all fifty-odd routes - so as a
+    context processor it would put that cost on every page in the app to
+    populate a number most of them never show. Fetched after load instead, so
+    page renders stay exactly as expensive as they were.
+    """
+    from flask import jsonify
+    from services import notifications
+
+    # for_user, not cached_for: the badge must count what this person will
+    # actually be shown, or it advertises alerts the page then withholds.
+    alerts = notifications.for_user(current_user)
+    response = jsonify({
+        'count': len(alerts),
+        'critical': sum(1 for a in alerts if a['severity'] == 'critical'),
+    })
+    # Never stored: it is a live figure, and a cached one is worse than none.
+    response.headers['Cache-Control'] = 'no-store'
+    return response
+
 
 def _sku_token(text, length=4):
     """Uppercase alphanumeric fragment of `text`, for building a readable SKU."""
@@ -638,7 +687,9 @@ def add_item_group():
     form.category_id.choices = [(0, 'No Category')] + [(c.id, c.name) for c in Category.query.filter_by(business_id=current_user.business_id).order_by(Category.name)]
     if form.validate_on_submit():
         category_id = form.category_id.data if form.category_id.data and form.category_id.data != 0 else None
-        item_group = ItemGroup(business_id=current_user.business_id, name=form.name.data, category_id=category_id)
+        item_group = ItemGroup(business_id=current_user.business_id, name=form.name.data,
+                               category_id=category_id,
+                               track_expiry=bool(form.track_expiry.data))
         db.session.add(item_group)
         db.session.commit()
         flash('Item Group added!', 'success')
@@ -655,6 +706,7 @@ def edit_item_group(item_group_id):
     if form.validate_on_submit():
         item_group.name = form.name.data
         item_group.category_id = form.category_id.data if form.category_id.data and form.category_id.data != 0 else None
+        item_group.track_expiry = bool(form.track_expiry.data)
         db.session.commit()
         flash('Item Group updated!', 'success')
         return redirect(url_for('products.list_item_groups'))

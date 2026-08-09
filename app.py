@@ -114,6 +114,10 @@ def create_app():
 
     from api import api_bp
     app.register_blueprint(api_bp)
+    # Server-to-server, secret-authenticated, no session and no form: CSRF has
+    # nothing to protect here, and a scheduler cannot fetch a token first.
+    from api.routes import cron_subscriptions
+    csrf.exempt(cron_subscriptions)
 
     from billing import billing_bp
     app.register_blueprint(billing_bp)
@@ -130,12 +134,14 @@ def create_app():
                                       create_platform_admin_command,
                                       list_platform_admins_command,
                                       pending_payments_command,
+                                      reconcile_subscriptions_command,
                                       reject_payment_command)
     app.cli.add_command(create_platform_admin_command)
     app.cli.add_command(list_platform_admins_command)
     app.cli.add_command(pending_payments_command)
     app.cli.add_command(confirm_payment_command)
     app.cli.add_command(reject_payment_command)
+    app.cli.add_command(reconcile_subscriptions_command)
 
     from flask_login import login_required, current_user
     from auth.decorators import permission_required

@@ -4,12 +4,13 @@ Update this file after every meaningful implementation change.
 
 ## Current Phase
 
-- **Stage 2 — Differentiation.** Stage 0 and Stage 1 complete. Stage 2.1–2.3 complete.
+- **Stage 2 — Differentiation.** Stage 0 and Stage 1 complete. Stage 2.1–2.5 complete.
 
 ## Current Goal
 
-- **Stage 2.5 — Notification centre and expiry alerts.** Stage 2.4 is complete (a–d) and
-  the app is **deployed and live** at `https://inventory-app-svrn.onrender.com`.
+- **Stage 2.6 — Supplier scorecards.** Stage 2.5 (notifications) and the subscription
+  lifecycle are complete. The app is **deployed and live** at
+  `https://inventory-app-svrn.onrender.com`.
 
 ## Completed
 
@@ -186,28 +187,120 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   stranded the other forty-nine. A conflict is terminal — it drops out of the pending
   filter — so the condition is now "every sale reached a terminal state", with `retry` still
   stopping the loop so a sale that cannot go never spins.
+- **2.5 Notification centre and expiry alerts.** `services/notifications.py` plus
+  `/products/alerts` — out of stock, below reorder level, expiring, already expired,
+  customers overdue past 60 days, and a trial or plan about to lapse. Worst first.
+  **Derived, never stored.** Every alert is a fact about the current state, so it is
+  computed on read and leaves when the fact stops being true. There is deliberately no
+  read/unread: a stored alert can be dismissed while the thing it warns about is still
+  happening, and then the screen says all is well with the stock still at zero. The cost is
+  that it cannot describe the past — that would be an events table and a different feature.
+  **Expiry alerting is opt-in per item group (D1).** `ItemGroup.track_expiry`, default off.
+  This market sells mostly things that do not meaningfully expire, and warning about all of
+  it is how people learn to ignore warnings. The `?stock=expiring` product filter honours
+  the same flag, so the page an alert links to shows what the alert counted.
+  The service returns an **endpoint and params, not a built URL**, so it needs no request
+  context and stays usable from a CLI command or the SMS reminders that will want the same
+  list. The sidebar badge is **fetched after load** rather than rendered: computing it costs
+  several queries and the sidebar is on all fifty-odd routes.
+  Found while building it: `Subscription.days_left` used `timedelta.days`, which truncates,
+  so a 14-day trial read "13 days left" from the moment it started. Now `days_until()`,
+  rounding up — part of a day is a day you still have. The existing test tolerated
+  `TRIAL_DAYS - 1`, which was accommodating the bug.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
   `static/js/combobox.js`. No template loads anything from another origin, which is a
   precondition for the service worker in 2.4b.
 
-**332 tests passing**, locally and under bare `pytest` on CI-resolved versions.
+### Stage 2.5 — Notification centre and expiry alerts (merged)
+
+Alerts are **derived, never stored**: every one is a fact about the state of the business
+right now, computed on read. There is no read/unread, because a stored alert can be
+dismissed while the thing it warns about is still true — and then the screen says all is
+well while the stock is still at zero. Expiry alerting is opt-in per item group (D1).
+
+Because the page deliberately spans modules, it also crosses permission gates, so
+`notifications.for_user()` filters by permission and **both** the page and the badge count
+go through it — a badge counting what the page then withholds is its own small bug.
+`ALERT_PERMISSIONS` is the map: overdue credit needs `credit.view`, plan and trial alerts
+need `settings.manage`. Stock alerts need only the `products.view` the page already asks
+for. Any new alert kind touching another module must be added there.
+
+### Stage 2.5b — The subscription lifecycle (`services/subscriptions.py`)
+
+`subscription.status` was written in exactly two places — a confirmed payment, and a plan
+changed by hand in the console — so a trial that ended three weeks ago still read
+`trialing` forever. The console showed the contradiction: plan "Kiosk" beside status
+"Trial" on the same row.
+
+**The governing rule: autonomous is not authoritative.** `limits.effective_plan()` works
+entitlement out from the dates on every read and stays correct whether or not anything
+here has ever run. This module only makes the stored status agree with it. A missed run
+cannot grant a paid feature or lock out someone who paid — which matters, because the app
+runs on an instance that sleeps and GitHub's scheduler drops runs when it is busy.
+`tests/test_subscriptions.py` asserts that directly, across all six lifecycle states:
+reconciling never changes what a business may do.
+
+Three transitions: `trialing → free` when the trial ends, `active → grace` when the paid
+period lapses, `grace → free` after `GRACE_DAYS`. Grace exists because mobile money cannot
+renew on its own, so a lapse means "they have not paid *yet today*", not "they left".
+
+**The trap it guards.** `effective_plan` reads `status == 'free'` as "on the plan named
+here, with no expiry" — that is how a comped account works. So a downgrade must rewrite
+`plan_id` to the free plan, not just the status; flipping the status alone would grant the
+paid plan permanently and it would never expire again. If the free plan is not seeded,
+`reconcile` raises rather than guessing.
+
+Two triggers, plus a manual one:
+- **Lazily**, `before_app_request`, throttled to once a day per signed-in user through a
+  session marker. Failure is swallowed and logged — nobody asked for a reconcile, they
+  asked for the dashboard.
+- **On a schedule**, `POST /api/v1/cron/subscriptions`, guarded by `CRON_SECRET` compared
+  with `hmac.compare_digest` and 404 when unset. CSRF-exempt, which is only safe because
+  it takes no input and is idempotent. Called by `.github/workflows/subscriptions.yml`
+  daily at 02:10 UTC.
+- **`flask subscriptions-reconcile [--dry-run]`** for when the scheduler has been down.
+
+The console now derives the badge from `due_transition()` rather than reading the stored
+column, so the two columns can no longer disagree.
+
+**435 tests passing**, locally and under bare `pytest` on CI-resolved versions.
 
 ## In Progress
 
-- Nothing. Stage 2.4 and the manual mobile money billing flow are committed.
+- Nothing. Stage 2.5 and the subscription lifecycle are committed.
 
 ## Next Up
 
-1. **Stage 2.5** — Notification centre and expiry alerts (expiry opt-in per item group)
-2. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
-3. **Stage 2.7** — Smart reorder
-4. **Stage 2.8** — Dashboard rebuild
-5. **Stage 2B** — Paystack billing flow
-6. **Stage 3** — Interface revamp (light theme, self-hosted assets, barcode sale entry,
+1. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
+2. **Stage 2.7** — Smart reorder
+3. **Stage 2.8** — Dashboard rebuild
+4. **Stage 2B** — Paystack billing flow (blocked on business registration; the manual
+   mobile money flow in B5 covers it until then)
+5. **Stage 3** — Interface revamp (light theme, self-hosted assets, barcode sale entry,
    branded invoices)
 
 ## Open Questions
+
+- **There is no password reset (F-43). Live risk.** A business owner who forgets their
+  password today is permanently locked out — there is no recovery flow anywhere, and the
+  console cannot reset one either. `auth/models.py` even comments that email "must identify
+  a person, because every identity-recovery flow depends on it", and then no such flow was
+  built. Blocked on nothing but a decision: sending email needs a provider (Resend, Brevo,
+  Mailgun), an API key, and ideally a domain — `onrender.com` senders land in spam.
+  Write the sending layer behind an interface, the way `billing/providers.py` is done.
+- **Email verification (F-44).** Wanted, and shares the whole dependency above, so it is one
+  unit with password reset: infrastructure → reset → verification, in that order. Must be
+  **soft** — the account works immediately with a "confirm your email" nudge — because a
+  hard gate means one undelivered email costs a customer on a phone with patchy data.
+- **Onboarding and trial messaging (F-45).** New businesses are told nothing about the
+  14-day full-access trial at registration, and there is no activation guidance after it.
+  Planned shape: trial terms on the registration page, a welcome screen, a **setup checklist
+  that ticks itself off from real data** (not a modal tour — those are a lot of JavaScript
+  for something people click past), and a countdown banner. Deliberately does not advertise
+  the free tier at signup; it stays listed on `/billing/` and the *end* of a trial must say
+  plainly what happens next, because a downgrade discovered by surprise loses the customer.
+  Requested 2026-08-08; user has more requirements to add from memory.
 
 - **Promotional discounts do not exist.** Point-of-sale discounting works (a per-line
   price reduction, permission-gated, capped, audited) now that the ceiling is settable.

@@ -59,6 +59,15 @@
             <a class="nav-link" href="/" id="nav-dashboard"><i class="bi bi-grid-1x2"></i> Dashboard</a>
 
             {% if current_user.can('products.view') %}
+            <a class="nav-link d-flex align-items-center" href="/products/alerts" id="nav-alerts">
+              <i class="bi bi-bell"></i> <span class="ms-1">Needs attention</span>
+              {# Filled in after load - see the /products/alerts/count route for
+                 why this is not rendered server-side. #}
+              <span class="badge bg-danger ms-auto" id="alert-count" hidden></span>
+            </a>
+            {% endif %}
+
+            {% if current_user.can('products.view') %}
             <a class="nav-link" href="/products/" id="nav-products"><i class="bi bi-box-seam"></i> Products</a>
             {% endif %}
 
@@ -195,6 +204,24 @@
     });
 </script>
 {% endif %}
+<script>
+    // Fetched, not rendered: the count costs several queries and the sidebar is
+    // on every page. This keeps that cost off page render entirely.
+    (function () {
+      var badge = document.getElementById('alert-count');
+      if (!badge) { return; }
+      fetch('/products/alerts/count', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (data) {
+          if (!data || !data.count) { return; }
+          badge.textContent = data.count;
+          badge.hidden = false;
+          badge.className = 'badge ms-auto '
+            + (data.critical ? 'bg-danger' : 'bg-warning text-dark');
+        })
+        .catch(function () { /* a missing badge is not worth an error */ });
+    })();
+</script>
 {% block scripts %}{% endblock %}
 <script>
     // Registered after load so it never competes with the page for bandwidth on

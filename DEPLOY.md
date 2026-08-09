@@ -79,6 +79,22 @@ tier has no expiry — it sleeps when idle and wakes on the next request.
    The wallet number is configuration and not code because it is a personal
    phone number and this repository is public.
 
+
+
+   Generate the key on your machine and paste the output:
+
+   ```bash
+   python -c "import secrets; print(secrets.token_hex(32))"
+   ```
+
+   **The app will refuse to start without `SECRET_KEY`, on purpose.** It used to
+   fall back to a default written in this repository. Anyone who had read the
+   code could have forged a session cookie and signed in as any user of any
+   business. A deploy that fails loudly is better than one that serves an app
+   whose login means nothing.
+
+5. **Create Web Service.** First build takes 5–10 minutes.
+
 ### 2b. Your console account
 
 Confirming payments happens in a separate console at `/platform/login`, with its
@@ -114,19 +130,42 @@ DATABASE_URL="<your Neon string>" flask reject-payment <reference>
 The reference is what the customer submitted — for mobile money, the transaction
 ID their network texted them. `pending-payments` lists them.
 
-   Generate the key on your machine and paste the output:
+### 2c. Letting trials and plans expire on their own
+
+Without this, a trial that ended three weeks ago still reads "Trial" in your
+console. Nobody is over-served — what a business may actually *do* is worked out
+from the dates on every page load, so an expired trial stops granting paid
+features the moment it expires whether or not any of this is set up. What you
+get here is the stored status catching up, so the console tells you the truth
+and reminders have something to fire on.
+
+1. Make a secret, on your own machine:
 
    ```bash
-   python -c "import secrets; print(secrets.token_hex(32))"
+   python -c "import secrets; print(secrets.token_urlsafe(32))"
    ```
 
-   **The app will refuse to start without `SECRET_KEY`, on purpose.** It used to
-   fall back to a default written in this repository. Anyone who had read the
-   code could have forged a session cookie and signed in as any user of any
-   business. A deploy that fails loudly is better than one that serves an app
-   whose login means nothing.
+2. On Render, add it as `CRON_SECRET` (marked **Secret**).
+3. On GitHub, go to **Settings → Secrets and variables → Actions → New
+   repository secret** and add two:
 
-5. **Create Web Service.** First build takes 5–10 minutes.
+   | Name | Value |
+   |---|---|
+   | `CRON_SECRET` | the same string you just gave Render |
+   | `APP_URL` | `https://inventory-app-svrn.onrender.com` — no trailing slash |
+
+`.github/workflows/subscriptions.yml` then calls the app at 02:10 UTC daily. To
+test it now, open **Actions → Subscriptions → Run workflow**.
+
+If you skip this entirely, nothing breaks: the check also runs once a day for
+each business that opens the app, which covers everyone still using it. The
+schedule exists to catch the ones who have stopped — the accounts worth a phone
+call. And you can always run it by hand:
+
+```bash
+flask subscriptions-reconcile --dry-run
+```
+
 
 ### If you would rather not have the app sleep
 
@@ -203,6 +242,12 @@ resolve whatever it likes.
 
 **App builds but will not start.** Check Runtime logs.
 - `SECRET_KEY is not set` — you missed step 2.4. Deliberate.
+- **The Subscriptions workflow fails with 404** — `CRON_SECRET` on GitHub does
+  not match the one on Render, or Render does not have it set at all. The
+  endpoint returns 404 rather than 403 so that an unconfigured install does not
+  advertise itself.
+- **A status in the console looks stuck** — it is not load-bearing. Run
+  `flask subscriptions-reconcile --dry-run` to see what should move.
 - `could not connect to server` — `DATABASE_URL` is wrong, or `?sslmode=require`
   was dropped from the end.
 

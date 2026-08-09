@@ -24,7 +24,7 @@ Three rules shape the sync:
 import datetime
 from decimal import Decimal, InvalidOperation
 
-from flask import current_app, jsonify, request
+from flask import abort, current_app, jsonify, request
 from flask_login import current_user, login_required
 
 from api import api_bp
@@ -51,6 +51,43 @@ def never_cache(response):
     """
     response.headers['Cache-Control'] = 'no-store'
     return response
+
+
+@api_bp.route('/cron/subscriptions', methods=['POST'])
+def cron_subscriptions():
+    """Apply every due subscription transition. For a scheduler, not a person.
+
+    Guarded by a shared secret in a header rather than a login, because the
+    caller is a cron service with no session. Unset secret means 404: an
+    unconfigured endpoint should not exist, and 404 does not advertise that it
+    might.
+
+    Deliberately reachable without authentication *and* CSRF-exempt, which is
+    only safe because it takes no input, is idempotent, and does nothing a
+    signed-in user could not already cause by loading a page.
+    """
+    import hmac
+    import os
+
+    from services import subscriptions
+
+    expected = os.environ.get('CRON_SECRET', '').strip()
+    supplied = (request.headers.get('X-Cron-Key') or '').strip()
+    # Constant time: a plain == leaks the secret one character at a time to
+    # anyone patient enough to measure.
+    #
+    # Compared as bytes, because compare_digest refuses two strings when either
+    # holds a non-ASCII character - and a secret someone generated with a
+    # passphrase rather than token_urlsafe would then raise, turning the guard
+    # into a 500 that reveals the endpoint is real.
+    if not expected or not hmac.compare_digest(expected.encode('utf-8'),
+                                               supplied.encode('utf-8')):
+        abort(404)
+
+    summary = subscriptions.reconcile_all()
+    if summary['moved'] or summary['failed']:
+        current_app.logger.info('subscription reconcile: %s', summary)
+    return jsonify(summary)
 
 
 @api_bp.route('/session')

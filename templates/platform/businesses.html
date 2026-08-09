@@ -29,14 +29,17 @@
              subscription still names what was bought. #}
           <td>{{ row.plan.name if row.plan else '-' }}</td>
           <td>
-            {% if row.subscription and row.subscription.status == 'active' %}
+            {# row.status, not row.subscription.status: the stored one lags
+               behind until the job runs, and would contradict the plan beside
+               it. #}
+            {% if row.status == 'active' %}
             <span class="badge bg-success">Active</span>
-            {% elif row.subscription and row.subscription.status == 'trialing' %}
+            {% elif row.status == 'trialing' %}
             <span class="badge bg-info">Trial</span>
+            {% elif row.status == 'grace' %}
+            <span class="badge bg-warning text-dark">Grace</span>
             {% else %}
-            <span class="badge bg-secondary">
-              {{ row.subscription.status if row.subscription else 'None' }}
-            </span>
+            <span class="badge bg-secondary">{{ row.status or 'None' }}</span>
             {% endif %}
           </td>
           <td class="text-center">{{ row.users }}</td>

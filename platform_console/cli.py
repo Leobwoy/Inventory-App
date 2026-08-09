@@ -159,3 +159,40 @@ def reject_payment_command(reference, reason, by):
         raise click.ClickException('That payment was settled before this could run.')
     db.session.commit()
     click.echo('Rejected. The claim is kept on record.')
+
+
+@click.command('subscriptions-reconcile')
+@click.option('--dry-run', is_flag=True,
+              help='List what would change without changing it.')
+@with_appcontext
+def reconcile_subscriptions_command(dry_run):
+    """Apply every subscription transition that has come due.
+
+    The same work the scheduled request does, from a shell. Useful when the
+    scheduler has been down, and useful with --dry-run before trusting it.
+    """
+    from services import subscriptions
+
+    if dry_run:
+        due = subscriptions.pending()
+        if not due:
+            click.echo('Nothing is due.')
+            return
+        for subscription in due:
+            target = subscriptions.due_transition(subscription)
+            click.echo(f'business {subscription.business_id}: '
+                       f'{subscription.status} -> {target}')
+        # Read-only, but `pending` opened a transaction. Close it explicitly so
+        # a dry run cannot be the thing that holds a lock open.
+        db.session.rollback()
+        click.echo(f'{len(due)} would change. Nothing was written.')
+        return
+
+    summary = subscriptions.reconcile_all()
+    for business_id, status in summary['moved'].items():
+        click.echo(f'business {business_id} -> {status}')
+    if summary['failed']:
+        click.echo(f"failed: {summary['failed']}", err=True)
+    click.echo(f"{len(summary['moved'])} changed, {len(summary['failed'])} failed.")
+    if summary['failed']:
+        raise SystemExit(1)
