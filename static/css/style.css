@@ -465,7 +465,17 @@ thead.table-light>tr>th {
   .mobile-header {
     display: flex;
   }
-  
+
+  /* The signed-out pages centre their card over the full viewport height, so a
+     card taller than the screen slides its heading up under the fixed header
+     above - which is 60px of solid bar over the first line of the page. Reserve
+     that height, and let a tall card scroll instead of centring. */
+  .auth-shell {
+    min-height: calc(100vh - 60px) !important;
+    padding-top: 60px;
+    align-items: flex-start !important;
+  }
+
   .sidebar-overlay.show {
     display: block;
   }

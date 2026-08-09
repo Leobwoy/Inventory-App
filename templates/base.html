@@ -41,8 +41,11 @@
 <!-- Sidebar Overlay Backdrop -->
 <div class="sidebar-overlay" id="sidebar-overlay"></div>
 
-<!-- Dummy RBAC Variable (For UI Demonstration) -->
-{% if current_user.is_authenticated %}
+{# `standalone` is for pages that are a gate rather than a page of the app - a
+   signed-in user who is not yet allowed anywhere else. They get the centred
+   layout below instead of the sidebar, because every link in that sidebar would
+   bounce them straight back here. #}
+{% if current_user.is_authenticated and not standalone %}
 <div class="wrapper">
     <!-- Sidebar -->
     <aside class="sidebar">
@@ -156,7 +159,7 @@
     </main>
 </div>
 {% else %}
-<main class="d-flex align-items-center justify-content-center flex-grow-1 w-100" style="min-height: 100vh; background-color: var(--bg-dark);">
+<main class="auth-shell d-flex align-items-center justify-content-center flex-grow-1 w-100" style="min-height: 100vh; background-color: var(--bg-dark);">
     <div class="container w-100">
         {% block auth_content %}{% endblock %}
     </div>
