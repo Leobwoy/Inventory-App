@@ -196,6 +196,19 @@ def act_on_payment(transaction_id, action):
 
 # --- customers --------------------------------------------------------------
 
+def _shown_status(subscription):
+    """The status in effect now, not the one last written.
+
+    Derived rather than stored on purpose: the scheduled job may not have run
+    yet, and the console should never be the place a stale row is believed.
+    """
+    from services import subscriptions as lifecycle
+
+    if subscription is None:
+        return None
+    return lifecycle.due_transition(subscription) or subscription.status
+
+
 @platform_bp.route('/businesses')
 @platform_required
 def businesses():
@@ -228,6 +241,11 @@ def businesses():
         # lookup per business rather than two queries.
         'plan': limits.effective_plan(business.id),
         'subscription': subscriptions.get(business.id),
+        # What the status *should* be, given the dates. Reading the stored one
+        # showed "Trial" next to a Kiosk plan on the same row - the plan column
+        # comes from effective_plan, which had already worked out the trial was
+        # over. This is that same answer, so the two columns cannot disagree.
+        'status': _shown_status(subscriptions.get(business.id)),
         'users': user_counts.get(business.id, 0),
         'products': product_counts.get(business.id, 0),
     } for business in found]
