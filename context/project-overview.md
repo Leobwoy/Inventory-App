@@ -75,7 +75,23 @@ excellent at one thing first.
 - IAM-style per-user permissions; roles are presets, not live bindings
 - Activity log recording who changed what, with before and after values
 - Per-tenant data export and restore
+- Business settings: name, address, contact, logo, discount ceiling, expiry alert window
 - Subscription plans with user and product limits, and feature gating
+- Mobile money subscription payment: the customer submits a transfer reference, a platform
+  admin confirms it. Manual on purpose — see Scope.
+
+### Alerts
+- One list answering "what needs me today", spanning stock, expiry, credit and the plan
+- Derived on read, never stored. There is no read/unread: a stored alert can be dismissed
+  while the thing it warns about is still true, and then the screen says all is well while
+  the stock is still at zero.
+- Expiry alerting is opt-in per item group, because this market sells mostly goods that do
+  not meaningfully expire and warning about all of it teaches people to ignore warnings
+
+### Vendor console
+Separate from the product. `/platform/login`, its own accounts, no business attached —
+the person who runs TrackTrack is not a customer of it. Confirms payments, lists tenants,
+and can set a plan by hand, with a CLI fallback for when the browser is not an option.
 
 ### Reporting
 - Sales, purchases and stock reports with PDF, Excel and CSV export
@@ -86,15 +102,21 @@ excellent at one thing first.
 ### In Scope
 
 - Multi-tenant inventory, purchasing, sales, credit and reporting for a single location
-- Subscription plans and limit enforcement (payment collection is Stage 2B)
+- Subscription plans and limit enforcement
+- **Manual** subscription collection: mobile money in, confirmed by a human in the vendor
+  console. Automated gateway collection is Stage 2B.
 - Offline sale capture with sync on reconnect
 - Progressive Web App — installable, no app store
+- Alerts for stock, expiry, overdue credit and a lapsing plan
 - English only, Ghana Cedi only
 
 ### Out of Scope
 
-- **Payment gateway integration** — planned for Stage 2B, deliberately not started.
-  No Paystack code exists yet.
+- **Automated payment gateway integration** — Stage 2B, not started. No Paystack code
+  exists. Collection today is manual and deliberately so: a Paystack account originally
+  required a business registration this project could not fund, and mobile money has no
+  reusable authorisation, so there is no recurring charge to automate in the first place.
+  Paystack access has since changed — see Open Questions in `progress-tracker.md`.
 - **Customer-facing ordering portal** — wholesalers serve their customers directly
 - **Multi-location / warehouse transfer** — only once a real customer has a second store;
   it touches every stock query, so it must not be speculative
