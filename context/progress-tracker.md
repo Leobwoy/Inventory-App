@@ -335,18 +335,35 @@ that logout stays reachable — otherwise a mistyped temporary password traps so
   brand until Friday", or a customer price tier. That is a distinct feature: it needs a
   price-rule model, a date window, and a resolution order when rules overlap. Raised by
   the user; not scoped or scheduled yet.
-- **Paystack deferred indefinitely (B5).** It needs a registered Ghanaian business and a
-  corporate bank account, and registering costs money the project does not have. Switching
-  aggregator does not help — Hubtel, ExpressPay, theTeller, Flutterwave and MTN's own API
-  all require the same, because Bank of Ghana KYC rules govern merchant settlement rather
-  than the companies being awkward.
-  **Collection is manual mobile money instead**, and the gap is smaller than it looks:
-  mobile money in Ghana has no reusable authorisation, so even a finished Paystack
-  integration needs the customer to actively pay again every month. Automation only changes
-  *who presses confirm* — worth 1.95% eventually, not worth blocking every customer on a
-  company registration today. Register when TrackTrack has paid for it.
-  Taking business payments into a personal wallet is a bridge, not a destination: wallets
-  have monthly ceilings and mixing business with personal money is unpleasant at tax time.
+- **Paystack — open, not decided (B5). Reopened 2026-08-09.** The original reason for
+  deferring was that Paystack needed a registered Ghanaian business and a corporate bank
+  account. **That premise turned out to be wrong for the tier that applies here.** Paystack
+  Ghana's *Starter* business type needs no registration certificate: a government ID, a
+  TIN, a GPS address, and a **personal** bank or mobile money number to settle into, with
+  every name matching. The user's account now reads **Pre-Approved**, meaning live payments
+  are accepted while background compliance checks continue; payouts may be paused during
+  those checks, and the status moves to Approved on its own. Watch for *Needs Attention* —
+  that is the one that restricts payouts, usually over a name mismatch.
+  (Note the trap: choosing "Sole Proprietorship" moves you into the *Registered* category,
+  which **does** require a Certificate of Registration. Starter is the tier without it.)
+
+  **Still undecided, and deliberately so.** Three things are unknown:
+  1. **No payout has ever been received.** Until one lands, Paystack is unproven here.
+  2. **The manual flow has never been exercised with real money either** — no customer has
+     ever subscribed, so neither path has been tested end to end in production. Testing
+     either one needs a real subscriber, which is the actual blocker.
+  3. **Whether momo can recur through Paystack is unverified.** The finding that Ghanaian
+     mobile money has no reusable authorisation predates this and was never re-checked
+     against Paystack specifically. If it holds, automation only changes *who presses
+     confirm*, and the manual path stays necessary for momo payers regardless — Paystack
+     would sit *alongside* it, not replace it. Worth asking Paystack directly.
+
+  **No code should change until at least (1) and (3) are answered.** Nothing is blocked by
+  waiting: `billing/providers.py` exists precisely so a `PaystackProvider` is additive, and
+  the confirm/reject logic, console and subscription lifecycle are provider-agnostic.
+  Taking business payments into a personal wallet remains a bridge, not a destination —
+  wallets have monthly ceilings and mixing business with personal money is unpleasant at
+  tax time.
 - **B6 — the vendor console (`platform_console/`).** Confirming a payment decides what a
   business has paid for, so it cannot be a permission: a tenant Owner controls every
   permission inside their own business and would grant it to themselves. The first attempt

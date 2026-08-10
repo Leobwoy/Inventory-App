@@ -56,6 +56,16 @@ Searchable dropdowns use `static/js/combobox.js` (with `static/css/combobox.css`
 by putting `data-combobox` on a `<select>`. The native `<select>` stays in the DOM and
 still posts its value, so the page works with JavaScript off.
 
+**Two Bootstrap behaviours that have already cost time:**
+
+- `.d-flex` carries `display: flex !important`, which **beats the browser's `[hidden]`
+  rule**. An element with `hidden` and `d-flex` stays visible forever. `style.css` now sets
+  `[hidden] { display: none !important; }`; without it the offline banner and the discount
+  summary showed permanently (F-42).
+- Bootstrap 5.3 colours table cells from `--bs-table-color` **set on the cells**, so a
+  `color` on `.table` never reaches them. Restyling a table means setting the Bootstrap
+  variables, not the property — the console's text was invisible until this was understood.
+
 **Known debt, to be resolved in Stage 3.2 / 3.3:**
 - 29 `!important` declarations, mostly overriding Bootstrap's white table and card
   defaults. Target zero — either configure Bootstrap through its variables or replace it
@@ -78,6 +88,12 @@ still posts its value, so the page works with JavaScript off.
   action that resolves it. Every list has one.
 - **Navigation** — grouped with `.nav-section-label`; visibility driven by
   `current_user.can()` and `has_feature()`, never by role name.
+- **Gate pages** — a signed-in page that is a gate rather than a page of the app (today,
+  the change-password screen) passes `standalone=True` and keeps `{% block auth_content %}`.
+  It gets the centred `.auth-shell` layout with no sidebar, because every link in that
+  sidebar would bounce the user straight back. `.auth-shell` also reserves the 60px the
+  fixed `.mobile-header` occupies — without it a card taller than the viewport centres
+  itself and pushes its own heading behind that bar.
 - **Print** — invoices and statements hide everything outside the printable region via
   `visibility: hidden` on `body *`.
 

@@ -52,6 +52,12 @@
 - A plain `{% set %}` inside a `{% for %}` is scoped to the iteration. Use
   `namespace()` for running totals, or the total silently renders zero.
 - Gate on `current_user.can()` and `has_feature()`. Hiding is cosmetic; the route enforces.
+- **`content` and `auth_content` are not interchangeable.** `base.html` emits `content` for
+  signed-in users and `auth_content` for signed-out ones. A `@login_required` page that
+  defines only `auth_content` renders a shell with nothing in it — no error, no clue. This
+  has shipped twice: `offline.html` in 2.4b and the change-password gate in F-46, where a
+  new employee was told to set a password on a page with no form. A signed-in page that
+  wants the centred layout passes `standalone=True` and keeps `auth_content`.
 
 ## Migrations
 
@@ -68,7 +74,13 @@
 
 - Quantities are stored in **base units**, always. The purchase unit exists only at the
   input and display boundaries (`services/uom.py`).
-- Money is `Numeric(10, 2)` and `Decimal` in Python.
+- Money is `Numeric(10, 2)` and `Decimal` in Python. A **derived** per-unit figure may take
+  more scale — `PurchaseOrderItem.unit_cost` is `Numeric(14, 6)`, because it comes from
+  dividing a line cost by a pack quantity and two decimals lose real money over a carton of
+  24. Anything a human types or reads stays at two.
+- `Decimal` accepts `'NaN'` and `'Infinity'` without complaint. Any Decimal built from
+  outside input is checked with `.is_finite()` before use: NaN poisons every comparison
+  downstream, and Infinity sails through a discount floor as the highest price ever charged.
 - Nullable columns that gate behaviour are a bug. `Product.is_active` was nullable while
   nothing read it; the moment it gated revenue, a `NULL` row was neither counted nor
   blocked.
@@ -89,6 +101,9 @@
 
 - `auth/`, `products/`, `sales/`, `purchases/`, `credit/`, `billing/`, `reports/` —
   each holds `models.py`, `forms.py`, `routes.py` for its domain
+- `api/` — JSON only, `/api/v1/*`. Never renders a template; never a second copy of a rule
+- `platform_console/` — the vendor's console. Imports from tenant domains, never the
+  reverse: nothing in the product may depend on the console existing
 - `services/` — business logic, no Flask request context assumptions where avoidable
 - `templates/<domain>/` — mirrors the blueprint layout
 - `migrations/versions/` — the schema's history

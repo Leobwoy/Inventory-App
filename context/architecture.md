@@ -5,19 +5,29 @@
 | Layer | Technology | Role |
 | --- | --- | --- |
 | Framework | Flask 3.x (Python 3.12) | Application factory in `app.py`, blueprints per domain |
-| Templating | Jinja2 + Flask-Bootstrap 3.3.7 | Server-rendered HTML; no SPA |
+| Templating | Jinja2 + Bootstrap 5.3 (vendored) | Server-rendered HTML; no SPA |
 | ORM | SQLAlchemy 2.x + Flask-SQLAlchemy 3.x | Models and queries |
 | Migrations | Alembic via Flask-Migrate | **The only way schema changes** |
 | Database | PostgreSQL 16 | All persistent state |
 | Auth | Flask-Login + `werkzeug.security` | Sessions and password hashing |
 | Forms | Flask-WTF / WTForms | Validation and CSRF |
 | Reports | ReportLab, pandas, openpyxl, XlsxWriter | PDF / Excel / CSV export |
-| Hosting | Koyeb (app) + Neon (Postgres), Frankfurt | Free tier, no expiry clock |
+| Hosting | Render (app) + Neon (Postgres), Frankfurt | Free tier, no expiry clock |
 | Server | Gunicorn, via the repo `Dockerfile` | Runs `flask db upgrade` on start |
-| Tests | pytest against real PostgreSQL | 220 tests; migrations, not `create_all()` |
+| Tests | pytest against real PostgreSQL | 458 tests; migrations, not `create_all()` |
+| Scheduling | GitHub Actions cron to an HTTP endpoint | No worker process; see Subscription Lifecycle |
 
 Frankfurt is chosen over US or Cape Town regions because West African undersea cables
 route north to Europe, so Ghana reaches Frankfurt faster than Johannesburg.
+
+Koyeb was the original host and is gone - it was acquired and stopped letting new
+services be created. Render replaced it. Because Neon holds the data, the host is
+interchangeable; that was the point of keeping them separate.
+
+`flask_bootstrap` is still initialised in `create_app()` but **no template extends its
+base**, and its Bootstrap 3.3.7 assets are never served. The markup is Bootstrap 5.3 from
+`static/vendor/`. The extension is dead weight kept only because removing it touches
+`create_app()`; it is not a second UI framework.
 
 ## System Boundaries
 
@@ -29,10 +39,19 @@ route north to Europe, so Ghana reaches Frankfurt faster than Johannesburg.
   receipt, price comparison pages
 - `sales/` — `Sale`, `SaleItem`, `Customer`; recording sales, invoices
 - `credit/` — `Payment`; the credit book, ageing, statements
-- `billing/` — `Plan`, `Subscription`, `PaymentTransaction`, and the plan catalogue
+- `billing/` — `Plan`, `Subscription`, `PaymentTransaction`, the plan catalogue, and
+  `providers.py` (the `PaymentProvider` interface, currently `ManualMomoProvider`). Also
+  hosts the `before_app_request` hook that reconciles a subscription once a day.
+- `api/` — JSON endpoints under `/api/v1/*`. Exists for the offline queue and the
+  subscription cron. Calls the same services the web forms call; a second implementation of
+  "how much stock is there" would drift within weeks, and the copy that drifted would be
+  the one running when the shop had no network.
+- `platform_console/` — **the vendor's own console, not a tenant feature.** Separate
+  `PlatformAdmin` table, session key and decorator. See Two Identity Systems below.
 - `reports/` — read-only reporting and export
 - `services/` — **all business logic**. Routes stay thin and call in here.
-  `stock`, `pricing`, `uom`, `credit`, `sourcing`, `limits`, `audit`, `backup`
+  `stock`, `pricing`, `uom`, `credit`, `sourcing`, `limits`, `audit`, `backup`,
+  `billing`, `listing`, `notifications`, `subscriptions`
 - `migrations/versions/` — the schema's entire history
 - `tests/` — pytest suite, real database, fixtures in `conftest.py`
 
@@ -42,11 +61,19 @@ Blueprints must not import each other's route modules. Cross-domain work goes th
 ## Storage Model
 
 - **PostgreSQL** holds everything persistent. There is no file store, cache or queue.
-- **Session** holds only the Flask-Login user id.
-- **Client-side (Stage 2.4)** — IndexedDB will hold a cached catalogue and a queue of
-  sales recorded offline. It is a staging area, never a source of truth: the server
-  re-validates stock and price on sync.
-- Money is `Numeric(10, 2)`. Quantities are integers in **base units**.
+- **Session** holds the Flask-Login user id, `platform_admin_id` for a signed-in console
+  admin, and `subscription_checked` (a date string throttling the lazy reconcile). Nothing
+  else — no entitlement, permission or business id is ever cached there, so a plan or
+  permission change takes effect on the next request rather than the next login.
+- **Client-side** — IndexedDB holds a cached catalogue and a queue of sales recorded
+  offline. It is a staging area, never a source of truth: the server re-validates stock and
+  price on sync, against the truth *now* rather than the truth the device had.
+- Money is `Numeric(10, 2)`, with two deliberate exceptions.
+  `Business.max_discount_percent` is `Numeric(5, 2)` — a percentage, not money.
+  `PurchaseOrderItem.unit_cost` is `Numeric(14, 6)` because it is *derived*, by dividing a
+  line cost by a pack quantity; at two decimals that rounding is real money across a carton
+  of 24. Money a human types or reads stays at two.
+- Quantities are integers in **base units**.
 - Free-form context on audit entries and payment payloads is JSON in a `Text` column.
 
 ## Auth and Access Model
@@ -106,6 +133,91 @@ Rules the codebase must never violate. Each was learned from a real defect.
 9. **Customer data is never deleted to enforce a plan limit.** Downgrading removes
    *access*, not records: products deactivate, staff suspend, nothing is destroyed.
 
-10. **Every POST form carries a CSRF token.** `CSRFProtect` is global with no exemptions,
-    so a missing token is a silent 400 (F-28). The only future exception will be the
-    Paystack webhook, which is server-to-server and verified by signature instead.
+10. **Every POST form carries a CSRF token.** `CSRFProtect` is global and a missing token
+    is a silent 400 (F-28). There is exactly **one** exemption,
+    `api.cron_subscriptions`: server-to-server, authenticated by a shared secret compared
+    with `hmac.compare_digest`, taking no input and idempotent. A scheduler has no
+    session and cannot fetch a token first. A Paystack webhook would be the second,
+    verified by signature. A third needs all four of those properties, not just the first.
+
+11. **Entitlement is decided on read, never by a scheduled job.**
+    `services/limits.effective_plan()` works out what a business may do from the dates on
+    the subscription row, on every request. `services/subscriptions.py` only makes the
+    stored `status` agree with it. A run that is skipped, late or failed cannot grant a
+    paid feature or lock out someone who paid - which matters, because the app runs on an
+    instance that sleeps and GitHub's scheduler drops runs when it is busy. If the two
+    ever disagree, `effective_plan` is right.
+
+12. **A downgrade rewrites `plan_id`, not just `status`.** `effective_plan` reads
+    `status == 'free'` as "on the plan named here, with no expiry" - that is how a comped
+    account works. Flipping the status while leaving a paid `plan_id` in place grants that
+    plan permanently and it never expires again: the exact opposite of a downgrade.
+
+13. **An alert is only shown to someone allowed to see what it is about.** The alerts
+    page spans modules by design, so it crosses permission gates its own `products.view`
+    does not cover. `notifications.ALERT_PERMISSIONS` holds the exceptions, and both the
+    page and the badge count go through `for_user()` - a badge counting what the page
+    then withholds is its own bug.
+
+## Two Identity Systems
+
+There are two kinds of person here and they share nothing.
+
+| | Tenant user | Platform admin |
+| --- | --- | --- |
+| Table | `User` | `PlatformAdmin` |
+| Belongs to a business | Always; `business_id` is `NOT NULL` | Never |
+| Session key | Flask-Login's `_user_id` | `platform_admin_id` |
+| Gate | `@login_required` + `@permission_required` | `@platform_required` |
+| Reaches | Their own business's data | Every tenant's billing state |
+
+Separate because both alternatives were worse. Making the vendor a `User` of a placeholder
+business would have made `User.business_id` nullable, which holes invariant 1: every scoped
+query would need a null case, on every route, forever. And an Owner already holds every
+permission inside their business, so anything expressed as a permission would be
+self-grantable by the very people it is meant to exclude.
+
+The console is not reachable from the app and has no signup page - the first account is
+made from a shell, because the set of people who can confirm payments should be exactly the
+set who can already deploy. `@platform_required` returns 404 on POST rather than
+redirecting, so a probe cannot confirm the console exists.
+
+## Subscription Lifecycle
+
+Three transitions in `services/subscriptions.py`: `trialing` to `free` when the trial ends,
+`active` to `grace` when the paid period lapses, `grace` to `free` after `GRACE_DAYS`. An
+`active` row whose grace has *already* elapsed goes straight to `free`, because
+`effective_plan` treats active and grace alike - a row that lapsed months ago has no grace
+left to enter.
+
+Grace exists because mobile money cannot renew on its own. A lapse means "they have not
+paid *yet today*", not "they left".
+
+It runs three ways, none of them authoritative (invariant 11):
+
+- **Lazily**, `before_app_request`, throttled to once a day per signed-in user through the
+  session. The marker is written *after* the work, so a connection that blinks is retried
+  on the next page rather than written off until tomorrow.
+- **On a schedule**, `POST /api/v1/cron/subscriptions`, guarded by `CRON_SECRET`, 404 when
+  unset. Called by `.github/workflows/subscriptions.yml` daily. This is what catches the
+  businesses that are *not* logging in - the ones worth chasing.
+- **By hand**, `flask subscriptions-reconcile [--dry-run]`.
+
+No worker process and no in-app scheduler, deliberately: a background thread on an instance
+that sleeps stops when the instance does, and would be the last thing to notice.
+
+## Billing Collection
+
+`billing/providers.py` defines `PaymentProvider` so that "did the money arrive?" is the only
+thing differing between a human reading a mobile money statement and a signed webhook.
+Everything after that answer - the plan change, the audit entry, the locking - is shared.
+
+`ManualMomoProvider` is the only implementation. A customer sends mobile money and submits
+the reference; a platform admin confirms it in the console or by CLI. Both `confirm` and
+`reject` take a row lock and re-check `status == 'pending'` *after* acquiring it, so two
+admins acting at once cannot both apply.
+
+It works this way because Paystack required a business registration the project could not
+fund, and because mobile money has no reusable authorisation - there is no recurring charge
+to automate, so a human confirming a renewal costs far less here than it would in a card
+market. See Open Questions in `progress-tracker.md`: Paystack access has since changed.
