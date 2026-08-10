@@ -307,8 +307,50 @@ def business_detail(business_id):
         subscription=subscription,
         plan=limits.effective_plan(business_id),
         owner=User.query.filter_by(business_id=business_id).order_by(User.id).first(),
+        staff=User.query.filter_by(business_id=business_id).order_by(User.id).all(),
         users=limits.active_user_count(business_id),
         products=limits.active_product_count(business_id),
         payments=billing_service.history(business_id),
         form=form,
     )
+
+
+@platform_bp.route('/businesses/<int:business_id>/users/<int:user_id>/reset-password',
+                   methods=['POST'])
+@platform_required
+def reset_tenant_password(business_id, user_id):
+    """Issue a tenant a new temporary password. The last way back in.
+
+    An Owner locked out of their own business cannot be helped from inside it —
+    they are the one who holds `users.manage`. Without this, the only recovery is
+    someone with shell access to the production database, which is not a support
+    process.
+
+    Deliberately powerful, so it is deliberately loud: the entry lands in *that
+    business's* activity log, naming the admin who did it, where the Owner can
+    see it.
+    """
+    from services import passwords
+
+    user = User.query.filter_by(id=user_id, business_id=business_id).first_or_404()
+
+    # Login refuses a suspended account before it ever checks the password, so
+    # resetting one hands over a password that cannot work and reports success.
+    # The CLI already refused this; the console did not.
+    if not user.is_active:
+        flash(f'{user.name} is suspended, so a new password would not let them '
+              f'in. Their Owner must reinstate the account first.', 'warning')
+        return redirect(url_for('platform.business_detail', business_id=business_id))
+
+    try:
+        temporary = passwords.reset(user, by=current_admin().email)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception('a console password reset failed')
+        flash('Something went wrong and the password was not changed.', 'danger')
+        return redirect(url_for('platform.business_detail', business_id=business_id))
+
+    flash(f'Temporary password for {user.name} ({user.email}): {temporary} — '
+          f'shown once. They must change it when they sign in.', 'success')
+    return redirect(url_for('platform.business_detail', business_id=business_id))

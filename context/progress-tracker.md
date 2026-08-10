@@ -293,25 +293,67 @@ and the route passes it. Three further things came out of it:
 test ever walked through the gate. `tests/test_password_change.py` now covers it, including
 that logout stays reachable — otherwise a mistyped temporary password traps someone.
 
+### F-47 — Password recovery, done by a person (implemented; pending merge, PR #11)
+
+Chosen over email-based reset because it needed no provider, no domain and no spend, and it
+closed a live risk the same day. Prompted by asking what was next: the app was live with
+real accounts and **no recovery path of any kind**. An Owner could add staff and edit their
+permissions but could not reset a password, and neither could the console — so the everyday
+case (a clerk forgets theirs on a Saturday) was as stuck as the Owner case, and the only
+real fix was shell access to the production database.
+
+What made this cheap is that F-46 had just repaired the change-password gate. A temporary
+password plus `must_change_password` is now a complete flow, so recovery is: issue one,
+relay it, and the gate forces the holder to replace it before they reach a single page.
+
+Two levels, one shared `services/passwords.py` — two implementations would drift, and the
+one that drifted would be the console, used rarely and under pressure:
+
+- **Owner → their own staff**, `users.manage`, scoped to the business. The common case, and
+  the vendor is not involved in it.
+- **Vendor → anyone**, from the console or `flask reset-user-password`. The last way back
+  in, for an Owner who cannot be helped from inside their own business.
+
+Details that carry weight:
+- The generated password avoids every character people misread — no `O`/`0`, `I`/`l`/`1`,
+  `S`/`5`, `B`/`8`, `Z`/`2` — and is uppercase in hyphenated groups of four. It gets read
+  down a phone line or typed off a WhatsApp message.
+- It is shown **once**, in a flash, and stored nowhere in plain text.
+- Every reset lands in **the tenant's own activity log**. A console reset is signed
+  `user_id=None` and names the admin, so an Owner can see the vendor did it. Asserting that
+  needed a client holding *both* a console session and a tenant session, because with no
+  tenant session `user_id` is `None` either way and the test proved nothing.
+
+**Known gap, deliberate:** a reset does not invalidate sessions the account already has
+open. The threat model here is a locked-out user, not a compromised one — there is no live
+session in the case this solves. Doing it properly needs a token column on `User`, a
+`get_id()` override and a migration, which is its own unit.
+
 ## In Progress
 
-- Nothing. Stage 2.5, the subscription lifecycle and F-46 are committed.
+- Nothing. Stage 2.5, the subscription lifecycle, F-46 and F-47 are committed.
+- **Next: F-45**, onboarding and trial messaging. Chosen by the user, ahead of
+  Stage 2.6 — supplier scorecards need 20–30 purchase orders to show anything, and
+  there are no real customers yet, so the work that matters is what turns a signup
+  into one.
 
 ## Next Up
 
 1. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
 2. **Stage 2.7** — Smart reorder
 3. **Stage 2.8** — Dashboard rebuild
-4. **Stage 2B** — Paystack billing flow (blocked on business registration; the manual
-   mobile money flow in B5 covers it until then)
+4. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
+   registration premise was wrong and the account is pre-approved. See Open Questions:
+   no payout has been received, and neither collection path has taken real money yet.
 5. **Stage 3** — Interface revamp (light theme, self-hosted assets, barcode sale entry,
    branded invoices)
 
 ## Open Questions
 
-- **There is no password reset (F-43). Live risk.** A business owner who forgets their
-  password today is permanently locked out — there is no recovery flow anywhere, and the
-  console cannot reset one either. `auth/models.py` even comments that email "must identify
+- **Self-service password reset still does not exist (F-43), but the lockout risk is
+  closed.** Recovery is now done by a person rather than by email — see F-47 below. What is
+  still missing is the customer doing it themselves at 9pm without contacting anyone, which
+  needs an email provider, an API key and ideally a domain. `auth/models.py` even comments that email "must identify
   a person, because every identity-recovery flow depends on it", and then no such flow was
   built. Blocked on nothing but a decision: sending email needs a provider (Resend, Brevo,
   Mailgun), an API key, and ideally a domain — `onrender.com` senders land in spam.

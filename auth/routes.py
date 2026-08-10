@@ -370,6 +370,39 @@ def toggle_user_active(user_id):
     return redirect(url_for('auth.users_list'))
 
 
+@auth_bp.route('/users/<int:user_id>/reset_password', methods=['POST'])
+@login_required
+@permission_required('users.manage')
+def reset_user_password(user_id):
+    """Issue a staff member a new temporary password.
+
+    The everyday case, and the reason this is not only a console feature: a sales
+    clerk who forgets their password on a Saturday should not need the vendor.
+
+    The password is shown once and never stored in plain text. Whoever runs this
+    knows it for as long as it takes to relay, and the account is held on the
+    change-password page until the holder replaces it.
+    """
+    from services import passwords
+
+    user = User.query.filter_by(id=user_id,
+                                business_id=current_user.business_id).first_or_404()
+
+    if user.id == current_user.id:
+        # Not forbidden so much as pointless, and confusing: it would hand you a
+        # password you already have a page for changing directly.
+        flash('To change your own password, use Change Password.', 'warning')
+        return redirect(url_for('auth.users_list'))
+
+    temporary = passwords.reset(user)
+    db.session.commit()
+
+    flash(f'Temporary password for {user.name}: {temporary} — give it to them '
+          f'now, it will not be shown again. They must change it when they '
+          f'sign in.', 'success')
+    return redirect(url_for('auth.users_list'))
+
+
 MAX_LOGO_BYTES = 512 * 1024
 
 

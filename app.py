@@ -135,13 +135,15 @@ def create_app():
                                       list_platform_admins_command,
                                       pending_payments_command,
                                       reconcile_subscriptions_command,
-                                      reject_payment_command)
+                                      reject_payment_command,
+                                      reset_user_password_command)
     app.cli.add_command(create_platform_admin_command)
     app.cli.add_command(list_platform_admins_command)
     app.cli.add_command(pending_payments_command)
     app.cli.add_command(confirm_payment_command)
     app.cli.add_command(reject_payment_command)
     app.cli.add_command(reconcile_subscriptions_command)
+    app.cli.add_command(reset_user_password_command)
 
     from flask_login import login_required, current_user
     from auth.decorators import permission_required
