@@ -130,6 +130,32 @@ DATABASE_URL="<your Neon string>" flask reject-payment <reference>
 The reference is what the customer submitted — for mobile money, the transaction
 ID their network texted them. `pending-payments` lists them.
 
+### 2b-i. When someone is locked out
+
+There is no "forgot password" email yet, so a lost password is recovered by a
+person. Try these in order — most cases stop at the first.
+
+**A staff member forgot theirs.** Their own Owner fixes it, and you are not
+involved: **Staff → the key button** next to that person. A temporary password
+appears once. The Owner reads it to them, and the app makes them choose their own
+before they can do anything.
+
+**An Owner forgot theirs.** Nobody inside that business can help — the Owner is
+the one who holds staff management — so this one reaches you. In the console open
+**Businesses → the business → Staff → Reset password**. Same thing: shown once,
+they must change it on sign-in.
+
+**The console itself is unreachable.** From your machine:
+
+```bash
+DATABASE_URL="<your Neon string>" flask reset-user-password owner@theirbusiness.com
+```
+
+Every reset is written into **that business's own activity log**, naming whoever
+did it. That is deliberate: anyone who can take over any account should leave a
+mark the account's owner can see. Never reset a customer's password unless they
+have asked you to — they can see that you did.
+
 ### 2c. Letting trials and plans expire on their own
 
 Without this, a trial that ended three weeks ago still reads "Trial" in your

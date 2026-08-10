@@ -196,3 +196,39 @@ def reconcile_subscriptions_command(dry_run):
     click.echo(f"{len(summary['moved'])} changed, {len(summary['failed'])} failed.")
     if summary['failed']:
         raise SystemExit(1)
+
+
+@click.command('reset-user-password')
+@click.argument('email')
+@click.option('--by', default='cli', help='Recorded in the audit trail.')
+@with_appcontext
+def reset_user_password_command(email, by):
+    """Give a tenant user a new temporary password.
+
+    The fallback beneath the fallback: for when the console itself cannot be
+    reached, or when the person locked out is the only Owner and nobody inside
+    their business can help them.
+    """
+    from auth.models import User
+    from services import passwords
+
+    user = User.query.filter(db.func.lower(User.email) == email.strip().lower()).first()
+    if user is None:
+        click.echo(f'No user with the address {email}.', err=True)
+        raise SystemExit(1)
+
+    if not user.is_active:
+        click.echo(f'{user.email} is suspended. Reinstate the account first, or '
+                   f'the new password will not get them in.', err=True)
+        raise SystemExit(1)
+
+    click.echo(f'{user.name} <{user.email}> at {user.business.name}')
+    click.confirm('Reset this password?', abort=True)
+
+    temporary = passwords.reset(user, by=by)
+    db.session.commit()
+
+    click.echo('')
+    click.echo(f'  Temporary password: {temporary}')
+    click.echo('')
+    click.echo('Shown once. They must change it when they sign in.')

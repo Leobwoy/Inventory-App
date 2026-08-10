@@ -71,6 +71,51 @@
       <div class="muted py-3">No payments.</div>
       {% endif %}
     </div>
+
+    <div class="panel">
+      <h2 class="h6 mb-3">Staff</h2>
+      {# The last way back in. An Owner locked out of their own business cannot
+         be helped from inside it - they are the one holding users.manage. #}
+      <p class="muted small">
+        Resetting stops their current password working immediately and shows a
+        temporary one <strong>once</strong>. They must change it when they sign
+        in. Every reset is written to this business's own activity log, naming
+        you.
+      </p>
+      <div class="table-responsive">
+        <table class="table align-middle mb-0">
+          <thead><tr class="muted small">
+            <th>Name</th><th>Email</th><th>Status</th><th></th>
+          </tr></thead>
+          <tbody>
+            {% for member in staff %}
+            <tr>
+              <td>{{ member.name }}{% if member.is_owner %}
+                <span class="badge bg-secondary ms-1">Owner</span>{% endif %}</td>
+              <td class="font-monospace small">{{ member.email }}</td>
+              <td>
+                {% if member.must_change_password %}
+                <span class="badge bg-warning text-dark">Must set password</span>
+                {% elif member.is_active %}<span class="badge bg-success">Active</span>
+                {% else %}<span class="badge bg-secondary">Suspended</span>{% endif %}
+              </td>
+              <td class="text-end">
+                <form method="post" style="display:inline;"
+                      action="{{ url_for('platform.reset_tenant_password',
+                                         business_id=business.id, user_id=member.id) }}">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  <button type="submit" class="btn btn-sm btn-outline-light"
+                          onclick="return confirm('Reset the password for {{ member.email }}?\n\nThis is a customer account. Only do this when they have asked you to.');">
+                    Reset password
+                  </button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <div class="col-lg-5">
