@@ -302,8 +302,9 @@ that logout stays reachable — otherwise a mistyped temporary password traps so
 1. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
 2. **Stage 2.7** — Smart reorder
 3. **Stage 2.8** — Dashboard rebuild
-4. **Stage 2B** — Paystack billing flow (blocked on business registration; the manual
-   mobile money flow in B5 covers it until then)
+4. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
+   registration premise was wrong and the account is pre-approved. See Open Questions:
+   no payout has been received, and neither collection path has taken real money yet.
 5. **Stage 3** — Interface revamp (light theme, self-hosted assets, barcode sale entry,
    branded invoices)
 
