@@ -226,7 +226,15 @@ def reset_user_password_command(email, by):
     click.confirm('Reset this password?', abort=True)
 
     temporary = passwords.reset(user, by=by)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as e:
+        # Printed only after the write is safely down. A password echoed for a
+        # reset that did not commit is worse than an error: whoever ran this
+        # would read it out, and it would not work.
+        db.session.rollback()
+        click.echo(f'Nothing was changed: {e}', err=True)
+        raise SystemExit(1)
 
     click.echo('')
     click.echo(f'  Temporary password: {temporary}')

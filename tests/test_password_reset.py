@@ -133,12 +133,16 @@ def test_the_new_password_gets_them_in_and_straight_to_the_gate(shop, app):
 
 
 def test_the_reset_is_written_to_the_business_activity_log(shop):
+    """Named, not merely non-null. "Somebody reset this password" is not an
+    answer anyone can act on — the Owner needs to know which of them did it."""
     owner_client, business_id, staff = shop
+    owner = User.query.filter_by(email='owner@ab.example.com').one()
+
     owner_client.post(f'/auth/users/{staff.id}/reset_password')
 
     entry = AuditLog.query.filter_by(business_id=business_id,
                                      action='user.password_reset').one()
-    assert entry.user_id is not None                # an owner did this one
+    assert entry.user_id == owner.id
     assert STAFF_EMAIL in (entry.details_json or '')
 
 
@@ -310,3 +314,207 @@ def test_the_console_lists_the_staff_it_can_reset(console, shop):
 
     assert STAFF_EMAIL in body
     assert 'Reset password' in body
+
+
+# --- the CLI: the fallback beneath the fallback ------------------------------
+
+def cli(app):
+    return app.test_cli_runner()
+
+
+def test_the_cli_resets_a_password(app, shop):
+    """For when the console itself cannot be reached. Confirmed interactively,
+    because this is one keystroke away from changing a customer's password."""
+    from platform_console.cli import reset_user_password_command
+
+    _owner_client, _business_id, staff = shop
+
+    result = cli(app).invoke(reset_user_password_command,
+                             [STAFF_EMAIL, '--by', 'terminal'], input='y\n')
+
+    assert result.exit_code == 0, result.output
+    temporary = temp_from(result.output)
+    assert temporary
+    assert check_password_hash(User.query.get(staff.id).password_hash, temporary)
+    assert User.query.get(staff.id).must_change_password is True
+
+
+def test_the_cli_records_who_ran_it(app, shop):
+    from platform_console.cli import reset_user_password_command
+
+    _owner_client, business_id, _staff = shop
+    cli(app).invoke(reset_user_password_command,
+                    [STAFF_EMAIL, '--by', 'leonard-on-call'], input='y\n')
+
+    entry = AuditLog.query.filter_by(business_id=business_id,
+                                     action='user.password_reset').one()
+    assert entry.user_id is None
+    assert 'leonard-on-call' in (entry.details_json or '')
+
+
+def test_the_cli_refuses_an_address_it_does_not_know(app, shop):
+    from platform_console.cli import reset_user_password_command
+
+    result = cli(app).invoke(reset_user_password_command,
+                             ['nobody@nowhere.example.com'], input='y\n')
+
+    assert result.exit_code == 1
+    assert 'No user' in result.output
+
+
+def test_the_cli_finds_an_address_whatever_its_case(app, shop):
+    """Email is stored as typed but matched case-insensitively at login, so the
+    recovery path has to agree - or the address in someone's message will not
+    match the address in the database."""
+    from platform_console.cli import reset_user_password_command
+
+    result = cli(app).invoke(reset_user_password_command,
+                             [STAFF_EMAIL.upper()], input='y\n')
+
+    assert result.exit_code == 0, result.output
+    assert temp_from(result.output)
+
+
+def test_the_cli_refuses_a_suspended_account(app, shop):
+    """Login checks is_active before the password, so a reset here would hand
+    over something that cannot work and say it succeeded."""
+    from platform_console.cli import reset_user_password_command
+
+    _owner_client, _business_id, staff = shop
+    before = staff.password_hash
+    staff.is_active = False
+    db.session.commit()
+
+    result = cli(app).invoke(reset_user_password_command, [STAFF_EMAIL], input='y\n')
+
+    assert result.exit_code == 1
+    assert 'suspended' in result.output.lower()
+    assert User.query.get(staff.id).password_hash == before
+
+
+def test_declining_the_confirmation_changes_nothing(app, shop):
+    from platform_console.cli import reset_user_password_command
+
+    _owner_client, _business_id, staff = shop
+    before = staff.password_hash
+
+    result = cli(app).invoke(reset_user_password_command, [STAFF_EMAIL], input='n\n')
+
+    assert result.exit_code != 0
+    assert User.query.get(staff.id).password_hash == before
+    assert temp_from(result.output) is None
+
+
+def test_a_failed_commit_prints_no_password_and_leaves_none_set(app, shop, monkeypatch):
+    """The order that matters. A password echoed for a reset that did not commit
+    is worse than an error - whoever ran this would read it out, and it would
+    not work."""
+    from platform_console.cli import reset_user_password_command
+
+    _owner_client, _business_id, staff = shop
+    before = staff.password_hash
+
+    def refuse():
+        raise RuntimeError('the database went away')
+
+    monkeypatch.setattr(db.session, 'commit', refuse)
+    result = cli(app).invoke(reset_user_password_command, [STAFF_EMAIL], input='y\n')
+    monkeypatch.undo()
+
+    assert result.exit_code == 1
+    assert temp_from(result.output) is None
+    assert 'Nothing was changed' in result.output
+    db.session.rollback()
+    assert User.query.get(staff.id).password_hash == before
+
+
+# --- no user-controlled data inside a JavaScript string ----------------------
+
+HOSTILE = "Kwame'); alert(document.cookie); //"
+
+
+def onclick_attributes(body):
+    """Every onclick="..." value on the page."""
+    return re.findall(r'onclick="([^"]*)"', body)
+
+
+def test_a_staff_name_never_reaches_a_javascript_string(shop, make_staff):
+    """Autoescaping does not protect a JS string literal inside an attribute.
+
+    It turns `'` into `&#39;`, the HTML parser turns that back into `'` before
+    the JS parser ever runs, and a name like  Kwame'); alert(1); //  closes the
+    literal and executes. The name now travels in a data attribute and is read
+    back through `dataset`, so it is never parsed as code.
+    """
+    owner_client, business_id, _staff = shop
+    make_staff(business_id, 'Sales Staff', 'hostile@ab.example.com')
+    hostile = User.query.filter_by(email='hostile@ab.example.com').one()
+    hostile.name = HOSTILE
+    db.session.commit()
+
+    body = owner_client.get('/auth/users').get_data(as_text=True)
+
+    assert 'data-who' in body, 'the safe pattern is not being used at all'
+    for handler in onclick_attributes(body):
+        assert 'alert(' not in handler
+        assert 'Kwame' not in handler
+
+
+def test_a_tenant_address_never_reaches_a_javascript_string_in_the_console(
+        console, shop):
+    """The one that crosses a trust boundary. That address is written by the
+    customer and rendered in the console — the single place that can reset any
+    password in the system."""
+    _owner_client, business_id, staff = shop
+    staff.email = "victim'); alert(document.cookie); //@ab.example.com"
+    db.session.commit()
+
+    body = console.get(f'/platform/businesses/{business_id}').get_data(as_text=True)
+
+    assert 'data-who' in body
+    for handler in onclick_attributes(body):
+        assert 'alert(' not in handler
+        assert 'victim' not in handler
+
+
+# --- a suspended account ------------------------------------------------------
+
+def test_the_console_refuses_to_reset_a_suspended_account(console, shop):
+    """Login checks is_active before it checks the password, so this would hand
+    over something that cannot work and report success."""
+    _owner_client, business_id, staff = shop
+    staff.is_active = False
+    db.session.commit()
+    before = staff.password_hash
+
+    body = console.post(
+        f'/platform/businesses/{business_id}/users/{staff.id}/reset-password',
+        follow_redirects=True).get_data(as_text=True)
+
+    assert temp_from(body) is None
+    assert 'suspended' in body.lower()
+    assert User.query.get(staff.id).password_hash == before
+
+
+def test_the_console_hides_the_reset_button_for_a_suspended_account(console, shop):
+    _owner_client, business_id, staff = shop
+    staff.is_active = False
+    db.session.commit()
+
+    body = console.get(f'/platform/businesses/{business_id}').get_data(as_text=True)
+
+    assert 'Reinstate first' in body
+
+
+def test_suspended_is_shown_even_mid_reset(console, shop):
+    """It used to sit behind must_change_password, so an account that was both
+    suspended and awaiting a password showed only the second — hiding the very
+    thing stopping the new password from working."""
+    _owner_client, business_id, staff = shop
+    staff.is_active = False
+    staff.must_change_password = True
+    db.session.commit()
+
+    body = console.get(f'/platform/businesses/{business_id}').get_data(as_text=True)
+
+    assert 'Suspended' in body

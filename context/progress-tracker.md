@@ -293,7 +293,7 @@ and the route passes it. Three further things came out of it:
 test ever walked through the gate. `tests/test_password_change.py` now covers it, including
 that logout stays reachable — otherwise a mistyped temporary password traps someone.
 
-### F-47 — Password recovery, done by a person (merged)
+### F-47 — Password recovery, done by a person (implemented; pending merge, PR #11)
 
 Chosen over email-based reset because it needed no provider, no domain and no spend, and it
 closed a live risk the same day. Prompted by asking what was next: the app was live with

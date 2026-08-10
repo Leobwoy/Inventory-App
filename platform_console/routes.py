@@ -334,6 +334,14 @@ def reset_tenant_password(business_id, user_id):
 
     user = User.query.filter_by(id=user_id, business_id=business_id).first_or_404()
 
+    # Login refuses a suspended account before it ever checks the password, so
+    # resetting one hands over a password that cannot work and reports success.
+    # The CLI already refused this; the console did not.
+    if not user.is_active:
+        flash(f'{user.name} is suspended, so a new password would not let them '
+              f'in. Their Owner must reinstate the account first.', 'warning')
+        return redirect(url_for('platform.business_detail', business_id=business_id))
+
     try:
         temporary = passwords.reset(user, by=current_admin().email)
         db.session.commit()

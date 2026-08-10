@@ -94,21 +94,36 @@
                 <span class="badge bg-secondary ms-1">Owner</span>{% endif %}</td>
               <td class="font-monospace small">{{ member.email }}</td>
               <td>
-                {% if member.must_change_password %}
+                {# Suspended is checked first. It used to sit behind
+                   must_change_password, so a suspended account mid-reset showed
+                   only "Must set password" - hiding the very thing that stops
+                   the new password working. #}
+                {% if not member.is_active %}
+                <span class="badge bg-secondary">Suspended</span>
+                {% elif member.must_change_password %}
                 <span class="badge bg-warning text-dark">Must set password</span>
-                {% elif member.is_active %}<span class="badge bg-success">Active</span>
-                {% else %}<span class="badge bg-secondary">Suspended</span>{% endif %}
+                {% else %}<span class="badge bg-success">Active</span>{% endif %}
               </td>
               <td class="text-end">
+                {% if member.is_active %}
                 <form method="post" style="display:inline;"
                       action="{{ url_for('platform.reset_tenant_password',
                                          business_id=business.id, user_id=member.id) }}">
                   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                  {# The address is read back through dataset rather than written
+                     into the JS string. It is written by the tenant and rendered
+                     here, in the console - so an unescapable string literal
+                     would let a customer run script in the one place that can
+                     reset any password in the system. #}
                   <button type="submit" class="btn btn-sm btn-outline-light"
-                          onclick="return confirm('Reset the password for {{ member.email }}?\n\nThis is a customer account. Only do this when they have asked you to.');">
+                          data-who="{{ member.email }}"
+                          onclick="return confirm('Reset the password for ' + this.dataset.who + '?\n\nThis is a customer account. Only do this when they have asked you to.');">
                     Reset password
                   </button>
                 </form>
+                {% else %}
+                <span class="muted small">Reinstate first</span>
+                {% endif %}
               </td>
             </tr>
             {% endfor %}

@@ -64,7 +64,14 @@
                         <button type="submit"
                                 class="btn btn-sm btn-outline-{{ 'warning' if user.is_active else 'success' }} ms-1"
                                 title="{{ 'Suspend' if user.is_active else 'Reinstate' }}"
-                                onclick="return confirm('{{ 'Suspend' if user.is_active else 'Reinstate' }} {{ user.name }}?');">
+                                data-who="{{ user.name }}"
+                                {# The name goes in an attribute and is read back through
+                                   dataset, never written into the JS string. Autoescaping
+                                   does not save you here: it turns ' into &#39;, the HTML
+                                   parser turns that back into ' before the JS parser sees
+                                   it, and a name like  Kwame'); alert(1); //  escapes the
+                                   literal and runs. #}
+                                onclick="return confirm('{{ 'Suspend' if user.is_active else 'Reinstate' }} ' + this.dataset.who + '?');">
                             <i class="bi bi-{{ 'pause' if user.is_active else 'play' }}"></i>
                         </button>
                     </form>
@@ -81,7 +88,8 @@
                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-sm btn-outline-secondary ms-1"
                                 title="Reset password"
-                                onclick="return confirm('Give {{ user.name }} a new temporary password?\n\nTheir current password stops working immediately, and the new one is shown to you once.');">
+                                data-who="{{ user.name }}"
+                                onclick="return confirm('Give ' + this.dataset.who + ' a new temporary password?\n\nTheir current password stops working immediately, and the new one is shown to you once.');">
                             <i class="bi bi-key"></i>
                         </button>
                     </form>
