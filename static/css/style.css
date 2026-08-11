@@ -9,6 +9,14 @@
     display: none !important;
 }
 
+/* Bootstrap's progress track is #e9ecef - near-white. On a dark card an empty
+   bar renders as a solid light bar the full width of the card, which reads as
+   complete: the exact opposite of "0 of 5". The filled part is already the
+   accent colour, so only the track needs saying. */
+.progress {
+    background-color: rgba(148, 163, 184, 0.2);
+}
+
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {

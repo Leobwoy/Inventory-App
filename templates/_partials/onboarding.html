@@ -1,0 +1,76 @@
+{# Setup progress and the trial countdown.
+
+   Both disappear on their own: the checklist when the data says every step is
+   done, the countdown when there is no longer a trial. Neither has a dismiss
+   button, because neither is stored — there is nothing to dismiss, and a state
+   that can be dismissed while still true is how a screen ends up lying. #}
+
+{% if trial and trial.phase == 'trialing' %}
+<div class="glass-card mb-4 d-flex justify-content-between align-items-center flex-wrap gap-2"
+     style="border-left: 3px solid var(--accent-primary);">
+  <div>
+    <strong>{{ trial.days }} day{{ '' if trial.days == 1 else 's' }} left</strong>
+    <span class="text-muted">on your full-access trial.</span>
+  </div>
+  <a href="{{ url_for('billing.overview') }}" class="btn btn-sm btn-primary">See plans</a>
+</div>
+{% elif trial and trial.phase == 'ended' %}
+<div class="glass-card mb-4" style="border-left: 3px solid var(--bs-warning);">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      {# Plainly, and naming what they lost. Someone who works out they have been
+         downgraded by finding a feature gone does not come back. #}
+      <strong>Your trial has ended.</strong>
+      <span class="text-muted">
+        You are on {{ trial.plan.name }}. Your records are all still here, but
+        purchase orders, the credit book and offline selling are switched off.
+      </span>
+    </div>
+    <a href="{{ url_for('billing.overview') }}" class="btn btn-sm btn-primary">Choose a plan</a>
+  </div>
+</div>
+{% endif %}
+
+{% if setup and not setup.complete %}
+<div class="glass-card mb-4">
+  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
+    <div>
+      {% if setup.fresh %}
+      <h5 class="mb-1">Welcome to TrackTrack, {{ current_user.name.split()[0] }}</h5>
+      <div class="text-muted">Five steps and you are trading. Each one unlocks the next.</div>
+      {% else %}
+      <h5 class="mb-1">Finish setting up</h5>
+      <div class="text-muted">Next: {{ setup.next.detail }}</div>
+      {% endif %}
+    </div>
+    <span class="text-muted small">{{ setup.done }} of {{ setup.total }}</span>
+  </div>
+
+  <div class="progress mb-3" style="height: 4px;" role="progressbar"
+       aria-label="Setup progress"
+       aria-valuenow="{{ setup.done }}" aria-valuemin="0" aria-valuemax="{{ setup.total }}">
+    <div class="progress-bar" style="width: {{ (setup.done / setup.total * 100)|round }}%;"></div>
+  </div>
+
+  <ol class="list-unstyled mb-0">
+    {% for step in setup.steps %}
+    <li class="d-flex align-items-start gap-2 py-2
+               {% if not loop.last %}border-bottom border-secondary border-opacity-25{% endif %}">
+      {% if step.done %}
+      <i class="bi bi-check-circle-fill text-success mt-1" aria-hidden="true"></i>
+      <span class="visually-hidden">Done:</span>
+      <div class="text-muted"><s>{{ step.title }}</s></div>
+      {% else %}
+      <i class="bi bi-circle text-muted mt-1" aria-hidden="true"></i>
+      <span class="visually-hidden">To do:</span>
+      <div>
+        <a href="{{ url_for(step.endpoint, **step.params) }}"
+           class="text-decoration-none fw-medium">{{ step.title }}</a>
+        <div class="text-muted small">{{ step.detail }}</div>
+      </div>
+      {% endif %}
+    </li>
+    {% endfor %}
+  </ol>
+</div>
+{% endif %}

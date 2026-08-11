@@ -329,6 +329,51 @@ open. The threat model here is a locked-out user, not a compromised one — ther
 session in the case this solves. Doing it properly needs a token column on `User`, a
 `get_id()` override and a migration, which is its own unit.
 
+### F-45 — Onboarding and trial messaging (implemented; pending merge)
+
+New businesses were told nothing. The trial was never named before signing up, nothing
+guided the first hour, and a downgrade was discovered by finding a feature gone.
+
+`services/onboarding.py` gives three things:
+
+- **The trial, named at registration.** `trial_days` comes from a context processor rather
+  than each render call — the register page has three separate `render_template` calls, and
+  passing it to each is how the fourth one ends up saying nothing.
+- **A setup checklist that ticks itself off from real data** — product, supplier, order,
+  goods received, sale. No stored progress, so it cannot claim a step is done when the row
+  was deleted, and nobody has to dismiss anything. **All five answered in one query**; five
+  separate `EXISTS` calls put the dashboard over its query budget the moment it shipped.
+  It disappears entirely once complete. `endpoint`/`params`, not built URLs, as with alerts.
+- **A countdown, then an explanation.** `trial_state()` has exactly three phases: days left
+  while trialing, a notice for `ENDED_NOTICE_DAYS` (14) after the downgrade, and silence for
+  a paying customer. A banner that is always there is a banner nobody reads.
+
+Two decisions worth keeping:
+
+- **Deliberately quiet about the free tier while the trial runs.** It stays listed on
+  `/billing/`, but naming it in the countdown answers "what happens if I do nothing?" at the
+  moment we would rather they considered paying. The *end* notice does say plainly what
+  happened — a surprise downgrade loses the customer.
+- **`status == 'free'` is not enough to conclude a trial lapsed.** A comped account reads
+  identically, and telling those customers their trial ran out would be wrong. The ended
+  notice requires an actual `trial_ends_at` and a free effective plan.
+
+Only the dashboard carries it. A countdown on all fifty routes is the same mistake that
+made expiry alerts opt-in.
+
+**Still open:** the user has further onboarding requirements to add from memory.
+
+### F-48 — Three tests that failed only across midnight (fixed)
+
+`TODAY = datetime.date.today()` is captured at module import in thirteen test modules. Three
+tests posted `TODAY + 1 day` and asserted it was rejected as a future date — so a suite that
+started before midnight and reached them after it posted a date that had since become
+*today*, which is correctly accepted. The test then failed having proved nothing.
+
+Caught when the full suite finished at 00:14. The three boundary tests (receipt date,
+payment date, sale date) now call `datetime.date.today()` at the point of use. The other
+uses of `TODAY` have wide enough margins that a rollover cannot flip them.
+
 ## In Progress
 
 - Nothing. Stage 2.5, the subscription lifecycle, F-46 and F-47 are committed.
