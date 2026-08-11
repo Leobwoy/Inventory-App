@@ -238,7 +238,9 @@ def test_a_product_deleted_while_offline_is_a_conflict(shop):
 def test_a_future_dated_sale_is_refused(shop):
     client, _business_id, product = shop
     payload = queued(product)
-    payload['sale_date'] = (TODAY + datetime.timedelta(days=1)).isoformat()
+    # date.today(), not the import-time TODAY: a suite crossing midnight would
+    # post a date that has since become today, which is correctly accepted.
+    payload['sale_date'] = (datetime.date.today() + datetime.timedelta(days=1)).isoformat()
 
     assert json.loads(sync(client, payload).data)['results'][0]['status'] == 'rejected'
 
