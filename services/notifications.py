@@ -157,7 +157,7 @@ def for_business(business_id):
             'Every one of these is a sale you cannot make: '
             + ', '.join(p.name for p in empty[:3])
             + (f' and {len(empty) - 3} more' if len(empty) > 3 else ''),
-            'products.list_products', {'stock': 'out'}, len(empty)))
+            'products.low_stock', {}, len(empty)))
 
     soon = expiring_batches(business_id)
     if soon:
@@ -175,7 +175,7 @@ def for_business(business_id):
             f'{len(running_out)} product{"s" if len(running_out) > 1 else ""} below reorder level',
             'Lowest: ' + ', '.join(
                 f'{p.name} ({p.quantity_in_stock} left)' for p in running_out[:3]),
-            'products.list_products', {'stock': 'low'}, len(running_out)))
+            'products.low_stock', {}, len(running_out)))
 
     if limits.has_feature('credit_ledger', business_id):
         overdue = overdue_credit(business_id)

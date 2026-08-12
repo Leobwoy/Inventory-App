@@ -440,6 +440,40 @@ in `tests/test_tour.py` assert that a mechanism is *present* in `tour.js` rather
 works. They would pass against code that is there but broken. The behaviour was verified in
 the browser instead, at both desktop and 375px.
 
+### F-51 — Three things found by using the app (implemented; pending merge)
+
+**The sidebar buttons rendered as unstyled browser chrome.** Not a CSS bug: the rules were
+correct and present. `static/css/style.css` is in the service worker's `PRECACHE` and served
+**cache-first**, so a browser holding the `tracktrack-v4` cache kept the stylesheet from
+before the nav groups existed. No amount of reloading helps, because the worker never asks
+the network.
+
+Bumped to `v5`, and added `tour.css`/`tour.js` to the precache list. More importantly this
+now has a guard: `tests/test_pwa.py` fingerprints every precached file and fails if one
+changes while `CACHE_VERSION` does not, printing the line to paste. It would otherwise recur
+on every CSS or JS change, and it presents as a styling bug rather than a stale file. It
+escaped the browser verification because that loaded a saved page directly, bypassing the
+worker entirely.
+
+**Two dashboard links pointed at the wrong place.** The "Low Stock Items" card opened the
+stock level report — named for the number on it rather than its destination — and is now
+"Stock Level Report". "View All" beside the low stock heading went to `/products/` with no
+filter at all, showing the entire catalogue.
+
+New page `/products/low-stock`, derived like the alerts: nothing stored, no dismiss, a
+product leaves the moment stock returns above its reorder level, because handling it *is*
+receiving the stock. It includes products at zero, unlike `notifications.low_stock` — the
+alerts keep low and empty apart because the severities differ, but this page answers "what
+do I buy", and zero is the most urgent answer to that. **Both** stock alerts now point here:
+one question, one destination, with the severity distinction kept where it belongs, in the
+alert list.
+
+**A customer's statement was unreachable except through Money Owed.** Which means a customer
+who has always paid on time — and so never appears in Money Owed — had no reachable history
+at all. Added to the Customers row, gated on `credit.view` **and** `credit_ledger`, because
+the statement route is gated on both: without the first a clerk gets a button that 403s,
+without the second a Kiosk business gets an upsell disguised as a broken link.
+
 ## In Progress
 
 - Nothing. Stage 2.5, the subscription lifecycle, F-46 and F-47 are committed.
