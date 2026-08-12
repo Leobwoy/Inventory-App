@@ -104,7 +104,7 @@ def test_the_worst_is_listed_first(shop, make_product):
 
 
 def test_the_page_stays_inside_the_business(shop, register, make_product):
-    client, business_id = shop
+    client, _business_id = shop
     _other, other_id = register(name='Kumasi Drinks', email='o@kd.example.com')
     theirs = make_product(other_id, sku='KD-1', name='Kumasi Special')
     set_levels(theirs, in_stock=0, reorder_at=10)
@@ -114,7 +114,7 @@ def test_the_page_stays_inside_the_business(shop, register, make_product):
 
 
 def test_it_needs_permission_to_view_products(shop, make_staff):
-    client, business_id = shop
+    _client, business_id = shop
     outsider = make_staff(business_id, 'Sales Staff', 'nope@ab.example.com',
                           permissions=['sales.view'])
 
@@ -148,7 +148,7 @@ def test_view_all_goes_to_the_restocking_list(shop, make_product):
 def test_both_stock_alerts_lead_to_the_same_page(shop, make_product):
     """Low and empty stay separate alerts, because the severities differ. They
     lead to one destination, because "what do I buy" has one answer."""
-    client, business_id = shop
+    _client, business_id = shop
     low = make_product(business_id, sku='L-1', name='Low One')
     empty = make_product(business_id, sku='E-1', name='Empty One')
     set_levels(low, in_stock=3, reorder_at=10)

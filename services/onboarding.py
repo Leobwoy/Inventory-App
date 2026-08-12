@@ -146,7 +146,11 @@ def trial_state(business_id):
     if subscription is None:
         return None
 
-    if subscription.status == 'trialing' and subscription.trial_ends_at:
+    # is_trialing, not status == 'trialing': the status is only rewritten when
+    # the lifecycle job runs, so a lapsed trial can still read `trialing` for a
+    # while. days_left clamps at zero, so the countdown would sit on "0 days
+    # left" indefinitely rather than saying the trial is over.
+    if subscription.is_trialing:
         return {'phase': 'trialing', 'days': subscription.days_left}
 
     plan = limits.effective_plan(business_id)
@@ -156,7 +160,15 @@ def trial_state(business_id):
         # same, and telling those customers their trial ran out would be wrong.
         return None
 
-    since = datetime.datetime.utcnow() - subscription.trial_ends_at
+    now = datetime.datetime.utcnow()
+    # The end has to have actually happened. Without this a trial dated in the
+    # future gives a negative `since`, which is trivially less than the notice
+    # window - so the page would tell someone their trial had ended while it was
+    # still running.
+    if subscription.trial_ends_at > now:
+        return None
+
+    since = now - subscription.trial_ends_at
     if since > datetime.timedelta(days=ENDED_NOTICE_DAYS):
         return None
     return {'phase': 'ended', 'plan': plan}

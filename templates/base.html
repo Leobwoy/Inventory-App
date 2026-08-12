@@ -94,7 +94,11 @@
             </div>
             {% endif %}
 
-            {% if current_user.can('sales.view') or current_user.can('customers.view') %}
+            {# credit.view belongs here too, or someone holding only that
+               permission has Money Owed rendered inside a group that never
+               renders - the link exists and is unreachable. #}
+            {% if current_user.can('sales.view') or current_user.can('customers.view')
+                  or (current_user.can('credit.view') and has_feature('credit_ledger')) %}
             <div class="nav-group">
               <button class="nav-group-toggle collapsed" type="button" data-bs-toggle="collapse"
                       data-bs-target="#nav-group-sales" aria-expanded="false"
@@ -227,7 +231,15 @@
         // sidebar visibly unfolds itself each time you navigate.
         let remembered = {};
         try {
-            remembered = JSON.parse(localStorage.getItem('navGroups') || '{}');
+            const parsed = JSON.parse(localStorage.getItem('navGroups') || '{}');
+            // The try/catch alone is not enough: JSON.parse('null') does not
+            // throw, it returns null, and reading a key off that throws a
+            // TypeError here inside DOMContentLoaded - which would take out
+            // every listener registered after this one, including the mobile
+            // drawer toggle. Same for a stored array or number.
+            if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+                remembered = parsed;
+            }
         } catch (e) {
             remembered = {};   // corrupt value must not take the sidebar down
         }

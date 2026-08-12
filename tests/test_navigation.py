@@ -163,3 +163,32 @@ def test_a_corrupt_remembered_state_cannot_break_the_sidebar(owner):
 
     assert 'catch' in body
     assert re.search(r"JSON\.parse\(localStorage\.getItem\('navGroups'\)[^)]*\)", body)
+
+
+# --- two ways the sidebar could fail quietly ---------------------------------
+
+def test_a_credit_only_user_can_reach_money_owed(register, make_staff):
+    """The Credit link renders on credit.view + credit_ledger, but the group
+    around it rendered only on sales.view or customers.view. Someone holding
+    just credit.view therefore had the link built into a group that never
+    appeared - present in the template, unreachable on the page."""
+    _owner, business_id = register()
+    clerk = make_staff(business_id, 'Sales Staff', 'credit@ab.example.com',
+                       permissions=['credit.view'])
+
+    body = clerk.get('/').get_data(as_text=True)
+
+    assert 'id="nav-group-sales"' in body
+    assert 'id="nav-credit"' in body
+
+
+def test_a_stored_null_cannot_take_the_sidebar_down(register):
+    """`JSON.parse('null')` does not throw, it returns null - so the try/catch
+    around it never fires, and reading a key off null throws a TypeError inside
+    DOMContentLoaded. Everything registered after that never binds, including
+    the mobile drawer toggle, so the menu button stops working on phones."""
+    client, _business_id = register()
+    body = client.get('/').get_data(as_text=True)
+
+    assert "typeof parsed === 'object'" in body
+    assert 'Array.isArray(parsed)' in body

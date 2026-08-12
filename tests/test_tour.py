@@ -10,6 +10,7 @@ in their DOM, and `tour.js` drops any step whose anchor is missing. These tests
 pin that property, because the alternative is a second list of who-sees-what
 drifting away from the first.
 """
+import datetime
 import re
 
 import pytest
@@ -204,3 +205,80 @@ def test_the_tour_loads_nothing_from_another_origin(owner):
     assert client.get('/static/css/tour.css').status_code == 200
     assert 'cdn.' not in body
     assert '//unpkg' not in body
+
+
+# --- the record is written once, whoever asks -------------------------------
+
+def test_a_second_request_cannot_double_write_even_from_a_stale_read(owner, app):
+    """A conditional UPDATE, not read-then-write.
+
+    Two requests - a double click, a retry, the same person finishing on two
+    devices - would both see None and both write. Simulated here by marking the
+    row through a *separate* session, so the request's own identity map still
+    holds the old value: an in-memory check would sail past it, and the database
+    is the only thing that can settle who was first.
+    """
+    from sqlalchemy.orm import Session
+
+    client, _business_id = owner
+    user = User.query.filter_by(email='owner@ab.example.com').one()
+
+    other = Session(bind=db.engine)
+    try:
+        other.execute(
+            db.text('UPDATE "user" SET tour_seen_at = :when WHERE id = :id'),
+            {'when': datetime.datetime(2020, 1, 1), 'id': user.id})
+        other.commit()
+    finally:
+        other.close()
+
+    response = client.post('/auth/tour/done', data={'reason': 'completed'})
+
+    assert response.status_code == 204
+    db.session.expire_all()
+    assert User.query.get(user.id).tour_seen_at == datetime.datetime(2020, 1, 1)
+    assert AuditLog.query.filter_by(action='user.tour_seen').count() == 0
+
+
+def test_the_endpoint_records_it_when_nobody_has(owner):
+    """The other half: the conditional must still fire the first time."""
+    client, _business_id = owner
+    client.post('/auth/tour/done', data={'reason': 'completed'})
+
+    user = User.query.filter_by(email='owner@ab.example.com').one()
+    assert user.tour_seen_at is not None
+    assert AuditLog.query.filter_by(action='user.tour_seen').count() == 1
+
+
+# --- it behaves like the modal it announces itself as -------------------------
+
+def test_tab_is_kept_inside_the_tour(owner):
+    """The root carries aria-modal, which tells a screen reader the rest of the
+    page is inert. Without a trap that is simply untrue - Tab walks out into
+    content that is dimmed, unreachable by mouse, and still focusable."""
+    client, _business_id = owner
+    worker = client.get('/static/js/tour.js').get_data(as_text=True)
+
+    assert 'trapTab' in worker
+    assert "event.key === 'Tab'" in worker
+    assert 'reachable' in worker
+
+
+def test_focus_is_given_back_when_the_tour_closes(owner):
+    """Otherwise a keyboard user is dropped at the top of the document having
+    lost their place entirely."""
+    client, _business_id = owner
+    worker = client.get('/static/js/tour.js').get_data(as_text=True)
+
+    assert 'previousFocus = document.activeElement' in worker
+    assert 'this.previousFocus.focus(' in worker
+
+
+def test_the_dimmed_page_does_not_take_clicks(owner):
+    """It looks disabled. It was not: pointer-events was none, so a click landed
+    on whatever was underneath."""
+    client, _business_id = owner
+    css = client.get('/static/css/tour.css').get_data(as_text=True)
+
+    root = css[css.index('.tour-root {'):css.index('.tour-spotlight')]
+    assert 'pointer-events: auto' in root

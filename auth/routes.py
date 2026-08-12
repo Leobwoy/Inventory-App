@@ -382,11 +382,22 @@ def tour_seen():
     204 rather than a redirect - the caller is a `fetch` from the page the user
     is still reading, and it has nothing to do with a body.
     """
-    if current_user.tour_seen_at is None:
-        current_user.tour_seen_at = datetime.utcnow()
+    # A conditional UPDATE rather than reading the attribute and then writing it.
+    # This is a read-then-write on a shared row (invariant 8): two requests - a
+    # double click, a retry, the same person finishing on two devices - would
+    # both see None, both write, and both audit. Letting the database decide who
+    # got there first makes the check and the write one operation.
+    #
+    # synchronize_session=False leaves `current_user` stale in this session,
+    # which is harmless: nothing below reads it and the response carries no body.
+    updated = (User.query
+               .filter(User.id == current_user.id, User.tour_seen_at.is_(None))
+               .update({'tour_seen_at': datetime.utcnow()},
+                       synchronize_session=False))
+    if updated == 1:
         audit.log('user.tour_seen', entity_type='user', entity_id=current_user.id,
                   reason=(request.form.get('reason') or 'completed')[:32])
-        db.session.commit()
+    db.session.commit()
     return '', 204
 
 

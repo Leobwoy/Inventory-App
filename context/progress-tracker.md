@@ -474,13 +474,47 @@ at all. Added to the Customers row, gated on `credit.view` **and** `credit_ledge
 the statement route is gated on both: without the first a clerk gets a button that 403s,
 without the second a Kiosk business gets an upsell disguised as a broken link.
 
+### F-52 — Review fixes on the tour, the sidebar and the trial notice (implemented)
+
+Seven findings from the bot's review of F-49 through F-51. All seven were real.
+
+**Two were mine claiming protection that did not exist.**
+
+`JSON.parse('null')` does not throw — it returns `null`, so the `try/catch` around the
+`navGroups` read never fired, and indexing `null` threw a `TypeError` *inside*
+`DOMContentLoaded`. Everything registered after that point never binds, **including the
+mobile drawer toggle**, so the menu button stops working on a phone. The commit message for
+F-49 stated that a corrupt value was caught. It was not. The parse now has to yield a plain
+object or it is discarded.
+
+The tour set `aria-modal="true"` — which announces the rest of the page as inert — while
+`pointer-events: none` let clicks through and nothing trapped Tab. A keyboard or screen
+reader user could walk straight out into dimmed, unreachable content. It now saves focus on
+open, traps Tab among the enabled controls, restores focus on close, and the dim absorbs
+clicks.
+
+**The rest.** `tour_seen` was a read-then-write on a shared row, against invariant 8; it is
+now a conditional `UPDATE ... WHERE tour_seen_at IS NULL` with the audit entry written only
+when exactly one row moved. The trial countdown uses `subscription.is_trialing`, so a lapsed
+trial the lifecycle job has not reconciled yet stops sitting on "0 days left". The ended
+notice now requires `trial_ends_at <= now`: a future date gave a *negative* age, which is
+trivially inside the notice window, so the page announced an ending that had not happened.
+And the Sales nav group now opens for `credit.view` as well, or someone holding only that
+permission had Money Owed rendered inside a group that never appeared — present in the
+template, unreachable on the page.
+
+**The fingerprint guard earned itself immediately.** Changing `tour.js` and `tour.css` made
+`tests/test_pwa.py` fail on the first run after it was written, naming the fix. Bumped to
+`tracktrack-v6`.
+
 ## In Progress
 
-- Nothing. Stage 2.5, the subscription lifecycle, F-46 and F-47 are committed.
-- **Next: F-45**, onboarding and trial messaging. Chosen by the user, ahead of
-  Stage 2.6 — supplier scorecards need 20–30 purchase orders to show anything, and
-  there are no real customers yet, so the work that matters is what turns a signup
-  into one.
+- Nothing. Everything through F-51 is committed on `stage-1-finish`, awaiting merge.
+- **Next is undecided and is the user's call.** The roadmap says Stage 2.6 (supplier
+  scorecards), but 2.6 and 2.7 both score suppliers from purchase history and need 20–30
+  completed orders before they show anything — and there are no real customers yet, so both
+  would ship as empty screens. Bringing Stage 3 (the interface revamp) forward instead is a
+  reasonable alternative. Raised with the user 2026-08-12; not answered.
 
 ## Next Up
 

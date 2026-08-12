@@ -5,7 +5,12 @@
   position: fixed;
   inset: 0;
   z-index: 2000;              /* above the sidebar (1030) and its overlay */
-  pointer-events: none;       /* the dimmed page stays inert, not clickable */
+  /* auto, so a click on the dimmed page lands here and goes nowhere. It was
+     `none`, which let clicks through to content that looks disabled - and the
+     root carries aria-modal, so "the rest of the page is inert" was being
+     announced while it was still fully operable. Escape and the close button
+     are the ways out. */
+  pointer-events: auto;
 }
 
 /* The dim is a shadow spreading out of the highlight rather than a full-screen

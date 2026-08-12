@@ -58,6 +58,11 @@
   Tour.prototype.build = function () {
     var self = this;
 
+    // Where focus was before we took it, so it can be handed back on close.
+    // Without this a keyboard user is dropped at the top of the document after
+    // dismissing the tour, having lost their place entirely.
+    this.previousFocus = document.activeElement;
+
     var root = el('div', 'tour-root');
     root.setAttribute('role', 'dialog');
     root.setAttribute('aria-modal', 'true');
@@ -115,10 +120,45 @@
       if (event.key === 'Escape') { self.finish('closed'); }
       else if (event.key === 'ArrowRight') { self.go(1); }
       else if (event.key === 'ArrowLeft') { self.go(-1); }
+      else if (event.key === 'Tab') { self.trapTab(event); }
     };
     document.addEventListener('keydown', this.onKey);
     window.addEventListener('resize', this.onResize);
     window.addEventListener('scroll', this.onResize, true);
+  };
+
+  /* The controls a keyboard can actually reach right now. Back is disabled on
+   * the first step and Skip is hidden on the last, so the set changes per step
+   * and cannot be captured once at build time. */
+  Tour.prototype.reachable = function () {
+    return Array.prototype.filter.call(
+      this.nodes.bubble.querySelectorAll('button'),
+      function (button) { return !button.disabled && !button.hidden; });
+  };
+
+  /* Keep Tab inside the tour.
+   *
+   * The root carries aria-modal, which tells a screen reader the rest of the
+   * page is inert. Without this that is simply untrue: Tab walks straight out
+   * into content that is dimmed, unreachable by mouse, and still focusable.
+   */
+  Tour.prototype.trapTab = function (event) {
+    var items = this.reachable();
+    if (!items.length) { return; }
+    var first = items[0];
+    var last = items[items.length - 1];
+    var active = document.activeElement;
+
+    if (!this.nodes.bubble.contains(active)) {
+      event.preventDefault();
+      first.focus();
+    } else if (event.shiftKey && active === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && active === last) {
+      event.preventDefault();
+      first.focus();
+    }
   };
 
   Tour.prototype.go = function (delta) {
@@ -244,6 +284,13 @@
     this.nodes = null;
     document.body.classList.remove('tour-open');
     this.setDrawer(false);
+
+    // Hand focus back where it was. `focus` is guarded because the element may
+    // have been inside the drawer we have just closed.
+    if (this.previousFocus && document.contains(this.previousFocus)) {
+      try { this.previousFocus.focus({preventScroll: true}); } catch (e) { /* gone */ }
+    }
+    this.previousFocus = null;
 
     // Both endings count as seen. Someone who closed it on the second step has
     // told us something, and asking again tomorrow ignores the answer.

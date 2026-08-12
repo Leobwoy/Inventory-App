@@ -116,7 +116,7 @@ def test_the_dashboard_welcomes_a_business_with_nothing_in_it(shop):
 def test_the_checklist_disappears_once_everything_is_done(shop, monkeypatch):
     """No dismiss button anywhere, because there is nothing stored to dismiss —
     it goes when the work is done and comes back if the work is undone."""
-    client, business_id = shop
+    client, _business_id = shop
     monkeypatch.setattr(onboarding, 'state_for',
                         lambda bid: {'steps': [], 'done': 5, 'total': 5,
                                      'complete': True, 'next': None, 'fresh': False})
@@ -244,3 +244,66 @@ def test_the_whole_checklist_costs_one_query(shop, make_product):
         onboarding.steps(business_id)
 
     assert len(counter.statements) == 1, counter.statements
+
+
+# --- the trial notice tells the truth about time ------------------------------
+
+def test_a_lapsed_trial_is_not_still_counting_down(shop):
+    """`status` is only rewritten when the lifecycle job runs, so a trial that
+    ended can still read `trialing`. days_left clamps at zero, so the countdown
+    would sit on "0 days left" instead of saying the trial is over."""
+    _client, business_id = shop
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.status = 'trialing'
+    subscription.trial_ends_at = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+    db.session.commit()
+
+    state = onboarding.trial_state(business_id)
+
+    assert state is None or state['phase'] != 'trialing'
+
+
+def test_a_trial_still_running_counts_down(shop):
+    """The other half - the guard must not silence a live trial."""
+    _client, business_id = shop
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.status = 'trialing'
+    subscription.trial_ends_at = datetime.datetime.utcnow() + datetime.timedelta(days=3)
+    db.session.commit()
+
+    state = onboarding.trial_state(business_id)
+
+    assert state['phase'] == 'trialing'
+    assert state['days'] == 3
+
+
+def test_nobody_is_told_their_trial_ended_before_it_has(shop):
+    """A trial dated in the future gives a negative age, which is trivially
+    inside the notice window - so the page announced an ending that had not
+    happened."""
+    from billing.models import Plan
+
+    _client, business_id = shop
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.status = 'free'
+    subscription.plan_id = Plan.query.filter_by(code='free').one().id
+    subscription.trial_ends_at = datetime.datetime.utcnow() + datetime.timedelta(days=5)
+    db.session.commit()
+
+    assert onboarding.trial_state(business_id) is None
+
+
+def test_a_trial_that_really_ended_is_explained(shop):
+    """And the notice must still appear when it is genuinely due."""
+    from billing.models import Plan
+
+    _client, business_id = shop
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.status = 'free'
+    subscription.plan_id = Plan.query.filter_by(code='free').one().id
+    subscription.trial_ends_at = datetime.datetime.utcnow() - datetime.timedelta(days=2)
+    db.session.commit()
+
+    state = onboarding.trial_state(business_id)
+
+    assert state['phase'] == 'ended'
