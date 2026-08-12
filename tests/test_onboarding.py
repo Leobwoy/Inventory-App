@@ -251,7 +251,14 @@ def test_the_whole_checklist_costs_one_query(shop, make_product):
 def test_a_lapsed_trial_is_not_still_counting_down(shop):
     """`status` is only rewritten when the lifecycle job runs, so a trial that
     ended can still read `trialing`. days_left clamps at zero, so the countdown
-    would sit on "0 days left" instead of saying the trial is over."""
+    would sit on "0 days left" instead of saying the trial is over.
+
+    Asserted as `ended`, not merely "not trialing": silence is also not
+    trialing, and silence is the wrong answer. Someone whose trial lapsed is
+    owed the explanation — discovering a downgrade by finding a feature missing
+    is what loses the customer. A weaker assertion here would pass on a
+    regression that dropped the notice altogether.
+    """
     _client, business_id = shop
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.status = 'trialing'
@@ -260,7 +267,8 @@ def test_a_lapsed_trial_is_not_still_counting_down(shop):
 
     state = onboarding.trial_state(business_id)
 
-    assert state is None or state['phase'] != 'trialing'
+    assert state is not None, 'a lapsed trial should still be explained'
+    assert state['phase'] == 'ended'
 
 
 def test_a_trial_still_running_counts_down(shop):
