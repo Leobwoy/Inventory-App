@@ -32,7 +32,8 @@
 {% endif %}
 
 {% if setup and not setup.complete %}
-<div class="glass-card mb-4">
+{# id is the tour's anchor for this step (F-50). #}
+<div class="glass-card mb-4" id="onboarding-card">
   <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-3">
     <div>
       {% if setup.fresh %}
@@ -43,7 +44,12 @@
       <div class="text-muted">Next: {{ setup.next.detail }}</div>
       {% endif %}
     </div>
-    <span class="text-muted small">{{ setup.done }} of {{ setup.total }}</span>
+    <div class="text-end">
+      <span class="text-muted small d-block">{{ setup.done }} of {{ setup.total }}</span>
+      {# The way back into the tour. It only auto-starts once, so without this
+         a customer who closed it on step one has no route to it at all. #}
+      <a href="#" id="tour-replay" class="small">Show me around</a>
+    </div>
   </div>
 
   <div class="progress mb-3" style="height: 4px;" role="progressbar"

@@ -253,6 +253,10 @@ def create_app():
             # made expiry alerts opt-in.
             setup=onboarding.state_for(business_id),
             trial=onboarding.trial_state(business_id),
+            # Auto-start once, for someone who has never seen it. A tour that
+            # launches itself on every visit is a pop-up, and the replay link
+            # below the checklist is how anyone gets it back.
+            show_tour=current_user.tour_seen_at is None,
         )
 
     @app.route('/backup_restore', methods=['GET', 'POST'])

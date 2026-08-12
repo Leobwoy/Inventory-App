@@ -402,6 +402,44 @@ Three things that were easy to get wrong:
 `tests/test_navigation.py` pins the full set of Owner links by id, so losing one in a future
 restructure fails there rather than being found by a customer who cannot locate Brands.
 
+### F-50 — An interactive guided tour (implemented; pending merge)
+
+Requested directly, and it overrides the F-45 note that said not to build one. `tour.js` is
+hand-written — no library, self-hosted like everything since 2.4a, because a service worker
+cannot reliably cache a cross-origin response and this has to work on a market-day
+connection.
+
+Seven steps, each anchored to a real element, with a spotlight, an arrow, and a bubble
+explaining what the thing is for.
+
+**The property the design rests on: a step whose anchor is not in the DOM is dropped.** The
+sidebar is already permission-gated, so a Sales Staff member has no `#nav-group-admin` for a
+step to attach to and is never walked through Settings. There is deliberately no second list
+of who-sees-what to drift from the first. Verified live rather than only in tests: on a
+business that had finished setup the tour reported "1 of 6" rather than 7, having dropped
+the checklist step by itself.
+
+**Nav steps open the drawer.** Below 992px the sidebar is off-canvas, so a step pointing at
+a nav item points at nothing; the tour opens the drawer, waits for the slide, points, and
+closes it after. It also opens a collapsed group first (F-49), or the highlight lands on a
+zero-height element behind a folded panel. This is why the sidebar had to land first — the
+tour points at things, and all of them were about to move.
+
+**Nothing traps you.** Skip advances past a step, × and Escape end the tour. They are
+different actions, and the user asked for both.
+
+**Told once.** `User.tour_seen_at` (migration `d1b58e0472a9`), not localStorage: the question
+is whether this *person* has been shown the app, not whether this browser has, and a
+wholesaler using the shop tablet and their own phone should not be toured twice. Closing
+early counts — someone who shut it on step two has answered, and asking again tomorrow
+ignores that. A "Show me around" link beside the checklist replays it, without which anyone
+who closed it on step one would have no way back.
+
+**Test weakness worth knowing.** pytest cannot execute browser JavaScript, so several tests
+in `tests/test_tour.py` assert that a mechanism is *present* in `tour.js` rather than that it
+works. They would pass against code that is there but broken. The behaviour was verified in
+the browser instead, at both desktop and 375px.
+
 ## In Progress
 
 - Nothing. Stage 2.5, the subscription lifecycle, F-46 and F-47 are committed.
@@ -435,14 +473,12 @@ restructure fails there rather than being found by a customer who cannot locate 
   unit with password reset: infrastructure → reset → verification, in that order. Must be
   **soft** — the account works immediately with a "confirm your email" nudge — because a
   hard gate means one undelivered email costs a customer on a phone with patchy data.
-- **Onboarding and trial messaging (F-45).** New businesses are told nothing about the
-  14-day full-access trial at registration, and there is no activation guidance after it.
-  Planned shape: trial terms on the registration page, a welcome screen, a **setup checklist
-  that ticks itself off from real data** (not a modal tour — those are a lot of JavaScript
-  for something people click past), and a countdown banner. Deliberately does not advertise
-  the free tier at signup; it stays listed on `/billing/` and the *end* of a trial must say
-  plainly what happens next, because a downgrade discovered by surprise loses the customer.
-  Requested 2026-08-08; user has more requirements to add from memory.
+- ~~**Onboarding and trial messaging (F-45).**~~ **Done** — see Completed. One line of it was
+  wrong and is worth keeping visible rather than deleting: the planned shape said a checklist
+  **"not a modal tour — those are a lot of JavaScript for something people click past"**. The
+  user asked for exactly that tour on 2026-08-11, twice and explicitly, and it is built (F-50).
+  The reasoning was not wrong about the cost — `tour.js` is 250 lines — but it was a product
+  judgement dressed as an engineering one, and it was not mine to make.
 
 - **Promotional discounts do not exist.** Point-of-sale discounting works (a per-line
   price reduction, permission-gated, capped, audited) now that the ceiling is settable.

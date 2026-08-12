@@ -77,6 +77,10 @@ class User(UserMixin, db.Model):
     is_active = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login_at = db.Column(db.DateTime)
+    # Null means the guided tour has never been finished or dismissed. On the
+    # user rather than in localStorage: the question is whether this *person*
+    # has been shown the app, not whether this browser has.
+    tour_seen_at = db.Column(db.DateTime)
 
     permissions = db.relationship(
         'Permission',

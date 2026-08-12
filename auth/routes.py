@@ -370,6 +370,26 @@ def toggle_user_active(user_id):
     return redirect(url_for('auth.users_list'))
 
 
+@auth_bp.route('/tour/done', methods=['POST'])
+@login_required
+def tour_seen():
+    """Record that this person has been shown the app. Idempotent.
+
+    Both endings count: finishing the tour and closing it on the second step are
+    equally an answer, and offering it again tomorrow would be ignoring the one
+    we were given.
+
+    204 rather than a redirect - the caller is a `fetch` from the page the user
+    is still reading, and it has nothing to do with a body.
+    """
+    if current_user.tour_seen_at is None:
+        current_user.tour_seen_at = datetime.utcnow()
+        audit.log('user.tour_seen', entity_type='user', entity_id=current_user.id,
+                  reason=(request.form.get('reason') or 'completed')[:32])
+        db.session.commit()
+    return '', 204
+
+
 @auth_bp.route('/users/<int:user_id>/reset_password', methods=['POST'])
 @login_required
 @permission_required('users.manage')

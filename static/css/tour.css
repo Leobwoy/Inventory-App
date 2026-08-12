@@ -1,0 +1,123 @@
+/* The guided tour. Loaded on every authenticated page, but inert until
+   tour.js builds anything, so it costs one cached file and no layout. */
+
+.tour-root {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;              /* above the sidebar (1030) and its overlay */
+  pointer-events: none;       /* the dimmed page stays inert, not clickable */
+}
+
+/* The dim is a shadow spreading out of the highlight rather than a full-screen
+   overlay with a hole cut in it. One element, no clip-path, and it animates
+   between steps for free. */
+.tour-spotlight {
+  position: absolute;
+  border-radius: 0.6rem;
+  box-shadow: 0 0 0 9999px rgba(2, 6, 23, 0.72);
+  border: 2px solid var(--accent-primary);
+  transition: top 0.22s ease, left 0.22s ease, width 0.22s ease, height 0.22s ease;
+}
+
+.tour-bubble {
+  position: absolute;
+  width: min(320px, calc(100vw - 24px));
+  background: #1e293b;        /* solid, not the translucent card: text over a
+                                 blurred backdrop is the contrast problem this
+                                 theme already has */
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  padding: 1rem 1rem 0.85rem;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55);
+  pointer-events: auto;
+  transition: top 0.22s ease, left 0.22s ease;
+}
+
+.tour-counter {
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  margin-bottom: 0.35rem;
+}
+
+.tour-title {
+  color: #fff;
+  font-size: 1.02rem;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+  padding-right: 1.5rem;      /* clear of the close button */
+}
+
+.tour-body {
+  color: #cbd5e1;             /* 8.9:1 on #1e293b */
+  font-size: 0.9rem;
+  line-height: 1.45;
+  margin: 0 0 0.85rem;
+}
+
+.tour-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.tour-actions .tour-next { margin-left: auto; }
+
+.tour-skip {
+  color: var(--text-secondary);
+  text-decoration: none;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.tour-skip:hover { color: #fff; }
+
+.tour-back:disabled { opacity: 0.4; }
+
+.tour-close {
+  position: absolute;
+  top: 0.35rem;
+  right: 0.5rem;
+  background: none;
+  border: 0;
+  color: var(--text-secondary);
+  font-size: 1.4rem;
+  line-height: 1;
+  padding: 0.15rem 0.35rem;
+  border-radius: 0.35rem;
+}
+
+.tour-close:hover,
+.tour-close:focus-visible { color: #fff; }
+
+.tour-close:focus-visible,
+.tour-actions .btn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* The pointer. A rotated square, so one element gives four directions. */
+.tour-arrow {
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  background: #1e293b;
+  border: 1px solid var(--border-color);
+  transform: rotate(45deg);
+}
+
+.tour-arrow[data-side="right"]  { border-width: 0 0 1px 1px; }
+.tour-arrow[data-side="left"]   { border-width: 1px 1px 0 0; }
+.tour-arrow[data-side="top"]    { border-width: 0 1px 1px 0; }
+.tour-arrow[data-side="bottom"] { border-width: 1px 0 0 1px; }
+
+/* Stops the page scrolling behind the tour while a step is anchored to
+   something on it. */
+body.tour-open { overflow: hidden; }
+
+/* Reduced motion: keep the positioning, drop the sliding. */
+@media (prefers-reduced-motion: reduce) {
+  .tour-spotlight,
+  .tour-bubble { transition: none; }
+}
