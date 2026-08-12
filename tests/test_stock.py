@@ -120,8 +120,13 @@ def test_future_receipt_date_rejected(register, make_product, make_po):
     product = make_product(business_id)
     po, item = make_po(business_id, product)
 
+    # date.today() here, not the module-level TODAY. TODAY is captured at import,
+    # so a suite that starts before midnight and reaches this test after it posts
+    # a date that has since become *today* - which is correctly accepted, and the
+    # test fails having proved nothing. It cost a real debugging session.
+    tomorrow = datetime.date.today() + datetime.timedelta(days=1)
     response = client.post(f'/purchases/receive/{po.id}', data={
-        'received_date': (TODAY + datetime.timedelta(days=1)).isoformat(),
+        'received_date': tomorrow.isoformat(),
         f'qty_{item.id}': '10',
     }, follow_redirects=True)
 

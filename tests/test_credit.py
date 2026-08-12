@@ -131,7 +131,10 @@ def test_a_future_dated_payment_is_refused(shop):
 
     response = client.post(f'/credit/sale/{sale.id}/pay', data={
         'amount': '100.00', 'method': 'cash', 'reference': '',
-        'paid_on': (TODAY + datetime.timedelta(days=1)).isoformat(), 'notes': '',
+        # date.today(), not the import-time TODAY: a suite crossing midnight
+        # would post a date that has since become today, which is allowed.
+        'paid_on': (datetime.date.today() + datetime.timedelta(days=1)).isoformat(),
+        'notes': '',
     }, follow_redirects=True)
 
     assert 'cannot be dated in the future' in response.get_data(as_text=True)

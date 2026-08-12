@@ -155,12 +155,17 @@ def create_app():
         Permissions are already reachable via current_user.can(); this is the
         other gate - what the business has paid for rather than who is asking.
         """
+        from billing.plans import TRIAL_DAYS
         from services import limits, uom
 
         def has_feature(code):
             return limits.has_feature(code)
 
-        return {'has_feature': has_feature, 'uom': uom}
+        # trial_days is a constant, so it costs nothing here and cannot drift
+        # from the value the subscription is actually created with. The register
+        # page has three separate render calls; passing it to each is how the
+        # fourth one ends up saying nothing.
+        return {'has_feature': has_feature, 'uom': uom, 'trial_days': TRIAL_DAYS}
 
     @app.route('/sw.js')
     def service_worker():
@@ -234,6 +239,8 @@ def create_app():
 
         # Top 5 products by stock
         top_products = Product.query.filter_by(business_id=business_id).order_by(Product.quantity_in_stock.desc()).limit(5).all()
+        from services import onboarding
+
         return render_template(
             'index.html',
             low_stock=low_stock,
@@ -241,6 +248,15 @@ def create_app():
             top_products=top_products,
             product_count=product_count,
             year=today.year,
+            # Only the dashboard. A countdown on all fifty routes is how people
+            # learn to stop reading banners, which is the same reasoning that
+            # made expiry alerts opt-in.
+            setup=onboarding.state_for(business_id),
+            trial=onboarding.trial_state(business_id),
+            # Auto-start once, for someone who has never seen it. A tour that
+            # launches itself on every visit is a pop-up, and the replay link
+            # below the checklist is how anyone gets it back.
+            show_tour=current_user.tour_seen_at is None,
         )
 
     @app.route('/backup_restore', methods=['GET', 'POST'])

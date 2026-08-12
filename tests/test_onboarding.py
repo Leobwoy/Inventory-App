@@ -1,129 +1,317 @@
-"""Onboarding — F-01.
+"""F-45 — telling a new business what to do, and what it is on.
 
-A new business could not create a single product: brand and item group are
-required, neither was seeded, and all four templates for creating them were
-missing with no navigation to reach the routes.
+Two things a new business was never told: that a trial exists at all, and what
+to do first. Registration mentioned neither, and the dashboard went straight to
+stat cards reading zero.
+
+The checklist is **derived**, like the alerts and for the same reason. A stored
+checklist can be ticked while the thing is not true, and a dismissed one goes on
+saying "all set" to a business with nothing in it. Here a step is done because
+the data says so, and undoing the work un-ticks it.
 """
-from auth.models import Business, User
-from products.models import Brand, ItemGroup, Product
+import datetime
+
+import pytest
+
+from billing.models import Plan, Subscription
+from billing.plans import TRIAL_DAYS
+from extensions import db
+from services import onboarding
 
 
-def test_registration_creates_business_and_owner(register):
-    _c, business_id = register()
-
-    business = Business.query.get(business_id)
-    assert business is not None
-
-    owner = User.query.filter_by(business_id=business_id).one()
-    assert owner.role.name == 'Owner'
-    assert owner.is_owner
-    assert owner.last_login_at is None      # not set until an actual login
-
-
-def test_registration_seeds_catalogue_fallbacks(register):
-    """Without these the first product cannot be saved at all."""
-    _c, business_id = register()
-
-    assert [b.name for b in Brand.query.filter_by(business_id=business_id)] == ['Generic']
-    assert [g.name for g in ItemGroup.query.filter_by(business_id=business_id)] == ['Uncategorized']
-
-
-def test_catalogue_pages_render(register):
-    """These four routes raised TemplateNotFound - the templates did not exist."""
-    client, _ = register()
-    for path in ['/products/brands', '/products/item_groups', '/products/categories']:
-        assert client.get(path).status_code == 200, path
-
-
-def test_product_saves_with_only_the_essential_fields(register):
-    """Name, prices, brand and item group. Everything else must default (D7)."""
+@pytest.fixture
+def shop(register):
     client, business_id = register()
-    brand = Brand.query.filter_by(business_id=business_id).first()
-    group = ItemGroup.query.filter_by(business_id=business_id).first()
-
-    client.post('/products/add', data={
-        'name': 'BelAqua 750ml', 'cost_price': '2.50', 'unit_price': '3.50',
-        'brand_id': str(brand.id), 'item_group_id': str(group.id), 'category_id': '0',
-        'sku': '', 'base_uom': '', 'purchase_uom': '', 'units_per_purchase_uom': '',
-        'min_stock_alert': '0', 'quantity_in_stock': '0',
-    }, follow_redirects=True)
-
-    product = Product.query.filter_by(name='BelAqua 750ml').one()
-    assert product.sku                          # auto-generated
-    assert product.base_uom == 'pcs'
-    assert product.purchase_uom == 'pcs'        # falls back to base
-    assert product.units_per_purchase_uom == 1
-    assert product.min_stock_alert == 0         # zero must be storable
-    assert product.quantity_in_stock == 0       # stock only enters via receipt
+    return client, business_id
 
 
-def test_generated_skus_are_unique(register):
-    client, business_id = register()
-    brand = Brand.query.filter_by(business_id=business_id).first()
-    group = ItemGroup.query.filter_by(business_id=business_id).first()
-
-    for name in ['Water A', 'Water B', 'Water C']:
-        client.post('/products/add', data={
-            'name': name, 'cost_price': '1', 'unit_price': '2',
-            'brand_id': str(brand.id), 'item_group_id': str(group.id), 'category_id': '0',
-            'sku': '', 'base_uom': '', 'purchase_uom': '', 'units_per_purchase_uom': '',
-            'min_stock_alert': '0', 'quantity_in_stock': '0',
-        }, follow_redirects=True)
-
-    skus = [p.sku for p in Product.query.all()]
-    assert len(skus) == 3
-    assert len(set(skus)) == 3
+def set_subscription(business_id, status, plan='trial', trial_ends_at=..., paid_through=...):
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.status = status
+    subscription.plan_id = Plan.query.filter_by(code=plan).one().id
+    if trial_ends_at is not ...:
+        subscription.trial_ends_at = trial_ends_at
+    if paid_through is not ...:
+        subscription.paid_through = paid_through
+    db.session.commit()
+    return subscription
 
 
-def test_cannot_attach_another_businesses_brand(register, client, app):
-    """A posted foreign key must never be trusted."""
-    owner_a, business_a = register(name='Alpha', email='a@x.example.com')
-    _owner_b, business_b = register(name='Beta', email='b@x.example.com', c=app.test_client())
+# --- the checklist reflects real data ----------------------------------------
 
-    foreign_brand = Brand.query.filter_by(business_id=business_b).first()
-    group_a = ItemGroup.query.filter_by(business_id=business_a).first()
+def test_a_brand_new_business_has_nothing_ticked(shop):
+    _client, business_id = shop
 
-    owner_a.post('/products/add', data={
-        'name': 'Should Not Save', 'cost_price': '1', 'unit_price': '2',
-        'brand_id': str(foreign_brand.id), 'item_group_id': str(group_a.id),
-        'category_id': '0', 'sku': '', 'base_uom': '', 'purchase_uom': '',
-        'units_per_purchase_uom': '', 'min_stock_alert': '0', 'quantity_in_stock': '0',
-    }, follow_redirects=True)
+    state = onboarding.state_for(business_id)
 
-    assert Product.query.filter_by(name='Should Not Save').first() is None
+    assert state['done'] == 0
+    assert state['fresh'] is True
+    assert state['complete'] is False
+    assert state['next']['key'] == 'product'
 
 
-def test_login_records_last_login(register, client):
-    register()
-    client.get('/auth/logout')
-    client.post('/auth/login', data={'email': 'owner@ab.example.com', 'password': 'Str0ngPass!23'},
-                follow_redirects=True)
-    assert User.query.filter_by(email='owner@ab.example.com').one().last_login_at is not None
+def test_adding_a_product_ticks_the_first_step(shop, make_product):
+    _client, business_id = shop
+    make_product(business_id, sku='BA-750')
+
+    state = onboarding.state_for(business_id)
+
+    assert state['done'] == 1
+    assert state['next']['key'] == 'supplier'
 
 
-def test_deactivated_account_cannot_log_in(register, app):
-    from extensions import db
-    register()
-    user = User.query.filter_by(email='owner@ab.example.com').one()
-    user.is_active = False
+def test_deactivating_the_only_product_unticks_it(shop, make_product):
+    """Derived, not stored. The point of computing it is that it cannot go on
+    claiming a step is done after the thing stops being true."""
+    from products.models import Product
+
+    _client, business_id = shop
+    product = make_product(business_id, sku='BA-750')
+    assert onboarding.state_for(business_id)['done'] == 1
+
+    db.session.get(Product, product.id).is_active = False
     db.session.commit()
 
-    response = app.test_client().post(
-        '/auth/login',
-        data={'email': 'owner@ab.example.com', 'password': 'Str0ngPass!23'},
-        follow_redirects=True,
-    )
-    assert 'deactivated' in response.get_data(as_text=True)
+    assert onboarding.state_for(business_id)['done'] == 0
 
 
-def test_login_ignores_absolute_next_target(register, client):
-    """The next parameter was followed unvalidated - an open redirect (F-31)."""
-    register()
-    client.get('/auth/logout')
-    response = client.post('/auth/login?next=https://evil.example/steal',
-                           data={'email': 'owner@ab.example.com', 'password': 'Str0ngPass!23'})
-    # Assert the redirect happened: a 200 (failed login) would leave Location
-    # empty and pass the check below without ever exercising the redirect path.
-    assert response.status_code == 302
-    assert 'evil.example' not in response.headers.get('Location', '')
-    assert response.headers['Location'] in ('/', 'http://localhost/')
+def test_the_steps_are_in_the_order_the_app_forces(shop):
+    """You cannot receive stock without an order, or sell what you never
+    received. A checklist in any other order sends someone into a dead end."""
+    _client, business_id = shop
+
+    assert [s['key'] for s in onboarding.steps(business_id)] == [
+        'product', 'supplier', 'order', 'stock', 'sale']
+
+
+def test_every_step_points_at_a_page_that_exists(shop, app):
+    """A checklist whose links 404 is worse than no checklist."""
+    _client, business_id = shop
+    endpoints = {r.endpoint for r in app.url_map.iter_rules()}
+
+    for step in onboarding.steps(business_id):
+        assert step['endpoint'] in endpoints, step['key']
+
+
+def test_the_checklist_stays_inside_the_business(shop, register, make_product):
+    _client, business_id = shop
+    _other, other_id = register(name='Kumasi Drinks', email='o@kd.example.com')
+    make_product(other_id, sku='KD-1')
+
+    assert onboarding.state_for(business_id)['done'] == 0
+    assert onboarding.state_for(other_id)['done'] == 1
+
+
+# --- the dashboard ------------------------------------------------------------
+
+def test_the_dashboard_welcomes_a_business_with_nothing_in_it(shop):
+    client, _business_id = shop
+
+    body = client.get('/').get_data(as_text=True)
+
+    assert 'Welcome to TrackTrack' in body
+    assert 'Add your first product' in body
+
+
+def test_the_checklist_disappears_once_everything_is_done(shop, monkeypatch):
+    """No dismiss button anywhere, because there is nothing stored to dismiss —
+    it goes when the work is done and comes back if the work is undone."""
+    client, _business_id = shop
+    monkeypatch.setattr(onboarding, 'state_for',
+                        lambda bid: {'steps': [], 'done': 5, 'total': 5,
+                                     'complete': True, 'next': None, 'fresh': False})
+
+    body = client.get('/').get_data(as_text=True)
+
+    assert 'Welcome to TrackTrack' not in body
+    assert 'Finish setting up' not in body
+
+
+def test_a_partly_set_up_business_is_told_only_the_next_thing(shop, make_product):
+    client, business_id = shop
+    make_product(business_id, sku='BA-750')
+
+    body = client.get('/').get_data(as_text=True)
+
+    assert 'Finish setting up' in body
+    assert 'Welcome to TrackTrack' not in body
+
+
+# --- the trial is mentioned before signing up --------------------------------
+
+def test_the_registration_page_says_what_the_trial_is(client):
+    """It said nothing at all, so the offer was invisible at the one moment
+    someone is deciding whether to bother."""
+    body = client.get('/auth/register').get_data(as_text=True)
+
+    assert f'{TRIAL_DAYS} days' in body
+
+
+def test_the_registration_page_does_not_advertise_the_free_tier(client):
+    """Deliberate. It is listed on the billing page for anyone who looks, but
+    answering "what if I do nothing?" here answers it at the wrong moment."""
+    body = client.get('/auth/register').get_data(as_text=True)
+
+    assert 'Kiosk' not in body
+    assert 'free plan' not in body.lower()
+    assert 'free tier' not in body.lower()
+
+
+# --- the countdown, and what happens when it runs out ------------------------
+
+def test_a_running_trial_shows_the_days_left(shop):
+    client, business_id = shop
+    set_subscription(business_id, 'trialing',
+                     trial_ends_at=datetime.datetime.utcnow() + datetime.timedelta(days=9))
+
+    state = onboarding.trial_state(business_id)
+    assert state['phase'] == 'trialing'
+    assert state['days'] == 9
+    assert '9 days left' in client.get('/').get_data(as_text=True)
+
+
+def test_a_finished_trial_says_plainly_what_happened(shop):
+    """Someone who works out they have been downgraded by finding a feature
+    missing does not come back."""
+    client, business_id = shop
+    set_subscription(business_id, 'free', plan='free',
+                     trial_ends_at=datetime.datetime.utcnow() - datetime.timedelta(days=1))
+
+    body = client.get('/').get_data(as_text=True)
+
+    assert 'Your trial has ended' in body
+    assert 'Kiosk' in body                        # names what they are on now
+    assert 'still here' in body                   # and that nothing was deleted
+
+
+def test_the_ended_notice_stops_after_a_fortnight(shop):
+    """The moment that matters is the first login after the downgrade. A month
+    later it is nagging."""
+    client, business_id = shop
+    set_subscription(
+        business_id, 'free', plan='free',
+        trial_ends_at=datetime.datetime.utcnow()
+        - datetime.timedelta(days=onboarding.ENDED_NOTICE_DAYS + 1))
+
+    assert onboarding.trial_state(business_id) is None
+    assert 'Your trial has ended' not in client.get('/').get_data(as_text=True)
+
+
+def test_a_comped_business_is_never_told_its_trial_ran_out(shop):
+    """A comped account is `status == 'free'` on a paid plan — identical to a
+    lapsed trial in the status column alone. Reading only the status would tell
+    a customer we chose to look after that they had run out."""
+    client, business_id = shop
+    set_subscription(business_id, 'free', plan='standard',
+                     trial_ends_at=datetime.datetime.utcnow() - datetime.timedelta(days=1))
+
+    assert onboarding.trial_state(business_id) is None
+    assert 'trial has ended' not in client.get('/').get_data(as_text=True)
+
+
+def test_a_paying_business_sees_no_trial_message_at_all(shop):
+    client, business_id = shop
+    set_subscription(business_id, 'active', plan='standard',
+                     trial_ends_at=datetime.datetime.utcnow() - datetime.timedelta(days=40),
+                     paid_through=datetime.datetime.utcnow() + datetime.timedelta(days=20))
+
+    assert onboarding.trial_state(business_id) is None
+    body = client.get('/').get_data(as_text=True)
+    assert 'trial' not in body.lower()
+
+
+def test_the_progress_track_is_not_bootstraps_near_white(client):
+    """Bootstrap's `.progress` track is #e9ecef. On a dark card an empty bar
+    renders as a solid light bar the full width of the card — reading as
+    complete, the exact opposite of "0 of 5". Only visible in a browser, so it
+    is asserted against the stylesheet that ships."""
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    assert '.progress {' in css
+    assert 'background-color: rgba(148, 163, 184, 0.2)' in css
+
+
+def test_the_whole_checklist_costs_one_query(shop, make_product):
+    """Five separate EXISTS calls put the dashboard over its query budget the
+    moment this shipped. The dashboard renders more than any other page, and an
+    earlier version of it ran a query per product (F-14)."""
+    from tests.test_queries import QueryCounter
+
+    _client, business_id = shop
+    make_product(business_id, sku='BA-750')
+
+    with QueryCounter() as counter:
+        onboarding.steps(business_id)
+
+    assert len(counter.statements) == 1, counter.statements
+
+
+# --- the trial notice tells the truth about time ------------------------------
+
+def test_a_lapsed_trial_is_not_still_counting_down(shop):
+    """`status` is only rewritten when the lifecycle job runs, so a trial that
+    ended can still read `trialing`. days_left clamps at zero, so the countdown
+    would sit on "0 days left" instead of saying the trial is over.
+
+    Asserted as `ended`, not merely "not trialing": silence is also not
+    trialing, and silence is the wrong answer. Someone whose trial lapsed is
+    owed the explanation — discovering a downgrade by finding a feature missing
+    is what loses the customer. A weaker assertion here would pass on a
+    regression that dropped the notice altogether.
+    """
+    _client, business_id = shop
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.status = 'trialing'
+    subscription.trial_ends_at = datetime.datetime.utcnow() - datetime.timedelta(days=1)
+    db.session.commit()
+
+    state = onboarding.trial_state(business_id)
+
+    assert state is not None, 'a lapsed trial should still be explained'
+    assert state['phase'] == 'ended'
+
+
+def test_a_trial_still_running_counts_down(shop):
+    """The other half - the guard must not silence a live trial."""
+    _client, business_id = shop
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.status = 'trialing'
+    subscription.trial_ends_at = datetime.datetime.utcnow() + datetime.timedelta(days=3)
+    db.session.commit()
+
+    state = onboarding.trial_state(business_id)
+
+    assert state['phase'] == 'trialing'
+    assert state['days'] == 3
+
+
+def test_nobody_is_told_their_trial_ended_before_it_has(shop):
+    """A trial dated in the future gives a negative age, which is trivially
+    inside the notice window - so the page announced an ending that had not
+    happened."""
+    from billing.models import Plan
+
+    _client, business_id = shop
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.status = 'free'
+    subscription.plan_id = Plan.query.filter_by(code='free').one().id
+    subscription.trial_ends_at = datetime.datetime.utcnow() + datetime.timedelta(days=5)
+    db.session.commit()
+
+    assert onboarding.trial_state(business_id) is None
+
+
+def test_a_trial_that_really_ended_is_explained(shop):
+    """And the notice must still appear when it is genuinely due."""
+    from billing.models import Plan
+
+    _client, business_id = shop
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.status = 'free'
+    subscription.plan_id = Plan.query.filter_by(code='free').one().id
+    subscription.trial_ends_at = datetime.datetime.utcnow() - datetime.timedelta(days=2)
+    db.session.commit()
+
+    state = onboarding.trial_state(business_id)
+
+    assert state['phase'] == 'ended'

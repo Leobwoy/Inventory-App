@@ -1,0 +1,69 @@
+{# The guided tour's step list.
+
+   Steps live here rather than in the JavaScript so the copy sits with the rest
+   of the interface text, and so a step can be written against what the template
+   actually renders. Anything unavailable to this person is dropped by tour.js
+   at run time, because its anchor simply is not in their DOM - the sidebar is
+   already permission-gated, so there is no second list of who-sees-what to keep
+   in step with the first.
+
+   `nav: true` marks a step pointing into the sidebar. Below 992px that is an
+   off-canvas drawer, so the tour opens it, points, and closes it again. #}
+<script src="{{ url_for('static', filename='js/tour.js') }}" defer></script>
+<script>
+  document.addEventListener('DOMContentLoaded', function () {
+    var steps = [
+      {anchor: '#nav-dashboard', nav: true,
+       title: 'This is your dashboard',
+       body: 'Today’s sales, what is running low, and what needs you. Come back here first each morning.'},
+
+      {anchor: '#nav-products', nav: true,
+       title: 'Your products live here',
+       body: 'Everything you sell, with its price and how much is left. Add them once and the rest of the app knows about them.'},
+
+      {anchor: '#nav-group-purchasing', nav: true,
+       title: 'Buying stock',
+       body: 'Raise an order for what you are buying, then record the goods when they arrive. Stock only enters here — nothing can be sold until it does.'},
+
+      {anchor: '#nav-group-sales', nav: true,
+       title: 'Selling, and who owes you',
+       body: 'Record a sale, print an invoice, and track anyone who has not paid yet. Money owed is worked out from the sales, so it is always current.'},
+
+      {anchor: '#nav-alerts', nav: true,
+       title: 'What needs you today',
+       body: 'Stock at zero, batches near expiry, customers overdue. The number appears here when something wants attention.'},
+
+      {anchor: '#nav-group-admin', nav: true,
+       title: 'Settings and your team',
+       body: 'Your business details and logo, staff and what each of them may do, and your subscription.'},
+
+      {anchor: '#onboarding-card',
+       title: 'Your setup checklist',
+       body: 'Five steps to your first sale. Each ticks itself off as you do it — there is nothing to mark complete.'}
+    ];
+
+    var tour = new TrackTrackTour(steps, {
+      recordUrl: {{ url_for('auth.tour_seen')|tojson }},
+      csrfToken: {{ csrf_token()|tojson }}
+    });
+
+    {# Auto-start only for someone who has never seen it, and only here on the
+       dashboard. A tour that launches itself on every page is a pop-up.
+
+       A flag rather than emitting the call conditionally, so the script is the
+       same for everyone and only the answer differs - and so "does it start by
+       itself" is one readable line instead of a shape to pattern-match. #}
+    var autoStart = {{ 'true' if show_tour else 'false' }};
+    if (autoStart) {
+      window.setTimeout(function () { tour.start(); }, 600);
+    }
+
+    var replay = document.getElementById('tour-replay');
+    if (replay) {
+      replay.addEventListener('click', function (event) {
+        event.preventDefault();
+        tour.start();
+      });
+    }
+  });
+</script>

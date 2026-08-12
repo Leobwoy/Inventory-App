@@ -33,7 +33,18 @@
                     </td>
                     <td data-label="Address" class="text-muted">{{ customer.address }}</td>
                     <td data-label="" class="cell-actions text-end">
-                        <a href="{{ url_for('sales.edit_customer', customer_id=customer.id) }}" class="btn btn-sm btn-outline-primary"><i class="bi bi-pencil"></i></a>
+                        {# Gated on both, because the statement itself is: the
+                           permission decides who may see what a customer owes,
+                           and the plan decides whether this business bought the
+                           credit book at all. Showing it without either gives a
+                           button that 403s or an upsell disguised as a bug. #}
+                        {% if current_user.can('credit.view') and has_feature('credit_ledger') %}
+                        <a href="{{ url_for('credit.customer_statement', customer_id=customer.id) }}"
+                           class="btn btn-sm btn-outline-secondary" title="Full statement">
+                            <i class="bi bi-receipt-cutoff"></i>
+                        </a>
+                        {% endif %}
+                        <a href="{{ url_for('sales.edit_customer', customer_id=customer.id) }}" class="btn btn-sm btn-outline-primary ms-1"><i class="bi bi-pencil"></i></a>
                         <form action="{{ url_for('sales.delete_customer', customer_id=customer.id) }}" method="post" style="display:inline;">
                             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                             <button type="submit" class="btn btn-sm btn-outline-danger ms-1" onclick="return confirm('Delete this customer?');"><i class="bi bi-trash"></i></button>

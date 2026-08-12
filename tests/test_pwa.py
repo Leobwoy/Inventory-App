@@ -239,3 +239,77 @@ def test_the_hidden_attribute_actually_hides():
     assert 'display:none!important' in declaration, (
         "the [hidden] rule must set display: none !important, or Bootstrap's "
         "display utilities still win")
+
+
+# --- the stale-cache guard ----------------------------------------------------
+
+#: Fingerprint of everything in PRECACHE, per CACHE_VERSION.
+#:
+#: The precached files are served **cache-first**, so changing one without
+#: bumping CACHE_VERSION leaves every existing user on the old copy for good —
+#: reloading does not help, because the worker never asks the network. That has
+#: already shipped once: the collapsible sidebar went out with unstyled buttons
+#: because style.css changed and the version did not, and it read as a CSS bug
+#: rather than a stale file.
+#:
+#: So the fingerprint is recorded here. Change an asset and this test fails,
+#: naming the fix: bump the version, then update the hash below.
+PRECACHE_FINGERPRINT = {
+    'tracktrack-v6': '823e7b468f6b6733a11270389c7bd279073a4662d77ff497fb3f7548160d602b',
+}
+
+
+def precache_paths():
+    listed = re.search(r'const PRECACHE = \[(.*?)\];', SW, re.S).group(1)
+    return [p for p in re.findall(r"'([^']+)'", listed) if p.startswith('/static/')]
+
+
+def precache_fingerprint():
+    """One hash over every precached file, stable across checkouts.
+
+    Text is normalised to LF first: this repository is worked on from Windows,
+    and a CRLF checkout would otherwise fingerprint differently from CI for
+    files nobody has touched.
+    """
+    import hashlib
+
+    digest = hashlib.sha256()
+    for path in sorted(precache_paths()):
+        target = REPO_ROOT / path.lstrip('/')
+        if not target.exists():
+            continue                # covered separately by the missing-file test
+        raw = target.read_bytes()
+        try:
+            raw = raw.decode('utf-8').replace('\r\n', '\n').encode('utf-8')
+        except UnicodeDecodeError:
+            pass                    # a png or a woff2; hash the bytes as they are
+        digest.update(path.encode('utf-8'))
+        digest.update(raw)
+    return digest.hexdigest()
+
+
+def test_every_precached_file_exists():
+    """A 404 in the precache list makes `addAll` reject, and then *nothing* is
+    cached — one wrong path silently disables the whole offline shell."""
+    missing = [p for p in precache_paths()
+               if not (REPO_ROOT / p.lstrip('/')).exists()]
+    assert not missing, f'PRECACHE lists files that do not exist: {missing}'
+
+
+def test_changing_a_precached_asset_requires_bumping_the_cache_version():
+    version = re.search(r"const CACHE_VERSION = '([^']+)'", SW).group(1)
+    actual = precache_fingerprint()
+    recorded = PRECACHE_FINGERPRINT.get(version, 'MISSING')
+
+    if recorded is None or recorded == 'MISSING':
+        pytest.fail(
+            f'No fingerprint recorded for CACHE_VERSION {version!r}.\n'
+            f'If you have just bumped the version, record it:\n\n'
+            f"    '{version}': '{actual}',\n")
+
+    assert recorded == actual, (
+        f'A file in PRECACHE changed but CACHE_VERSION is still {version!r}.\n'
+        f'Those files are served cache-first, so every existing user would keep\n'
+        f'the old copy indefinitely. Bump CACHE_VERSION in static/sw.js, then\n'
+        f'record the new fingerprint here:\n\n'
+        f"    '<new-version>': '{actual}',\n")

@@ -329,13 +329,192 @@ open. The threat model here is a locked-out user, not a compromised one — ther
 session in the case this solves. Doing it properly needs a token column on `User`, a
 `get_id()` override and a migration, which is its own unit.
 
+### F-45 — Onboarding and trial messaging (implemented; pending merge)
+
+New businesses were told nothing. The trial was never named before signing up, nothing
+guided the first hour, and a downgrade was discovered by finding a feature gone.
+
+`services/onboarding.py` gives three things:
+
+- **The trial, named at registration.** `trial_days` comes from a context processor rather
+  than each render call — the register page has three separate `render_template` calls, and
+  passing it to each is how the fourth one ends up saying nothing.
+- **A setup checklist that ticks itself off from real data** — product, supplier, order,
+  goods received, sale. No stored progress, so it cannot claim a step is done when the row
+  was deleted, and nobody has to dismiss anything. **All five answered in one query**; five
+  separate `EXISTS` calls put the dashboard over its query budget the moment it shipped.
+  It disappears entirely once complete. `endpoint`/`params`, not built URLs, as with alerts.
+- **A countdown, then an explanation.** `trial_state()` has exactly three phases: days left
+  while trialing, a notice for `ENDED_NOTICE_DAYS` (14) after the downgrade, and silence for
+  a paying customer. A banner that is always there is a banner nobody reads.
+
+Two decisions worth keeping:
+
+- **Deliberately quiet about the free tier while the trial runs.** It stays listed on
+  `/billing/`, but naming it in the countdown answers "what happens if I do nothing?" at the
+  moment we would rather they considered paying. The *end* notice does say plainly what
+  happened — a surprise downgrade loses the customer.
+- **`status == 'free'` is not enough to conclude a trial lapsed.** A comped account reads
+  identically, and telling those customers their trial ran out would be wrong. The ended
+  notice requires an actual `trial_ends_at` and a free effective plan.
+
+Only the dashboard carries it. A countdown on all fifty routes is the same mistake that
+made expiry alerts opt-in.
+
+**Still open:** the user has further onboarding requirements to add from memory.
+
+### F-48 — Three tests that failed only across midnight (fixed)
+
+`TODAY = datetime.date.today()` is captured at module import in thirteen test modules. Three
+tests posted `TODAY + 1 day` and asserted it was rejected as a future date — so a suite that
+started before midnight and reached them after it posted a date that had since become
+*today*, which is correctly accepted. The test then failed having proved nothing.
+
+Caught when the full suite finished at 00:14. The three boundary tests (receipt date,
+payment date, sale date) now call `datetime.date.today()` at the point of use. The other
+uses of `TODAY` have wide enough margins that a rollover cannot flip them.
+
+### F-49 — The sidebar folds into groups (implemented; pending merge)
+
+Fifteen links in one flat list, which is past the point where anyone reads a menu. The four
+labelled sections — Catalogue, Sales, Purchasing, Administration — are now collapsible,
+taking the resting sidebar from fifteen rows to eight. Dashboard, Needs attention, Products
+and Reports stay flat: they are single destinations, and burying the most-used pages one
+click deeper to tidy the list would be a bad trade.
+
+Bootstrap's Collapse drives it, so there is no new dependency and the accessibility comes
+for free once `aria-expanded` and `aria-controls` are set.
+
+Three things that were easy to get wrong:
+
+- **The permission guards are unchanged.** A group whose children are all hidden must not
+  render its own heading either, or a clerk sees "Administration" opening onto nothing.
+  `test_the_group_count_matches_what_the_person_may_use` counts the groups rather than
+  spot-checking, because an extra heading is the exact failure.
+- **The group holding the current page always opens**, whatever was remembered. Landing on
+  Settings with no indication of where you are is what makes a folded menu feel broken.
+- **The remembered state is opened by class, not through `bootstrap.Collapse`.** Constructing
+  it on load runs the open transition every time, so the sidebar visibly unfolds itself on
+  every navigation. A corrupt `localStorage` value is caught: a parse error inside a
+  `DOMContentLoaded` handler kills every listener registered after it, including the mobile
+  drawer toggle.
+
+`tests/test_navigation.py` pins the full set of Owner links by id, so losing one in a future
+restructure fails there rather than being found by a customer who cannot locate Brands.
+
+### F-50 — An interactive guided tour (implemented; pending merge)
+
+Requested directly, and it overrides the F-45 note that said not to build one. `tour.js` is
+hand-written — no library, self-hosted like everything since 2.4a, because a service worker
+cannot reliably cache a cross-origin response and this has to work on a market-day
+connection.
+
+Seven steps, each anchored to a real element, with a spotlight, an arrow, and a bubble
+explaining what the thing is for.
+
+**The property the design rests on: a step whose anchor is not in the DOM is dropped.** The
+sidebar is already permission-gated, so a Sales Staff member has no `#nav-group-admin` for a
+step to attach to and is never walked through Settings. There is deliberately no second list
+of who-sees-what to drift from the first. Verified live rather than only in tests: on a
+business that had finished setup the tour reported "1 of 6" rather than 7, having dropped
+the checklist step by itself.
+
+**Nav steps open the drawer.** Below 992px the sidebar is off-canvas, so a step pointing at
+a nav item points at nothing; the tour opens the drawer, waits for the slide, points, and
+closes it after. It also opens a collapsed group first (F-49), or the highlight lands on a
+zero-height element behind a folded panel. This is why the sidebar had to land first — the
+tour points at things, and all of them were about to move.
+
+**Nothing traps you.** Skip advances past a step, × and Escape end the tour. They are
+different actions, and the user asked for both.
+
+**Told once.** `User.tour_seen_at` (migration `d1b58e0472a9`), not localStorage: the question
+is whether this *person* has been shown the app, not whether this browser has, and a
+wholesaler using the shop tablet and their own phone should not be toured twice. Closing
+early counts — someone who shut it on step two has answered, and asking again tomorrow
+ignores that. A "Show me around" link beside the checklist replays it, without which anyone
+who closed it on step one would have no way back.
+
+**Test weakness worth knowing.** pytest cannot execute browser JavaScript, so several tests
+in `tests/test_tour.py` assert that a mechanism is *present* in `tour.js` rather than that it
+works. They would pass against code that is there but broken. The behaviour was verified in
+the browser instead, at both desktop and 375px.
+
+### F-51 — Three things found by using the app (implemented; pending merge)
+
+**The sidebar buttons rendered as unstyled browser chrome.** Not a CSS bug: the rules were
+correct and present. `static/css/style.css` is in the service worker's `PRECACHE` and served
+**cache-first**, so a browser holding the `tracktrack-v4` cache kept the stylesheet from
+before the nav groups existed. No amount of reloading helps, because the worker never asks
+the network.
+
+Bumped to `v5`, and added `tour.css`/`tour.js` to the precache list. More importantly this
+now has a guard: `tests/test_pwa.py` fingerprints every precached file and fails if one
+changes while `CACHE_VERSION` does not, printing the line to paste. It would otherwise recur
+on every CSS or JS change, and it presents as a styling bug rather than a stale file. It
+escaped the browser verification because that loaded a saved page directly, bypassing the
+worker entirely.
+
+**Two dashboard links pointed at the wrong place.** The "Low Stock Items" card opened the
+stock level report — named for the number on it rather than its destination — and is now
+"Stock Level Report". "View All" beside the low stock heading went to `/products/` with no
+filter at all, showing the entire catalogue.
+
+New page `/products/low-stock`, derived like the alerts: nothing stored, no dismiss, a
+product leaves the moment stock returns above its reorder level, because handling it *is*
+receiving the stock. It includes products at zero, unlike `notifications.low_stock` — the
+alerts keep low and empty apart because the severities differ, but this page answers "what
+do I buy", and zero is the most urgent answer to that. **Both** stock alerts now point here:
+one question, one destination, with the severity distinction kept where it belongs, in the
+alert list.
+
+**A customer's statement was unreachable except through Money Owed.** Which means a customer
+who has always paid on time — and so never appears in Money Owed — had no reachable history
+at all. Added to the Customers row, gated on `credit.view` **and** `credit_ledger`, because
+the statement route is gated on both: without the first a clerk gets a button that 403s,
+without the second a Kiosk business gets an upsell disguised as a broken link.
+
+### F-52 — Review fixes on the tour, the sidebar and the trial notice (implemented)
+
+Seven findings from the bot's review of F-49 through F-51. All seven were real.
+
+**Two were mine claiming protection that did not exist.**
+
+`JSON.parse('null')` does not throw — it returns `null`, so the `try/catch` around the
+`navGroups` read never fired, and indexing `null` threw a `TypeError` *inside*
+`DOMContentLoaded`. Everything registered after that point never binds, **including the
+mobile drawer toggle**, so the menu button stops working on a phone. The commit message for
+F-49 stated that a corrupt value was caught. It was not. The parse now has to yield a plain
+object or it is discarded.
+
+The tour set `aria-modal="true"` — which announces the rest of the page as inert — while
+`pointer-events: none` let clicks through and nothing trapped Tab. A keyboard or screen
+reader user could walk straight out into dimmed, unreachable content. It now saves focus on
+open, traps Tab among the enabled controls, restores focus on close, and the dim absorbs
+clicks.
+
+**The rest.** `tour_seen` was a read-then-write on a shared row, against invariant 8; it is
+now a conditional `UPDATE ... WHERE tour_seen_at IS NULL` with the audit entry written only
+when exactly one row moved. The trial countdown uses `subscription.is_trialing`, so a lapsed
+trial the lifecycle job has not reconciled yet stops sitting on "0 days left". The ended
+notice now requires `trial_ends_at <= now`: a future date gave a *negative* age, which is
+trivially inside the notice window, so the page announced an ending that had not happened.
+And the Sales nav group now opens for `credit.view` as well, or someone holding only that
+permission had Money Owed rendered inside a group that never appeared — present in the
+template, unreachable on the page.
+
+**The fingerprint guard earned itself immediately.** Changing `tour.js` and `tour.css` made
+`tests/test_pwa.py` fail on the first run after it was written, naming the fix. Bumped to
+`tracktrack-v6`.
+
 ## In Progress
 
-- Nothing. Stage 2.5, the subscription lifecycle, F-46 and F-47 are committed.
-- **Next: F-45**, onboarding and trial messaging. Chosen by the user, ahead of
-  Stage 2.6 — supplier scorecards need 20–30 purchase orders to show anything, and
-  there are no real customers yet, so the work that matters is what turns a signup
-  into one.
+- Nothing. Everything through F-51 is committed on `stage-1-finish`, awaiting merge.
+- **Next is undecided and is the user's call.** The roadmap says Stage 2.6 (supplier
+  scorecards), but 2.6 and 2.7 both score suppliers from purchase history and need 20–30
+  completed orders before they show anything — and there are no real customers yet, so both
+  would ship as empty screens. Bringing Stage 3 (the interface revamp) forward instead is a
+  reasonable alternative. Raised with the user 2026-08-12; not answered.
 
 ## Next Up
 
@@ -362,14 +541,12 @@ session in the case this solves. Doing it properly needs a token column on `User
   unit with password reset: infrastructure → reset → verification, in that order. Must be
   **soft** — the account works immediately with a "confirm your email" nudge — because a
   hard gate means one undelivered email costs a customer on a phone with patchy data.
-- **Onboarding and trial messaging (F-45).** New businesses are told nothing about the
-  14-day full-access trial at registration, and there is no activation guidance after it.
-  Planned shape: trial terms on the registration page, a welcome screen, a **setup checklist
-  that ticks itself off from real data** (not a modal tour — those are a lot of JavaScript
-  for something people click past), and a countdown banner. Deliberately does not advertise
-  the free tier at signup; it stays listed on `/billing/` and the *end* of a trial must say
-  plainly what happens next, because a downgrade discovered by surprise loses the customer.
-  Requested 2026-08-08; user has more requirements to add from memory.
+- ~~**Onboarding and trial messaging (F-45).**~~ **Done** — see Completed. One line of it was
+  wrong and is worth keeping visible rather than deleting: the planned shape said a checklist
+  **"not a modal tour — those are a lot of JavaScript for something people click past"**. The
+  user asked for exactly that tour on 2026-08-11, twice and explicitly, and it is built (F-50).
+  The reasoning was not wrong about the cost — `tour.js` is 250 lines — but it was a product
+  judgement dressed as an engineering one, and it was not mine to make.
 
 - **Promotional discounts do not exist.** Point-of-sale discounting works (a per-line
   price reduction, permission-gated, capped, audited) now that the ceiling is settable.

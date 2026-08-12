@@ -105,6 +105,30 @@ def alerts():
                            alerts=notifications.for_user(current_user))
 
 
+@products_bp.route('/low-stock')
+@login_required
+@permission_required('products.view')
+def low_stock():
+    """What needs reordering, worst first. Empties itself.
+
+    Nothing is stored, so a product leaves this page the moment stock goes back
+    above its reorder level — there is no "mark as handled", because handling it
+    *is* receiving the stock.
+
+    Includes products at zero, deliberately. The alerts page keeps low and empty
+    apart because one is a warning and the other is already costing money, but
+    the question *this* page answers is "what do I buy", and an item at zero is
+    the most urgent answer to it.
+    """
+    products = (Product.query
+                .filter(Product.business_id == current_user.business_id,
+                        Product.is_active.is_(True),
+                        Product.quantity_in_stock <= Product.min_stock_alert)
+                .order_by(Product.quantity_in_stock.asc(), Product.name)
+                .all())
+    return render_template('products/low_stock.html', products=products)
+
+
 @products_bp.route('/alerts/count')
 @login_required
 @permission_required('products.view')

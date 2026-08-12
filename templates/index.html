@@ -8,6 +8,9 @@
     <div class="text-muted">{{ year }}</div>
 </div>
 
+{% include '_partials/onboarding.html' %}
+{% include '_partials/tour.html' %}
+
 <div class="row g-4 mb-4">
     <!-- Stat Cards -->
     <div class="col-md-4">
@@ -28,7 +31,7 @@
                 <div class="stat-icon stat-warning">
                     <i class="bi bi-exclamation-triangle"></i>
                 </div>
-                <h5 class="text-muted mb-1">Low Stock Items</h5>
+                <h5 class="text-muted mb-1">Stock Level Report</h5>
                 <h3 class="mb-0 text-white">{{ low_stock|length }} <span class="fs-6 text-muted fw-normal">products</span></h3>
             </div>
         </a>
@@ -63,7 +66,7 @@
         <div class="glass-card h-100">
             <div class="d-flex justify-content-between align-items-center mb-4">
                 <h5 class="mb-0">Low Stock Alerts</h5>
-                <a href="/products/" class="btn btn-sm btn-outline-primary">View All</a>
+                <a href="{{ url_for('products.low_stock') }}" class="btn btn-sm btn-outline-primary">View All</a>
             </div>
             
             {% if low_stock %}
