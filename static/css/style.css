@@ -115,6 +115,60 @@ body {
   opacity: 0.65;
 }
 
+/* --- Collapsible nav groups ---------------------------------------------- */
+/* The sidebar reached fifteen links, which is past the point where anyone
+   reads it. Groups fold so the list is short enough to scan. */
+
+.nav-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  background: none;
+  border: 0;
+  text-align: left;
+  color: var(--text-primary);
+  padding: 0.6rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.95rem;
+}
+
+.nav-group-toggle:hover,
+.nav-group-toggle:focus-visible {
+  background: rgba(148, 163, 184, 0.12);
+  color: #fff;
+}
+
+/* A visible focus ring, because this is a button reachable by keyboard and the
+   browser default is invisible against this background. */
+.nav-group-toggle:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: -2px;
+}
+
+.nav-group-caret {
+  font-size: 0.75rem;
+  transition: transform 0.18s ease;
+}
+
+/* Bootstrap adds .collapsed to the toggle when the panel is shut, so the caret
+   follows the panel rather than needing its own state. */
+.nav-group-toggle.collapsed .nav-group-caret {
+  transform: rotate(-90deg);
+}
+
+/* Marks the group you are currently inside, which stays useful once it is open
+   and the heading is the only thing naming where you are. */
+.nav-group-toggle.has-active {
+  color: #fff;
+  font-weight: 600;
+}
+
+.nav-group-items .nav-link {
+  padding-left: 2.1rem;
+  font-size: 0.92rem;
+}
+
 .nav-link {
   color: var(--text-secondary);
   padding: 0.75rem 1rem;

@@ -374,6 +374,34 @@ Caught when the full suite finished at 00:14. The three boundary tests (receipt 
 payment date, sale date) now call `datetime.date.today()` at the point of use. The other
 uses of `TODAY` have wide enough margins that a rollover cannot flip them.
 
+### F-49 — The sidebar folds into groups (implemented; pending merge)
+
+Fifteen links in one flat list, which is past the point where anyone reads a menu. The four
+labelled sections — Catalogue, Sales, Purchasing, Administration — are now collapsible,
+taking the resting sidebar from fifteen rows to eight. Dashboard, Needs attention, Products
+and Reports stay flat: they are single destinations, and burying the most-used pages one
+click deeper to tidy the list would be a bad trade.
+
+Bootstrap's Collapse drives it, so there is no new dependency and the accessibility comes
+for free once `aria-expanded` and `aria-controls` are set.
+
+Three things that were easy to get wrong:
+
+- **The permission guards are unchanged.** A group whose children are all hidden must not
+  render its own heading either, or a clerk sees "Administration" opening onto nothing.
+  `test_the_group_count_matches_what_the_person_may_use` counts the groups rather than
+  spot-checking, because an extra heading is the exact failure.
+- **The group holding the current page always opens**, whatever was remembered. Landing on
+  Settings with no indication of where you are is what makes a folded menu feel broken.
+- **The remembered state is opened by class, not through `bootstrap.Collapse`.** Constructing
+  it on load runs the open transition every time, so the sidebar visibly unfolds itself on
+  every navigation. A corrupt `localStorage` value is caught: a parse error inside a
+  `DOMContentLoaded` handler kills every listener registered after it, including the mobile
+  drawer toggle.
+
+`tests/test_navigation.py` pins the full set of Owner links by id, so losing one in a future
+restructure fails there rather than being found by a customer who cannot locate Brands.
+
 ## In Progress
 
 - Nothing. Stage 2.5, the subscription lifecycle, F-46 and F-47 are committed.
