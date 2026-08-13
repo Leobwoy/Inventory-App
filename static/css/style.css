@@ -14,13 +14,12 @@
    complete: the exact opposite of "0 of 5". The filled part is already the
    accent colour, so only the track needs saying. */
 .progress {
-    background-color: rgba(148, 163, 184, 0.2);
+    background-color: var(--progress-track);
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-dark: #0f172a;
+  --bg-page: #0f172a;
   --bg-sidebar: rgba(15, 23, 42, 0.85);
   --bg-card: rgba(30, 41, 59, 0.7);
   --bg-card-hover: rgba(30, 41, 59, 0.9);
@@ -29,7 +28,6 @@
   --text-secondary: #94a3b8;
   
   --accent-primary: #3b82f6;
-  --accent-secondary: #8b5cf6;
   --accent-success: #10b981;
   --accent-danger: #ef4444;
   --accent-warning: #f59e0b;
@@ -37,6 +35,31 @@
   --border-color: rgba(255, 255, 255, 0.1);
   --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
   --glass-backdrop: blur(10px);
+
+  /* Surfaces that were literals until now, which is precisely why a light
+     theme could not exist: every one of these is a white or black wash, and a
+     wash that reads as "slightly lighter" on navy reads as "invisible" on
+     white. Values here are unchanged - this only creates the seam. */
+  --table-stripe: rgba(255, 255, 255, 0.02);
+  --table-stripe-odd: rgba(255, 255, 255, 0.015);
+  --table-hover: rgba(255, 255, 255, 0.04);
+  --table-head-bg: rgba(0, 0, 0, 0.25);
+  --input-bg: rgba(0, 0, 0, 0.2);
+  --input-bg-focus: rgba(0, 0, 0, 0.3);
+  --focus-ring: rgba(59, 130, 246, 0.25);
+  --progress-track: rgba(148, 163, 184, 0.2);
+
+  /* Bootstrap's contextual backgrounds are rewritten wholesale further down,
+     so these reach roughly fifty badges across the app. */
+  --badge-success-bg: rgba(16, 185, 129, 0.2);
+  --badge-success-fg: #34d399;
+  --badge-success-line: rgba(16, 185, 129, 0.3);
+  --badge-warning-bg: rgba(245, 158, 11, 0.2);
+  --badge-warning-fg: #fbbf24;
+  --badge-warning-line: rgba(245, 158, 11, 0.3);
+  --badge-danger-bg: rgba(239, 68, 68, 0.2);
+  --badge-danger-fg: #f87171;
+  --badge-danger-line: rgba(239, 68, 68, 0.3);
 }
 
 * {
@@ -45,7 +68,7 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: var(--bg-dark);
+  background-color: var(--bg-page);
   color: var(--text-primary);
   margin: 0;
   display: flex;
@@ -281,9 +304,9 @@ h1, h2, h3, h4, h5, h6 {
   width: 100%;
   --bs-table-bg: transparent;
   --bs-table-color: var(--text-primary);
-  --bs-table-striped-bg: rgba(255, 255, 255, 0.02);
+  --bs-table-striped-bg: var(--table-stripe);
   --bs-table-striped-color: var(--text-primary);
-  --bs-table-hover-bg: rgba(255, 255, 255, 0.04);
+  --bs-table-hover-bg: var(--table-hover);
   --bs-table-hover-color: var(--text-primary);
   --bs-table-border-color: var(--border-color);
 }
@@ -303,7 +326,7 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
 }
 .table>thead {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--table-head-bg);
 }
 .table>thead>tr>th {
   color: var(--text-secondary);
@@ -339,15 +362,15 @@ h1, h2, h3, h4, h5, h6 {
 .table-light>th,
 .table-light>td,
 thead.table-light>tr>th {
-  background-color: rgba(0, 0, 0, 0.25) !important;
+  background-color: var(--table-head-bg) !important;
   color: var(--text-secondary) !important;
-  --bs-table-bg: rgba(0, 0, 0, 0.25);
+  --bs-table-bg: var(--table-head-bg);
 }
 
 /* Override Bootstrap .table-striped */
 .table-striped>tbody>tr:nth-of-type(odd)>* {
-  background-color: rgba(255, 255, 255, 0.015);
-  --bs-table-bg-type: rgba(255, 255, 255, 0.015);
+  background-color: var(--table-stripe-odd);
+  --bs-table-bg-type: var(--table-stripe-odd);
 }
 
 /* Cards (Bootstrap .card used in invoices) – dark override */
@@ -365,16 +388,16 @@ thead.table-light>tr>th {
 
 /* Forms */
 .form-control, .form-select {
-  background-color: rgba(0,0,0,0.2);
+  background-color: var(--input-bg);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   border-radius: 0.5rem;
   padding: 0.75rem 1rem;
 }
 .form-control:focus, .form-select:focus {
-  background-color: rgba(0,0,0,0.3);
+  background-color: var(--input-bg-focus);
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 0.25rem rgba(59,130,246,0.25);
+  box-shadow: 0 0 0 0.25rem var(--focus-ring);
   color: var(--text-primary);
 }
 .form-label {
@@ -389,9 +412,9 @@ thead.table-light>tr>th {
   font-weight: 500;
   font-size: 0.75rem;
 }
-.bg-success { background-color: rgba(16,185,129,0.2) !important; color: #34d399 !important; border: 1px solid rgba(16,185,129,0.3); }
-.bg-warning { background-color: rgba(245,158,11,0.2) !important; color: #fbbf24 !important; border: 1px solid rgba(245,158,11,0.3); }
-.bg-danger { background-color: rgba(239,68,68,0.2) !important; color: #f87171 !important; border: 1px solid rgba(239,68,68,0.3); }
+.bg-success { background-color: var(--badge-success-bg) !important; color: var(--badge-success-fg) !important; border: 1px solid var(--badge-success-line); }
+.bg-warning { background-color: var(--badge-warning-bg) !important; color: var(--badge-warning-fg) !important; border: 1px solid var(--badge-warning-line); }
+.bg-danger { background-color: var(--badge-danger-bg) !important; color: var(--badge-danger-fg) !important; border: 1px solid var(--badge-danger-line); }
 
 /* Alerts */
 .alert {
