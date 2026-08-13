@@ -1,8 +1,34 @@
 <!DOCTYPE html>
-<html lang="en">
+{# data-bs-theme as well as data-theme, and both always concrete.
+
+   Bootstrap 5.3 scopes its variables as `:root,[data-bs-theme=light]` and ships
+   no prefers-color-scheme support at all, so a *missing* attribute is not
+   neutral - it is Bootstrap's light theme. That is the state this app has been
+   in all along: every modal, dropdown, offcanvas and toast has been running on
+   light defaults inside a dark shell, surviving only because style.css happens
+   to override the handful in use. #}
+<html lang="en" data-theme-pref="{{ theme_pref }}" data-theme="{{ theme }}" data-bs-theme="{{ theme }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {# First thing in the head, and deliberately blocking. The server cannot
+       know what the device prefers, so "follow my device" has to be resolved
+       here - before anything paints, or every system-light user gets a flash of
+       dark on every page load. Failing silently leaves the server's answer,
+       which is the app exactly as it was. #}
+    <script>
+      (function () {
+        try {
+          var root = document.documentElement;
+          if (root.dataset.themePref !== 'system') { return; }
+          var light = window.matchMedia('(prefers-color-scheme: light)').matches;
+          var theme = light ? 'light' : 'dark';
+          root.dataset.theme = theme;
+          root.setAttribute('data-bs-theme', theme);
+        } catch (e) { /* keep whatever the server rendered */ }
+      }());
+    </script>
     <title>{% block title %}TrackTrack{% endblock %}</title>
     {# Vendored, not CDN: a service worker cannot reliably cache cross-origin
        responses, and every CDN request is metered mobile data here. #}
