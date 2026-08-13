@@ -1,0 +1,264 @@
+<!-- @dsCard group="Directions" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Direction C — Built for the doorway</title>
+<style>
+  /* ------------------------------------------------------------------
+     DIRECTION C — designed for where the app is actually used.
+
+     A phone, held in one hand, in a warehouse doorway or an open market,
+     in full sun. Three consequences:
+
+       · No blur, and solid surfaces. A backdrop filter costs GPU on a
+         budget Android and lowers contrast on the one screen that can
+         least afford it.
+       · Navigation at the bottom, in thumb reach. The current drawer
+         needs a reach to the top-left corner, which is the hardest
+         place to touch one-handed.
+       · Numbers big enough to read at arm's length, and fewer of them
+         per screen.
+
+     Light is the default here, because sunlight is the hard case.
+     Desktop keeps the sidebar — the constraint is the phone, not the
+     desk.
+     ------------------------------------------------------------------ */
+  .tt {
+    --t-xs: 0.75rem; --t-sm: 0.875rem; --t-md: 1rem;
+    --t-lg: 1.25rem; --t-xl: 2rem; --t-2xl: 2.75rem;
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 20px; --s6: 28px;
+    --radius: 14px; --tap: 52px;   /* every target at least this tall */
+  }
+  .tt[data-theme="light"] {
+    --page: #ffffff; --surface: #f1f5f9; --line: #cbd5e1;
+    --ink: #0f172a; --ink-soft: #475569;
+    --accent: #1d4ed8; --on-accent: #ffffff;
+    --good: #046c4e; --warn: #92400e; --bad: #b91c1c;
+    --good-bg: #d1fae5; --warn-bg: #fef3c7; --bad-bg: #fee2e2;
+  }
+  .tt[data-theme="dark"] {
+    --page: #0b1220; --surface: #16213a; --line: #334155;
+    --ink: #f8fafc; --ink-soft: #b6c2d4;
+    --accent: #60a5fa; --on-accent: #06142b;
+    --good: #6ee7b7; --warn: #fcd34d; --bad: #fca5a5;
+    --good-bg: #052e21; --warn-bg: #3a2a06; --bad-bg: #401515;
+  }
+
+  .tt { font: 400 var(--t-md)/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+    background: var(--page); color: var(--ink); border: 1px solid var(--line);
+    border-radius: var(--radius); overflow: hidden; }
+  .tt * { box-sizing: border-box; }
+
+  /* ---------- phone ---------- */
+  .phone { width: 375px; }
+  .top { display: flex; align-items: center; gap: var(--s3);
+    padding: var(--s4); border-bottom: 2px solid var(--line); }
+  .top .biz { font-size: var(--t-xs); color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing: 0.08em; }
+  .top h1 { font-size: var(--t-lg); font-weight: 700; margin: 1px 0 0; }
+  .top .sw { margin-left: auto; width: 44px; height: 44px; flex: none;
+    border: 2px solid var(--line); background: transparent; color: var(--ink);
+    border-radius: 11px; font-size: 17px; cursor: pointer; }
+
+  .scroll { padding: var(--s4); }
+
+  /* the one number that matters, at arm's length */
+  .hero { background: var(--accent); color: var(--on-accent);
+    border-radius: var(--radius); padding: var(--s5); margin-bottom: var(--s3); }
+  .hero .lab { font-size: var(--t-sm); opacity: 0.92; font-weight: 600; }
+  .hero .val { font-size: var(--t-2xl); font-weight: 800; line-height: 1.05;
+    letter-spacing: -0.03em; margin-top: var(--s1);
+    font-variant-numeric: tabular-nums; }
+  .hero .d { font-size: var(--t-sm); opacity: 0.92; margin-top: var(--s1); }
+
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3);
+    margin-bottom: var(--s3); }
+  .box { background: var(--surface); border: 2px solid var(--line);
+    border-radius: var(--radius); padding: var(--s4); }
+  .box .lab { font-size: var(--t-xs); color: var(--ink-soft); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; }
+  .box .val { font-size: var(--t-xl); font-weight: 800; line-height: 1.15;
+    margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .box .val.bad { color: var(--bad); }
+
+  /* the action they opened the app to take */
+  .do { display: block; width: 100%; min-height: var(--tap);
+    background: var(--accent); color: var(--on-accent); border: 0;
+    border-radius: var(--radius); font-size: var(--t-md); font-weight: 700;
+    cursor: pointer; margin-bottom: var(--s4); }
+
+  .head2 { font-size: var(--t-xs); text-transform: uppercase; font-weight: 700;
+    letter-spacing: 0.08em; color: var(--ink-soft); margin: 0 0 var(--s2); }
+  .list { list-style: none; margin: 0 0 var(--s4); padding: 0;
+    border: 2px solid var(--line); border-radius: var(--radius);
+    overflow: hidden; }
+  .list li { display: flex; align-items: center; gap: var(--s3);
+    min-height: var(--tap); padding: var(--s3) var(--s4);
+    border-bottom: 1px solid var(--line); background: var(--surface); }
+  .list li:last-child { border-bottom: 0; }
+  .list .nm { font-weight: 600; font-size: var(--t-sm); }
+  .list .sub { font-size: var(--t-xs); color: var(--ink-soft); }
+  .pill { margin-left: auto; font-size: var(--t-xs); font-weight: 700;
+    padding: 4px 10px; border-radius: 20px; white-space: nowrap; }
+  .pill.bad { background: var(--bad-bg); color: var(--bad); }
+  .pill.warn { background: var(--warn-bg); color: var(--warn); }
+  .pill.good { background: var(--good-bg); color: var(--good); }
+
+  /* thumb-reach navigation */
+  .tabs { display: grid; grid-template-columns: repeat(5, 1fr);
+    border-top: 2px solid var(--line); background: var(--page); }
+  .tab { min-height: 60px; display: grid; place-items: center; gap: 2px;
+    color: var(--ink-soft); font-size: 10px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.04em; padding: var(--s2) 0;
+    cursor: pointer; position: relative; }
+  .tab .g { font-size: 19px; line-height: 1; }
+  .tab.on { color: var(--accent); }
+  .tab.on::before { content: ""; position: absolute; top: 0; left: 22%;
+    right: 22%; height: 3px; background: var(--accent); border-radius: 0 0 3px 3px; }
+  .tab .pip { position: absolute; top: 7px; right: 50%; margin-right: -18px;
+    min-width: 17px; height: 17px; border-radius: 9px; background: var(--bad);
+    color: #fff; font-size: 10px; display: grid; place-items: center; padding: 0 4px; }
+
+  /* ---------- desktop ---------- */
+  .desk { display: grid; grid-template-columns: 216px 1fr; min-height: 460px; }
+  .side { background: var(--surface); border-right: 2px solid var(--line);
+    padding: var(--s4); display: flex; flex-direction: column; gap: 2px; }
+  .side .b { display: flex; align-items: center; gap: var(--s2);
+    font-weight: 800; font-size: var(--t-lg); margin-bottom: var(--s5); }
+  .side .b i { width: 26px; height: 26px; border-radius: 7px;
+    background: var(--accent); display: block; }
+  .side a { display: flex; align-items: center; gap: var(--s3); min-height: 44px;
+    padding: 0 var(--s3); border-radius: 9px; color: var(--ink-soft);
+    text-decoration: none; font-size: var(--t-sm); font-weight: 600; }
+  .side a.on { background: var(--accent); color: var(--on-accent); }
+  .side a .g { width: 18px; text-align: center; flex: none; font-size: 15px; }
+  .side a .n { margin-left: auto; background: var(--bad); color: #fff;
+    font-size: 11px; border-radius: 20px; padding: 1px 7px; }
+  .dmain { padding: var(--s5) var(--s6); }
+  .drow { display: grid; grid-template-columns: 1.4fr 1fr 1fr; gap: var(--s3);
+    margin-bottom: var(--s4); }
+  .chart { width: 100%; height: 150px; display: block;
+    border: 2px solid var(--line); border-radius: var(--radius); padding: var(--s3);
+    background: var(--surface); }
+
+  .band { font: 600 12px system-ui; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #64748b; margin: 28px 0 10px; }
+  .band:first-child { margin-top: 0; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 24px; }
+  .side-by { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+  body { margin: 0; background: #f8fafc; }
+  @media (prefers-color-scheme: dark) { body { background: #020617; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="band">Direction C · phone · light (the hard case: full sun)</div>
+  <div class="side-by">
+    <div class="tt phone" data-theme="light">
+      <div class="top">
+        <div><div class="biz">Accra Beverage</div><h1>Today</h1></div>
+        <button class="sw">☾</button>
+      </div>
+      <div class="scroll">
+        <div class="hero">
+          <div class="lab">Sales this week</div>
+          <div class="val">₵785.00</div>
+          <div class="d">▲ ₵620 on last week</div>
+        </div>
+        <div class="pair">
+          <div class="box"><div class="lab">Owed to you</div><div class="val">₵1,240</div></div>
+          <div class="box"><div class="lab">Restock</div><div class="val bad">3</div></div>
+        </div>
+        <button class="do">＋  Record a sale</button>
+        <h3 class="head2">Needs you today</h3>
+        <ul class="list">
+          <li><div><div class="nm">Club Beer 330ml</div><div class="sub">0 left · reorder at 24</div></div><span class="pill bad">Out</span></li>
+          <li><div><div class="nm">Malta Guinness</div><div class="sub">6 left · reorder at 24</div></div><span class="pill warn">Low</span></li>
+          <li><div><div class="nm">Adjei Enterprise</div><div class="sub">₵420 · 62 days</div></div><span class="pill warn">Overdue</span></li>
+        </ul>
+      </div>
+      <nav class="tabs">
+        <div class="tab on"><span class="g">▤</span>Today</div>
+        <div class="tab"><span class="g">＋</span>Sell</div>
+        <div class="tab"><span class="g">▣</span>Stock</div>
+        <div class="tab"><span class="g">◉</span>Owed<span class="pip">3</span></div>
+        <div class="tab"><span class="g">☰</span>More</div>
+      </nav>
+    </div>
+
+    <div class="tt phone" data-theme="dark">
+      <div class="top">
+        <div><div class="biz">Accra Beverage</div><h1>Today</h1></div>
+        <button class="sw">☀</button>
+      </div>
+      <div class="scroll">
+        <div class="hero">
+          <div class="lab">Sales this week</div>
+          <div class="val">₵785.00</div>
+          <div class="d">▲ ₵620 on last week</div>
+        </div>
+        <div class="pair">
+          <div class="box"><div class="lab">Owed to you</div><div class="val">₵1,240</div></div>
+          <div class="box"><div class="lab">Restock</div><div class="val bad">3</div></div>
+        </div>
+        <button class="do">＋  Record a sale</button>
+        <h3 class="head2">Needs you today</h3>
+        <ul class="list">
+          <li><div><div class="nm">Club Beer 330ml</div><div class="sub">0 left · reorder at 24</div></div><span class="pill bad">Out</span></li>
+          <li><div><div class="nm">Malta Guinness</div><div class="sub">6 left · reorder at 24</div></div><span class="pill warn">Low</span></li>
+          <li><div><div class="nm">Adjei Enterprise</div><div class="sub">₵420 · 62 days</div></div><span class="pill warn">Overdue</span></li>
+        </ul>
+      </div>
+      <nav class="tabs">
+        <div class="tab on"><span class="g">▤</span>Today</div>
+        <div class="tab"><span class="g">＋</span>Sell</div>
+        <div class="tab"><span class="g">▣</span>Stock</div>
+        <div class="tab"><span class="g">◉</span>Owed<span class="pip">3</span></div>
+        <div class="tab"><span class="g">☰</span>More</div>
+      </nav>
+    </div>
+  </div>
+
+  <div class="band">Direction C · desktop · light</div>
+  <div class="tt" data-theme="light">
+    <div class="desk">
+      <aside class="side">
+        <div class="b"><i></i> TrackTrack</div>
+        <a class="on"><span class="g">▤</span>Dashboard</a>
+        <a><span class="g">◔</span>Needs attention <span class="n">3</span></a>
+        <a><span class="g">▣</span>Products</a>
+        <a><span class="g">＋</span>Sales</a>
+        <a><span class="g">◈</span>Purchasing</a>
+        <a><span class="g">◉</span>Money owed</a>
+        <a><span class="g">▦</span>Reports</a>
+        <a><span class="g">⚙</span>Settings</a>
+      </aside>
+      <div class="dmain">
+        <div class="drow">
+          <div class="hero" style="margin:0">
+            <div class="lab">Sales this week</div>
+            <div class="val">₵785.00</div>
+            <div class="d">▲ ₵620 on last week</div>
+          </div>
+          <div class="box"><div class="lab">Owed to you</div><div class="val">₵1,240</div>
+            <div class="sub" style="font-size:12px;color:var(--ink-soft)">3 customers</div></div>
+          <div class="box"><div class="lab">Restock</div><div class="val bad">3</div>
+            <div class="sub" style="font-size:12px;color:var(--ink-soft)">1 out of stock</div></div>
+        </div>
+        <svg class="chart" viewBox="0 0 620 150" preserveAspectRatio="none">
+          <line x1="0" y1="38" x2="620" y2="38" stroke="#cbd5e1"/>
+          <line x1="0" y1="75" x2="620" y2="75" stroke="#cbd5e1"/>
+          <line x1="0" y1="112" x2="620" y2="112" stroke="#cbd5e1"/>
+          <path d="M0,134 L103,132 L207,130 L310,104 L413,120 L516,124 L620,24"
+                fill="none" stroke="#1d4ed8" stroke-width="3.5" stroke-linejoin="round"/>
+          <circle cx="620" cy="24" r="5" fill="#1d4ed8"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

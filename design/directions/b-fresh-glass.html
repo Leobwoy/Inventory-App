@@ -1,0 +1,263 @@
+<!-- @dsCard group="Directions" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Direction B — Fresh look, glass kept</title>
+<style>
+  /* ------------------------------------------------------------------
+     DIRECTION B — same frosted character, different building.
+
+     The sidebar shrinks to an icon rail so the content gets the width
+     back. A top bar carries search and the one action people came to do
+     (record a sale). Stats become a strip rather than three big boxes,
+     which buys room for a second panel of real information.
+
+     More on screen at once. Recognisably the same product, clearly
+     rebuilt.
+     ------------------------------------------------------------------ */
+  .tt {
+    --t-xs: 0.6875rem; --t-sm: 0.8125rem; --t-md: 0.9375rem;
+    --t-lg: 1.0625rem; --t-xl: 1.5rem; --t-2xl: 1.875rem;
+    --s1: 4px; --s2: 8px; --s3: 12px; --s4: 16px; --s5: 24px;
+    --radius: 14px; --rail-w: 60px;
+  }
+  .tt[data-theme="dark"] {
+    --page: #080f1c; --card: rgba(23, 34, 54, 0.74);
+    --card-line: rgba(148,163,184,0.15);
+    --ink: #f1f5f9; --ink-soft: #93a3b8;
+    --accent: #60a5fa; --good: #34d399; --warn: #fbbf24; --bad: #f87171;
+    --rail: rgba(11, 18, 32, 0.94); --bar: rgba(15, 23, 42, 0.7);
+    --shadow: 0 10px 34px rgba(0,0,0,0.4);
+  }
+  .tt[data-theme="light"] {
+    --page: #e9eef5; --card: rgba(255,255,255,0.82);
+    --card-line: rgba(15,23,42,0.10);
+    --ink: #0f172a; --ink-soft: #52627a;
+    --accent: #2563eb; --good: #047857; --warn: #854d0e; --bad: #b91c1c;
+    --rail: rgba(255,255,255,0.94); --bar: rgba(255,255,255,0.72);
+    --shadow: 0 10px 30px rgba(15,23,42,0.10);
+  }
+
+  .tt { font: 400 var(--t-md)/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;
+    background: var(--page); color: var(--ink);
+    display: grid; grid-template-columns: var(--rail-w) 1fr;
+    min-height: 560px; border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--card-line); }
+  .tt * { box-sizing: border-box; }
+
+  /* --- icon rail ---------------------------------------------------- */
+  .rail { background: var(--rail); backdrop-filter: blur(14px);
+    border-right: 1px solid var(--card-line);
+    display: flex; flex-direction: column; align-items: center;
+    padding: var(--s3) 0; gap: var(--s1); }
+  .logo { width: 30px; height: 30px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), #22c55e);
+    margin-bottom: var(--s4); }
+  .ic { width: 38px; height: 38px; border-radius: 10px; display: grid;
+    place-items: center; color: var(--ink-soft); font-size: 15px;
+    position: relative; cursor: pointer; }
+  .ic.on { background: color-mix(in srgb, var(--accent) 20%, transparent);
+    color: var(--accent); }
+  .ic .pip { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px;
+    border-radius: 50%; background: var(--bad); }
+  .ic.last { margin-top: auto; }
+
+  /* --- top bar ------------------------------------------------------ */
+  .shell { display: flex; flex-direction: column; min-width: 0; }
+  .bar { display: flex; align-items: center; gap: var(--s3);
+    padding: var(--s3) var(--s5); background: var(--bar);
+    backdrop-filter: blur(14px);
+    border-bottom: 1px solid var(--card-line); }
+  .bar h1 { font-size: var(--t-lg); font-weight: 700; margin: 0;
+    letter-spacing: -0.01em; white-space: nowrap; }
+  .find { flex: 1; max-width: 340px; margin-left: var(--s4);
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    border: 1px solid var(--card-line); border-radius: 9px;
+    padding: 7px var(--s3); color: var(--ink-soft); font-size: var(--t-sm); }
+  .cta { margin-left: auto; background: var(--accent); color: #fff;
+    border: 0; border-radius: 9px; padding: 8px 15px; font-size: var(--t-sm);
+    font-weight: 600; cursor: pointer; white-space: nowrap; }
+  .ghost { background: transparent; color: var(--ink-soft);
+    border: 1px solid var(--card-line); border-radius: 9px;
+    width: 34px; height: 34px; cursor: pointer; }
+
+  /* --- body --------------------------------------------------------- */
+  .body { padding: var(--s5); overflow: auto; }
+
+  /* the strip: four numbers in one card, divided. Denser than three
+     separate boxes and it reads left to right as one sentence. */
+  .strip { display: grid; grid-template-columns: repeat(4, 1fr);
+    background: var(--card); backdrop-filter: blur(12px);
+    border: 1px solid var(--card-line); border-radius: var(--radius);
+    box-shadow: var(--shadow); margin-bottom: var(--s4); }
+  .cell { padding: var(--s4) var(--s5); border-right: 1px solid var(--card-line); }
+  .cell:last-child { border-right: 0; }
+  .cell .lab { font-size: var(--t-xs); text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--ink-soft); }
+  .cell .val { font-size: var(--t-2xl); font-weight: 700; line-height: 1.15;
+    letter-spacing: -0.02em; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .cell .val.accent { color: var(--accent); }
+  .cell .d { font-size: var(--t-xs); margin-top: 2px; color: var(--ink-soft); }
+  .cell .d.up { color: var(--good); }
+
+  .cols { display: grid; grid-template-columns: 1.6fr 1fr; gap: var(--s4); }
+  .card { background: var(--card); backdrop-filter: blur(12px);
+    border: 1px solid var(--card-line); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: var(--s4) var(--s5) var(--s5); }
+  .card h2 { font-size: var(--t-sm); font-weight: 600; margin: 0 0 var(--s4);
+    text-transform: uppercase; letter-spacing: 0.07em; color: var(--ink-soft);
+    display: flex; align-items: center; }
+  .card h2 .more { margin-left: auto; text-transform: none; letter-spacing: 0;
+    color: var(--accent); font-size: var(--t-xs); }
+  .chart { width: 100%; height: 150px; display: block; }
+
+  /* a real feed, which the current dashboard has nowhere for */
+  .feed { list-style: none; margin: 0; padding: 0; }
+  .feed li { display: flex; gap: var(--s3); padding: var(--s3) 0;
+    border-bottom: 1px solid var(--card-line); font-size: var(--t-sm); }
+  .feed li:last-child { border-bottom: 0; }
+  .feed .tag { width: 6px; border-radius: 3px; flex: none; }
+  .feed .tag.s { background: var(--good); }
+  .feed .tag.p { background: var(--accent); }
+  .feed .tag.w { background: var(--warn); }
+  .feed .t { color: var(--ink-soft); font-size: var(--t-xs); margin-left: auto;
+    white-space: nowrap; }
+  .feed b { font-weight: 600; }
+
+  .band { font: 600 12px system-ui; letter-spacing: 0.08em;
+    text-transform: uppercase; color: #64748b; margin: 28px 0 10px; }
+  .band:first-child { margin-top: 0; }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 24px; }
+  body { margin: 0; background: #f8fafc; }
+  @media (prefers-color-scheme: dark) { body { background: #020617; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="band">Direction B · dark · desktop</div>
+  <div class="tt" data-theme="dark">
+    <aside class="rail">
+      <div class="logo"></div>
+      <div class="ic on">▤</div>
+      <div class="ic">◔<span class="pip"></span></div>
+      <div class="ic">▣</div>
+      <div class="ic">▸</div>
+      <div class="ic">◈</div>
+      <div class="ic">◑</div>
+      <div class="ic last">☾</div>
+    </aside>
+    <div class="shell">
+      <div class="bar">
+        <h1>Dashboard</h1>
+        <div class="find">Search products, sales, customers…</div>
+        <button class="cta">＋ Record a sale</button>
+        <button class="ghost">◔</button>
+      </div>
+      <div class="body">
+        <div class="strip">
+          <div class="cell"><div class="lab">Sales · 7 days</div>
+            <div class="val accent">₵785</div><div class="d up">▲ ₵620</div></div>
+          <div class="cell"><div class="lab">Owed to you</div>
+            <div class="val">₵1,240</div><div class="d">3 customers</div></div>
+          <div class="cell"><div class="lab">Restock</div>
+            <div class="val">0</div><div class="d">nothing due</div></div>
+          <div class="cell"><div class="lab">Products</div>
+            <div class="val">16</div><div class="d">tracked</div></div>
+        </div>
+        <div class="cols">
+          <div class="card">
+            <h2>Sales trend <span class="more">Full report →</span></h2>
+            <svg class="chart" viewBox="0 0 520 150" preserveAspectRatio="none">
+              <defs><linearGradient id="hb" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.3"/>
+                <stop offset="100%" stop-color="#60a5fa" stop-opacity="0"/>
+              </linearGradient></defs>
+              <line x1="0" y1="38" x2="520" y2="38" stroke="rgba(148,163,184,0.13)"/>
+              <line x1="0" y1="75" x2="520" y2="75" stroke="rgba(148,163,184,0.13)"/>
+              <line x1="0" y1="112" x2="520" y2="112" stroke="rgba(148,163,184,0.13)"/>
+              <path d="M0,134 L87,132 L174,130 L260,106 L347,122 L434,126 L520,26 L520,150 L0,150 Z" fill="url(#hb)"/>
+              <path d="M0,134 L87,132 L174,130 L260,106 L347,122 L434,126 L520,26"
+                    fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linejoin="round"/>
+              <circle cx="520" cy="26" r="4.5" fill="#60a5fa"/>
+            </svg>
+          </div>
+          <div class="card">
+            <h2>Today</h2>
+            <ul class="feed">
+              <li><span class="tag s"></span><span><b>Sale ₵240</b><br>Mensah Stores</span><span class="t">10:12</span></li>
+              <li><span class="tag p"></span><span><b>Stock received</b><br>40 × Club 330ml</span><span class="t">09:40</span></li>
+              <li><span class="tag w"></span><span><b>Payment due</b><br>Adjei Ent. · 62 days</span><span class="t">09:02</span></li>
+              <li><span class="tag s"></span><span><b>Sale ₵85</b><br>Walk-in</span><span class="t">08:31</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="band">Direction B · light · desktop</div>
+  <div class="tt" data-theme="light">
+    <aside class="rail">
+      <div class="logo"></div>
+      <div class="ic on">▤</div>
+      <div class="ic">◔<span class="pip"></span></div>
+      <div class="ic">▣</div>
+      <div class="ic">▸</div>
+      <div class="ic">◈</div>
+      <div class="ic">◑</div>
+      <div class="ic last">☀</div>
+    </aside>
+    <div class="shell">
+      <div class="bar">
+        <h1>Dashboard</h1>
+        <div class="find">Search products, sales, customers…</div>
+        <button class="cta">＋ Record a sale</button>
+        <button class="ghost">◔</button>
+      </div>
+      <div class="body">
+        <div class="strip">
+          <div class="cell"><div class="lab">Sales · 7 days</div>
+            <div class="val accent">₵785</div><div class="d up">▲ ₵620</div></div>
+          <div class="cell"><div class="lab">Owed to you</div>
+            <div class="val">₵1,240</div><div class="d">3 customers</div></div>
+          <div class="cell"><div class="lab">Restock</div>
+            <div class="val">0</div><div class="d">nothing due</div></div>
+          <div class="cell"><div class="lab">Products</div>
+            <div class="val">16</div><div class="d">tracked</div></div>
+        </div>
+        <div class="cols">
+          <div class="card">
+            <h2>Sales trend <span class="more">Full report →</span></h2>
+            <svg class="chart" viewBox="0 0 520 150" preserveAspectRatio="none">
+              <defs><linearGradient id="hl" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#2563eb" stop-opacity="0.2"/>
+                <stop offset="100%" stop-color="#2563eb" stop-opacity="0"/>
+              </linearGradient></defs>
+              <line x1="0" y1="38" x2="520" y2="38" stroke="rgba(15,23,42,0.07)"/>
+              <line x1="0" y1="75" x2="520" y2="75" stroke="rgba(15,23,42,0.07)"/>
+              <line x1="0" y1="112" x2="520" y2="112" stroke="rgba(15,23,42,0.07)"/>
+              <path d="M0,134 L87,132 L174,130 L260,106 L347,122 L434,126 L520,26 L520,150 L0,150 Z" fill="url(#hl)"/>
+              <path d="M0,134 L87,132 L174,130 L260,106 L347,122 L434,126 L520,26"
+                    fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round"/>
+              <circle cx="520" cy="26" r="4.5" fill="#2563eb"/>
+            </svg>
+          </div>
+          <div class="card">
+            <h2>Today</h2>
+            <ul class="feed">
+              <li><span class="tag s"></span><span><b>Sale ₵240</b><br>Mensah Stores</span><span class="t">10:12</span></li>
+              <li><span class="tag p"></span><span><b>Stock received</b><br>40 × Club 330ml</span><span class="t">09:40</span></li>
+              <li><span class="tag w"></span><span><b>Payment due</b><br>Adjei Ent. · 62 days</span><span class="t">09:02</span></li>
+              <li><span class="tag s"></span><span><b>Sale ₵85</b><br>Walk-in</span><span class="t">08:31</span></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
