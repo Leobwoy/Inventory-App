@@ -255,7 +255,7 @@ def test_the_hidden_attribute_actually_hides():
 #: So the fingerprint is recorded here. Change an asset and this test fails,
 #: naming the fix: bump the version, then update the hash below.
 PRECACHE_FINGERPRINT = {
-    'tracktrack-v9': '59ba02e3deb9074c463820a290a4936080ee4f18165b8a5668d2cdab69de9255',
+    'tracktrack-v10': '44ebc6ca831a7fda21fd7149e8a6f6bdee2907987e6a31b556b15b2a77abbd5d',
 }
 
 

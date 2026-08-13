@@ -571,6 +571,15 @@ fails at 4.2:1; the palette uses `#52627a` (5.9:1) and `#2563eb` (4.9:1).
 5. **Stage 3** — Interface revamp (light theme, self-hosted assets, barcode sale entry,
    branded invoices)
 
+- **Cramped fields on goods receipt.** Reported from the running app with a screenshot.
+  On `templates/purchases/receive.html` the "Receiving now" input is about one digit wide and
+  "Batch number" is squeezed beside it — the row carries seven columns (Product, Ordered,
+  Already in, Outstanding, Receiving now, Batch number, Expiry date) and the three that are
+  actually *typed into* get whatever width is left over after five read-only ones. The fix is
+  a layout change, not a width tweak: the inputs should lead. Due in Phase C6 when Purchasing
+  is rebuilt; noted here so it is not lost, since it is the page where a typo costs real
+  stock. Same shape of problem is likely on the sale form, which has the same pattern.
+
 ## Open Questions
 
 - **Self-service password reset still does not exist (F-43), but the lockout risk is

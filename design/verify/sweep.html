@@ -28,7 +28,15 @@ function load(file){
     const f=document.createElement('iframe');
     f.style.cssText='width:1366px;height:1000px;position:absolute;left:-99999px';
     f.src='/static/_shot/'+file+'?v='+BUST;
-    f.onload=()=>setTimeout(()=>res(f),150);
+    f.onload=()=>{
+      // Open anything that folds before measuring. Collapsed nav groups are
+      // display:none, so the sweep skipped fourteen links a page - and those
+      // are reachable UI a person sees the moment they tap the group. A check
+      // that quietly stops checking is worse than no check.
+      const d=f.contentDocument;
+      d.querySelectorAll('.collapse').forEach(el=>el.classList.add('show'));
+      setTimeout(()=>res(f),150);
+    };
     document.body.appendChild(f);
   });
 }

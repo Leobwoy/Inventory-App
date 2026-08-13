@@ -255,24 +255,36 @@ def test_the_light_theme_actually_repaints(owner):
         assert dark != light, f'{name} is identical in both themes'
 
 
-def test_every_dark_token_has_a_light_counterpart(owner):
-    """A token defined only in :root silently keeps its dark value under light —
-    which is how a white-on-white or black-on-black surface appears, with
-    nothing failing anywhere."""
+def test_every_dark_colour_has_a_light_counterpart(owner):
+    """A colour defined only in :root silently keeps its dark value under light —
+    which is how a white-on-white or black-on-black surface appears, with nothing
+    failing anywhere.
+
+    Scoped to colours by looking at the value, not by keeping a list of
+    exceptions. Sizes and effects — `--rail-w`, `--glass-backdrop` — are
+    deliberately shared, and a hand-maintained exemption list would grow one
+    entry at a time until nobody trusted it.
+    """
     import re
 
     client, _business_id = owner
     css = client.get('/static/css/style.css').get_data(as_text=True)
 
-    def names(block):
+    def colours(block):
         section = css[css.index(block):]
-        section = section[:section.index('}')]
-        return set(re.findall(r'^\s*(--[\w-]+):', section, re.M))
+        section = section[:section.index('\n}')]
+        found = {}
+        for name, value in re.findall(r'^\s*(--[\w-]+):\s*([^;]+);', section, re.M):
+            v = value.strip()
+            if v.startswith('#') or v.startswith('rgb') or v.startswith('hsl'):
+                found[name] = v
+        return found
 
-    dark = names(':root {')
-    light = names('[data-theme="light"] {')
-    # --glass-backdrop is deliberately shared: the blur is the identity in both.
-    missing = dark - light - {'--glass-backdrop'}
+    dark = colours(':root {')
+    light = colours('[data-theme="light"] {')
+
+    assert len(dark) > 20, 'the dark palette looks truncated; check the parser'
+    missing = set(dark) - set(light)
     assert not missing, f'no light value for: {sorted(missing)}'
 
 

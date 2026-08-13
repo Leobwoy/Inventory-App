@@ -192,3 +192,51 @@ def test_a_stored_null_cannot_take_the_sidebar_down(register):
 
     assert "typeof parsed === 'object'" in body
     assert 'Array.isArray(parsed)' in body
+
+
+# --- the rail ----------------------------------------------------------------
+
+def test_every_nav_item_still_carries_its_words(register):
+    """The sidebar narrowed from 260px to 84px, icon above label rather than
+    beside it. Icons alone would have saved another 30px and cost every new
+    staff member their first morning guessing what a picture means — and hover,
+    the usual answer, does not exist on a phone."""
+    client, _business_id = register()
+    body = client.get('/').get_data(as_text=True)
+
+    for word in ('Dashboard', 'Needs attention', 'Products', 'Catalogue',
+                 'Sales', 'Purchasing', 'Reports', 'Administration'):
+        assert f'>{word}<' in body or f'> {word}<' in body or word in body, \
+            f'{word} lost its label'
+
+
+def test_the_rail_is_desktop_only(register):
+    """Below 992px the sidebar is a slide-out drawer with room to spare, so it
+    keeps full-width rows. Narrowing it there would shrink a menu that already
+    had the whole screen."""
+    client, _business_id = register()
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    mobile = css[css.index('@media (max-width: 991px)'):]
+    assert 'width: 260px' in mobile, 'the drawer must stay wide'
+    assert 'flex-direction: row' in mobile, 'rows go back to icon-beside-word'
+
+
+def test_the_tour_can_still_find_every_anchor(register, make_product):
+    """The tour points at seven ids that live in this sidebar, and a step whose
+    anchor is missing is dropped **silently** — by design, so permissions work.
+    Restructuring the nav could therefore shorten the tour with nothing
+    reporting it."""
+    import re
+
+    client, business_id = register()
+    make_product(business_id, sku='BA-750')
+    body = client.get('/').get_data(as_text=True)
+
+    steps = re.search(r'var steps = \[(.*?)\];', body, re.S)
+    assert steps, 'the tour step list is gone'
+    anchors = re.findall(r"anchor:\s*'#([^']+)'", steps.group(1))
+    assert len(anchors) >= 6, f'only {len(anchors)} steps survived'
+
+    for anchor in anchors:
+        assert f'id="{anchor}"' in body, f'the tour points at #{anchor}, which is gone'
