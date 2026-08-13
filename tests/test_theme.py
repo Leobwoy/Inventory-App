@@ -287,3 +287,51 @@ def test_the_accent_carries_its_own_text_colour(owner):
     rule = css[css.index('.btn-primary {'):]
     rule = rule[:rule.index('}')]
     assert 'var(--on-accent)' in rule
+
+
+# --- the switch itself --------------------------------------------------------
+
+def test_there_is_a_visible_way_to_switch(owner):
+    """Built after the user went looking for it and found nothing. A setting
+    with no control is not a feature — it shipped as one page of CSS nobody
+    could reach."""
+    client, _business_id = owner
+    body = client.get('/').get_data(as_text=True)
+
+    assert 'id="theme-toggle"' in body
+    assert 'bi-sun' in body and 'bi-moon-stars' in body
+
+
+def test_the_switch_is_in_the_sidebar_not_behind_a_permission(owner, make_staff):
+    """Settings needs settings.manage and applies to the whole business, so a
+    control living only there would be unreachable for a sales clerk — and the
+    clerk in the market doorway is exactly who needs light."""
+    _client, business_id = owner
+    clerk = make_staff(business_id, 'Sales Staff', 'clerk@ab.example.com',
+                       permissions=['sales.view'])
+
+    body = clerk.get('/').get_data(as_text=True)
+
+    assert 'id="theme-toggle"' in body
+
+
+def test_the_switch_repaints_before_it_saves(owner):
+    """A round trip before the colour changes makes a one-tap switch feel broken
+    on a slow connection. It paints first and tells the server after; a failed
+    save costs a revert on the next page, not a tap that did nothing."""
+    client, _business_id = owner
+    body = client.get('/').get_data(as_text=True)
+
+    script = body[body.index("const themeBtn"):body.index('</script>', body.index("const themeBtn"))]
+    assert "root.setAttribute('data-theme', next)" in script
+    assert script.index("setAttribute('data-theme'") < script.index('fetch(')
+    assert '.catch(' in script
+
+
+def test_the_switch_carries_a_csrf_token(owner):
+    """It posts, and every post in this app carries one."""
+    client, _business_id = owner
+    body = client.get('/').get_data(as_text=True)
+
+    script = body[body.index("const themeBtn"):body.index('</script>', body.index("const themeBtn"))]
+    assert "body.append('csrf_token'" in script

@@ -201,7 +201,19 @@
         </nav>
         
         <div class="mt-auto pt-3 border-top" style="border-color: var(--border-color) !important;">
-            <div class="text-muted small mb-2"><i class="bi bi-person-badge"></i> Role View:</div>
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <div class="text-muted small"><i class="bi bi-person-badge"></i> Role View:</div>
+              {# In the sidebar, not in Settings. Settings needs the
+                 settings.manage permission and applies to the whole business,
+                 so a sales clerk could never reach it - and the clerk standing
+                 in the sun is exactly who needs to switch to light. #}
+              <button type="button" id="theme-toggle" class="btn btn-sm btn-outline-secondary ms-auto"
+                      title="Switch between light and dark"
+                      aria-label="Switch between light and dark">
+                <i class="bi bi-sun" data-icon-light></i>
+                <i class="bi bi-moon-stars" data-icon-dark hidden></i>
+              </button>
+            </div>
             <div class="fw-bold">{{ current_user.role.name if current_user.role else 'No Role' }}</div>
             <a href="/auth/logout" class="btn btn-sm btn-outline-danger mt-2 w-100">Logout</a>
         </div>
@@ -313,6 +325,44 @@
             overlay.addEventListener('click', function() {
                 sidebar.classList.remove('show');
                 overlay.classList.remove('show');
+            });
+        }
+
+        // --- light / dark ---------------------------------------------------
+        // Repaints immediately and tells the server afterwards. Waiting for the
+        // round trip would make a one-tap switch feel broken on a slow
+        // connection, and if the save fails the only loss is that it reverts
+        // on the next page - not that the tap did nothing.
+        const themeBtn = document.getElementById('theme-toggle');
+        if (themeBtn) {
+            const root = document.documentElement;
+
+            function paintButton() {
+                const dark = root.getAttribute('data-theme') === 'dark';
+                // Show the thing you would switch *to*, not the state you are in.
+                themeBtn.querySelector('[data-icon-light]').hidden = !dark;
+                themeBtn.querySelector('[data-icon-dark]').hidden = dark;
+                themeBtn.title = dark ? 'Switch to light' : 'Switch to dark';
+                themeBtn.setAttribute('aria-label', themeBtn.title);
+            }
+            paintButton();
+
+            themeBtn.addEventListener('click', function () {
+                const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                root.setAttribute('data-theme', next);
+                root.setAttribute('data-bs-theme', next);
+                root.setAttribute('data-theme-pref', next);
+                paintButton();
+
+                const body = new FormData();
+                body.append('theme', next);
+                body.append('csrf_token', '{{ csrf_token() }}');
+                fetch('{{ url_for("auth.set_theme") }}', {
+                    method: 'POST', body: body, credentials: 'same-origin'
+                }).catch(function () {
+                    // Offline. The screen is already right; it will revert on the
+                    // next load, which is a smaller failure than blocking the tap.
+                });
             });
         }
     });
