@@ -202,7 +202,7 @@
         
         <div class="mt-auto pt-3 border-top" style="border-color: var(--border-color) !important;">
             <div class="text-muted small mb-2"><i class="bi bi-person-badge"></i> Role View:</div>
-            <div class="text-white fw-bold">{{ current_user.role.name if current_user.role else 'No Role' }}</div>
+            <div class="fw-bold">{{ current_user.role.name if current_user.role else 'No Role' }}</div>
             <a href="/auth/logout" class="btn btn-sm btn-outline-danger mt-2 w-100">Logout</a>
         </div>
     </aside>
@@ -216,7 +216,7 @@
                 {% for category, message in messages %}
                   <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
                     <i class="bi bi-info-circle me-2"></i> {{ message }}
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                   </div>
                 {% endfor %}
               {% endif %}

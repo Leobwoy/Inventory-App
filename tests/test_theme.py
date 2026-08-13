@@ -228,12 +228,62 @@ def test_one_persons_choice_is_not_everyone_elses(owner, make_staff):
 
 # --- nothing looks different yet ---------------------------------------------
 
-def test_choosing_light_changes_no_colour_yet(owner):
-    """Phase B2 is wiring only. The palette arrives in Phase C, and keeping them
-    apart is what makes a dark-theme regression attributable."""
-    client, _business_id = owner
-    client.post('/auth/theme', data={'theme': 'light'})
+def test_the_light_theme_actually_repaints(owner):
+    """Replaces an earlier test that asserted the opposite.
 
+    Through Phase B2 this file pinned "wiring only, no colour change", which was
+    the whole point of splitting the plumbing from the palette — a dark-theme
+    regression could only have come from one commit. C1a is where that stops
+    being true, so the assertion inverts rather than being deleted: the boundary
+    still needs a guard, it just moved.
+    """
+    client, _business_id = owner
     css = client.get('/static/css/style.css').get_data(as_text=True)
 
-    assert '[data-theme="light"]' not in css
+    assert '[data-theme="light"]' in css
+
+    def token(block, name):
+        section = css[css.index(block):]
+        section = section[:section.index('}')]
+        line = [l for l in section.splitlines() if l.strip().startswith(name + ':')]
+        return line[0].split(':', 1)[1].split(';')[0].strip() if line else None
+
+    for name in ('--bg-page', '--text-primary', '--accent-primary', '--table-head-bg'):
+        dark = token(':root {', name)
+        light = token('[data-theme="light"] {', name)
+        assert dark and light, f'{name} missing from one of the themes'
+        assert dark != light, f'{name} is identical in both themes'
+
+
+def test_every_dark_token_has_a_light_counterpart(owner):
+    """A token defined only in :root silently keeps its dark value under light —
+    which is how a white-on-white or black-on-black surface appears, with
+    nothing failing anywhere."""
+    import re
+
+    client, _business_id = owner
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    def names(block):
+        section = css[css.index(block):]
+        section = section[:section.index('}')]
+        return set(re.findall(r'^\s*(--[\w-]+):', section, re.M))
+
+    dark = names(':root {')
+    light = names('[data-theme="light"] {')
+    # --glass-backdrop is deliberately shared: the blur is the identity in both.
+    missing = dark - light - {'--glass-backdrop'}
+    assert not missing, f'no light value for: {sorted(missing)}'
+
+
+def test_the_accent_carries_its_own_text_colour(owner):
+    """A filled button puts text *on* the accent, so the accent and the ink on
+    it are two decisions. Lightening the dark accent for legible links left
+    white text on pale blue at 2.54:1 until this existed."""
+    client, _business_id = owner
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    assert css.count('--on-accent:') == 2, 'both themes must define it'
+    rule = css[css.index('.btn-primary {'):]
+    rule = rule[:rule.index('}')]
+    assert 'var(--on-accent)' in rule

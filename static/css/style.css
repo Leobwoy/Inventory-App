@@ -27,7 +27,10 @@
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   
-  --accent-primary: #3b82f6;
+  /* Was #3b82f6, which is 3.98:1 on the card - under AA for body text, and
+     it is the link colour, so it was failing on ordinary prose. */
+  --accent-primary: #60a5fa;
+  --on-accent: #06142b;      /* text *on* the accent, e.g. a filled button */
   --accent-success: #10b981;
   --accent-danger: #ef4444;
   --accent-warning: #f59e0b;
@@ -46,8 +49,10 @@
   --table-head-bg: rgba(0, 0, 0, 0.25);
   --input-bg: rgba(0, 0, 0, 0.2);
   --input-bg-focus: rgba(0, 0, 0, 0.3);
-  --focus-ring: rgba(59, 130, 246, 0.25);
+  --focus-ring: rgba(96, 165, 250, 0.3);
   --progress-track: rgba(148, 163, 184, 0.2);
+  --nav-hover: rgba(255, 255, 255, 0.06);
+  --sunken: rgba(0, 0, 0, 0.22);
 
   /* Bootstrap's contextual backgrounds are rewritten wholesale further down,
      so these reach roughly fifty badges across the app. */
@@ -60,6 +65,63 @@
   --badge-danger-bg: rgba(239, 68, 68, 0.2);
   --badge-danger-fg: #f87171;
   --badge-danger-line: rgba(239, 68, 68, 0.3);
+}
+
+/* --- Light -----------------------------------------------------------------
+
+   The same design in a different key, not a different design. Frosted white
+   cards on a soft blue-grey page, so a card still reads as raised; the blur
+   stays, because the glass is the identity and the user asked to keep it.
+
+   Every colour here was measured against the frosted card rather than picked
+   by eye. Two that look obvious and are not: #64748b, the natural slate for
+   muted text, fails at 4.2:1; and the dark theme's own #3b82f6 falls to 3.3:1
+   on white. Both are corrected below.
+   -------------------------------------------------------------------------- */
+[data-theme="light"] {
+  --bg-page: #e9eef5;
+  --bg-sidebar: rgba(255, 255, 255, 0.88);
+  --bg-card: rgba(255, 255, 255, 0.82);
+  --bg-card-hover: rgba(255, 255, 255, 0.96);
+
+  --text-primary: #0f172a;
+  --text-secondary: #52627a;          /* 5.9:1 — #64748b fails at 4.2 */
+
+  --accent-primary: #1d4ed8;
+  --on-accent: #ffffff;          /* 5.8:1 on the page, 6.4 on a card.
+                                         #2563eb measures 4.43 against this
+                                         page colour - under, not over. */
+  --accent-success: #047857;
+  --accent-danger: #b91c1c;
+  --accent-warning: #854d0e;          /* #a16207 is marginal at 4.4 */
+
+  --border-color: rgba(15, 23, 42, 0.12);
+  --glass-shadow: 0 4px 30px rgba(15, 23, 42, 0.10);
+
+  /* The washes invert. A white wash on navy reads as "slightly raised"; the
+     same wash on white is invisible, so light needs a dark one. */
+  --table-stripe: rgba(15, 23, 42, 0.025);
+  --table-stripe-odd: rgba(15, 23, 42, 0.02);
+  --table-hover: rgba(29, 78, 216, 0.07);
+  --table-head-bg: rgba(15, 23, 42, 0.05);
+  --input-bg: rgba(255, 255, 255, 0.9);
+  --input-bg-focus: #ffffff;
+  --focus-ring: rgba(29, 78, 216, 0.28);
+  --progress-track: rgba(15, 23, 42, 0.12);
+  --nav-hover: rgba(29, 78, 216, 0.09);
+  --sunken: rgba(15, 23, 42, 0.05);
+
+  /* Opaque rather than translucent: a 20% tint over white is nearly white, so
+     the badge would lose its shape entirely. */
+  --badge-success-bg: #d1fae5;
+  --badge-success-fg: #065f46;
+  --badge-success-line: rgba(6, 95, 70, 0.25);
+  --badge-warning-bg: #fef3c7;
+  --badge-warning-fg: #854d0e;
+  --badge-warning-line: rgba(133, 77, 14, 0.25);
+  --badge-danger-bg: #fee2e2;
+  --badge-danger-fg: #991b1b;
+  --badge-danger-line: rgba(153, 27, 27, 0.25);
 }
 
 * {
@@ -158,8 +220,8 @@ body {
 
 .nav-group-toggle:hover,
 .nav-group-toggle:focus-visible {
-  background: rgba(148, 163, 184, 0.12);
-  color: #fff;
+  background: var(--nav-hover);
+  color: var(--text-primary);
 }
 
 /* A visible focus ring, because this is a button reachable by keyboard and the
@@ -183,7 +245,7 @@ body {
 /* Marks the group you are currently inside, which stays useful once it is open
    and the heading is the only thing naming where you are. */
 .nav-group-toggle.has-active {
-  color: #fff;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
@@ -205,12 +267,12 @@ body {
 }
 
 .nav-link:hover, .nav-link.active {
-  background: rgba(255,255,255,0.05);
+  background: var(--nav-hover);
   color: var(--text-primary);
 }
 
 .nav-link.active {
-  background: linear-gradient(90deg, rgba(59,130,246,0.1) 0%, transparent 100%);
+  background: linear-gradient(90deg, var(--nav-hover) 0%, transparent 100%);
   border-left: 3px solid var(--accent-primary);
 }
 
@@ -267,6 +329,7 @@ h1, h2, h3, h4, h5, h6 {
 .stat-primary { background: rgba(59,130,246,0.1); color: var(--accent-primary); }
 .stat-success { background: rgba(16,185,129,0.1); color: var(--accent-success); }
 .stat-warning { background: rgba(245,158,11,0.1); color: var(--accent-warning); }
+.stat-danger  { background: rgba(239,68,68,0.1);  color: var(--accent-danger); }
 
 /* Buttons */
 .btn {
@@ -280,11 +343,17 @@ h1, h2, h3, h4, h5, h6 {
 .btn-primary {
   background: var(--accent-primary);
   border: none;
+  /* Both halves, or a lighter accent leaves white text on pale blue. */
+  --bs-btn-color: var(--on-accent);
+  --bs-btn-hover-color: var(--on-accent);
+  --bs-btn-active-color: var(--on-accent);
+  color: var(--on-accent);
 }
 .btn-primary:hover {
-  background: #2563eb;
+  background: color-mix(in srgb, var(--accent-primary) 85%, var(--text-primary));
+  color: var(--on-accent);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+  box-shadow: 0 4px 12px var(--focus-ring);
 }
 
 .btn-outline-primary {
@@ -824,3 +893,71 @@ thead.table-light>tr>th {
     padding: 0.3rem 0.5rem;
   }
 }
+
+
+/* --- Things the light theme exposed ---------------------------------------
+
+   None of these were wrong before, exactly; they were unstated, and an unstated
+   colour falls through to a Bootstrap default chosen for a white page. On navy
+   that was invisible or ignored. On white it is simply wrong. */
+
+a {
+  color: var(--accent-primary);
+}
+a:hover {
+  color: var(--accent-primary);
+}
+/* Links wrapping a whole card must not paint their contents blue. */
+a.text-decoration-none,
+a.text-decoration-none:hover {
+  color: inherit;
+}
+
+/* Totals rows: a band that reads as a summary in either theme, replacing
+   .bg-dark, which was a near-black stripe across a white table. */
+.table-total > * {
+  background: var(--table-head-bg) !important;
+  font-weight: 600;
+}
+
+/* The sale form's totals panel, and anything else that should read as inset. */
+.panel-sunken {
+  background: var(--sunken);
+  border: 1px solid var(--border-color);
+}
+
+/* Pagination followed .bg-dark + .text-light, so it inverted on light. */
+.page-link-themed {
+  background: var(--bg-card) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+.page-link-themed.disabled {
+  color: var(--text-secondary) !important;
+}
+
+/* Bootstrap's own semantic colours are tuned for a white page, and land just
+   under AA on our light card: #dc3545 at 4.45, #0d6efd at 4.43, #6c757d at
+   4.02. Point them at the tokens, which are measured in both themes. */
+.btn-outline-primary {
+  --bs-btn-color: var(--accent-primary);
+  --bs-btn-border-color: var(--accent-primary);
+  --bs-btn-hover-bg: var(--accent-primary);
+  --bs-btn-hover-border-color: var(--accent-primary);
+}
+.btn-outline-secondary {
+  --bs-btn-color: var(--text-secondary);
+  --bs-btn-border-color: var(--border-color);
+  --bs-btn-hover-bg: var(--nav-hover);
+  --bs-btn-hover-color: var(--text-primary);
+  --bs-btn-hover-border-color: var(--text-secondary);
+}
+.btn-outline-danger {
+  --bs-btn-color: var(--accent-danger);
+  --bs-btn-border-color: var(--accent-danger);
+  --bs-btn-hover-bg: var(--accent-danger);
+  --bs-btn-hover-border-color: var(--accent-danger);
+}
+.text-danger { color: var(--accent-danger) !important; }
+.text-success { color: var(--accent-success) !important; }
+.text-warning { color: var(--accent-warning) !important; }

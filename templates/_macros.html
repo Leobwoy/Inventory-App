@@ -4,14 +4,14 @@
 <nav aria-label="Page navigation" class="mt-4">
     <ul class="pagination justify-content-center mb-0">
         <li class="page-item {% if not pagination.has_prev %}disabled{% endif %}">
-            <a class="page-link bg-dark border-secondary text-light" href="{{ url_for(endpoint, page=pagination.prev_num, **args) if pagination.has_prev else '#' }}" tabindex="-1">Previous</a>
+            <a class="page-link page-link-themed" href="{{ url_for(endpoint, page=pagination.prev_num, **args) if pagination.has_prev else '#' }}" tabindex="-1">Previous</a>
         </li>
         
         {% for page in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
             {% if page %}
                 {% if page != pagination.page %}
                     <li class="page-item">
-                        <a class="page-link bg-dark border-secondary text-light" href="{{ url_for(endpoint, page=page, **args) }}">{{ page }}</a>
+                        <a class="page-link page-link-themed" href="{{ url_for(endpoint, page=page, **args) }}">{{ page }}</a>
                     </li>
                 {% else %}
                     <li class="page-item active" aria-current="page">
@@ -20,13 +20,13 @@
                 {% endif %}
             {% else %}
                 <li class="page-item disabled">
-                    <span class="page-link bg-dark border-secondary text-muted">…</span>
+                    <span class="page-link page-link-themed disabled">…</span>
                 </li>
             {% endif %}
         {% endfor %}
         
         <li class="page-item {% if not pagination.has_next %}disabled{% endif %}">
-            <a class="page-link bg-dark border-secondary text-light" href="{{ url_for(endpoint, page=pagination.next_num, **args) if pagination.has_next else '#' }}">Next</a>
+            <a class="page-link page-link-themed" href="{{ url_for(endpoint, page=pagination.next_num, **args) if pagination.has_next else '#' }}">Next</a>
         </li>
     </ul>
 </nav>
