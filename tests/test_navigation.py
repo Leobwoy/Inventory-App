@@ -29,6 +29,27 @@ GROUPS = ['nav-group-catalogue', 'nav-group-sales',
           'nav-group-purchasing', 'nav-group-admin']
 
 
+def media_block(css, opener, which=0):
+    """One @media block, ended at its matching brace.
+
+    Slicing to the end of the stylesheet meant a rule several blocks later could
+    satisfy an assertion about this one. `which` picks among repeats of the same
+    selector; -1 takes the last.
+    """
+    starts = [m.start() for m in re.finditer(re.escape(opener), css)]
+    assert starts, f'no {opener} block in the stylesheet'
+    i = starts[which]
+    depth, j = 0, css.index('{', i)
+    for k in range(j, len(css)):
+        if css[k] == '{':
+            depth += 1
+        elif css[k] == '}':
+            depth -= 1
+            if depth == 0:
+                return css[i:k + 1]
+    raise AssertionError(f'{opener} is never closed')
+
+
 def sidebar(body):
     """Just the sidebar, so a match in the page body cannot be mistaken for nav."""
     start = body.find('<aside class="sidebar"')
@@ -197,17 +218,22 @@ def test_a_stored_null_cannot_take_the_sidebar_down(register):
 # --- the rail ----------------------------------------------------------------
 
 def test_every_nav_item_still_carries_its_words(register):
-    """The sidebar narrowed from 260px to 84px, icon above label rather than
-    beside it. Icons alone would have saved another 30px and cost every new
-    staff member their first morning guessing what a picture means — and hover,
-    the usual answer, does not exist on a phone."""
+    """The sidebar narrowed from 260px to 140px, icon above label rather than
+    beside it. Icons alone would have saved another 50px and cost every new
+    staff member their first morning guessing what a picture means, and hover,
+    the usual answer, does not exist on a phone.
+
+    Asserted against the sidebar alone. The first version of this ended in
+    `or word in body`, which every one of these words satisfies from the page
+    content by itself - it would have stayed green with the labels stripped
+    out entirely.
+    """
     client, _business_id = register()
-    body = client.get('/').get_data(as_text=True)
+    nav = sidebar(client.get('/').get_data(as_text=True))
 
     for word in ('Dashboard', 'Needs attention', 'Products', 'Catalogue',
                  'Sales', 'Purchasing', 'Reports', 'Administration'):
-        assert f'>{word}<' in body or f'> {word}<' in body or word in body, \
-            f'{word} lost its label'
+        assert word in nav, f'{word} lost its label'
 
 
 def test_the_rail_is_desktop_only(register):
@@ -217,8 +243,11 @@ def test_the_rail_is_desktop_only(register):
     client, _business_id = register()
     css = client.get('/static/css/style.css').get_data(as_text=True)
 
-    mobile = css[css.index('@media (max-width: 991px)'):]
-    assert 'width: 260px' in mobile, 'the drawer must stay wide'
+    mobile = media_block(css, '@media (max-width: 991.98px)', which=-1)
+    # Anchored: a bare `'width: 260px' in mobile` is also satisfied by the
+    # `min-width` on the next line, so the width itself could go and this would
+    # not notice.
+    assert re.search(r'(?<!-)width:\s*260px', mobile), 'the drawer must stay wide'
     assert 'flex-direction: row' in mobile, 'rows go back to icon-beside-word'
 
 

@@ -21,11 +21,33 @@
       (function () {
         try {
           var root = document.documentElement;
-          if (root.dataset.themePref !== 'system') { return; }
-          var light = window.matchMedia('(prefers-color-scheme: light)').matches;
-          var theme = light ? 'light' : 'dark';
-          root.dataset.theme = theme;
-          root.setAttribute('data-bs-theme', theme);
+          var mq = window.matchMedia('(prefers-color-scheme: light)');
+
+          function apply(notify) {
+            // Re-checked on every call rather than once at startup. The switch
+            // in the sidebar rewrites the preference without reloading, so a
+            // decision taken at registration time would be the wrong one a tap
+            // later - the device would go on overruling a deliberate choice.
+            if (root.dataset.themePref !== 'system') { return; }
+            var theme = mq.matches ? 'light' : 'dark';
+            root.dataset.theme = theme;
+            root.setAttribute('data-bs-theme', theme);
+            if (notify) {
+              document.dispatchEvent(new CustomEvent('tracktrack:theme',
+                                                     { detail: { theme: theme } }));
+            }
+          }
+
+          apply(false);
+
+          // A phone that turns itself dark at sunset does so with the app open.
+          // Following the device has to mean following it, not sampling it once
+          // at load and staying wrong until the next page.
+          if (mq.addEventListener) {
+            mq.addEventListener('change', function () { apply(true); });
+          } else if (mq.addListener) {
+            mq.addListener(function () { apply(true); });  // Safari below 14
+          }
         } catch (e) { /* keep whatever the server rendered */ }
       }());
     </script>
@@ -409,6 +431,9 @@
                 themeBtn.setAttribute('aria-label', themeBtn.title);
             }
             paintButton();
+            // The button shows the theme you would switch *to*. When the device
+            // changes it underneath us, the icon has to move with it or it lies.
+            document.addEventListener('tracktrack:theme', paintButton);
 
             themeBtn.addEventListener('click', function () {
                 const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';

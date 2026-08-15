@@ -10,13 +10,16 @@ import sys
 import time
 import urllib.request
 
-sys.path.insert(0, r'C:\Users\Owner\Documents\TrackTrack')
+# Derived from this file, not hardcoded: the repository is not always checked
+# out to the machine this was first written on.
+ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(ROOT))
+
 import app as appmod
 from flask.sessions import SecureCookieSessionInterface
 
-PORT = sys.argv[1] if len(sys.argv) > 1 else '61534'
+PORT = sys.argv[1] if len(sys.argv) > 1 else '5000'
 BASE = f'http://localhost:{PORT}'
-ROOT = pathlib.Path(r'C:\Users\Owner\Documents\TrackTrack')
 OUT = ROOT / 'static' / '_shot'
 SWEEP = ROOT / 'design' / 'verify' / 'sweep.html'
 
@@ -39,25 +42,30 @@ with a.app_context():
     cookie = SecureCookieSessionInterface().get_signing_serializer(a).dumps(
         {'_user_id': str(owner.id), '_fresh': True})
 
-    for theme in ('light', 'dark'):
-        owner.theme_pref = theme
+    # Whatever it was before, not 'system': this runs against a development
+    # database a person also uses, and a crash halfway through would otherwise
+    # leave them staring at a theme they never chose.
+    original = owner.theme_pref
+    try:
+        for theme in ('light', 'dark'):
+            owner.theme_pref = theme
+            db.session.commit()
+            for name, path in PAGES.items():
+                req = urllib.request.Request(
+                    BASE + path, headers={'Cookie': f'session={cookie}'})
+                try:
+                    html = urllib.request.urlopen(req).read().decode('utf-8')
+                except Exception as e:
+                    print(f'  {name}/{theme}: FAILED {e}')
+                    continue
+                # Bust every stylesheet, or the browser serves the copy from
+                # before the last edit and every measurement describes the past.
+                html = re.sub(r'(href="/static/css/[^"]+?)(")',
+                              rf'\1?v={stamp}\2', html)
+                (OUT / f'{name}-{theme}.html').write_text(html, encoding='utf-8')
+    finally:
+        owner.theme_pref = original
         db.session.commit()
-        for name, path in PAGES.items():
-            req = urllib.request.Request(BASE + path,
-                                         headers={'Cookie': f'session={cookie}'})
-            try:
-                html = urllib.request.urlopen(req).read().decode('utf-8')
-            except Exception as e:
-                print(f'  {name}/{theme}: FAILED {e}')
-                continue
-            # Bust every stylesheet, or the browser serves the copy from before
-            # the last edit and every measurement is a measurement of the past.
-            html = re.sub(r'(href="/static/css/[^"]+?)(")',
-                          rf'\1?v={stamp}\2', html)
-            (OUT / f'{name}-{theme}.html').write_text(html, encoding='utf-8')
-
-    owner.theme_pref = 'system'
-    db.session.commit()
 
 # The sweep must be same-origin with the captures to read their iframes.
 (ROOT / 'static' / '_sweep.html').write_text(

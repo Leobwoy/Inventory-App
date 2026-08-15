@@ -107,6 +107,34 @@ def test_the_resolver_leaves_an_explicit_choice_alone(owner):
     assert "themePref !== 'system'" in script
 
 
+def test_the_device_is_followed_after_load_too(owner):
+    """A phone set to switch itself dark at sunset does that with the app open.
+    Sampling the setting once at load and never again means "follow my device"
+    quietly stops being true a few hours into the evening shift."""
+    client, _business_id = owner
+    body = client.get('/').get_data(as_text=True)
+    script = body[body.index('<script>'):body.index('</script>')]
+
+    assert "'change'" in script or 'addListener' in script,         'the resolver never listens for the device changing its mind'
+    # Old Safari has no addEventListener on a MediaQueryList at all.
+    assert 'addListener' in script, 'no fallback for Safari below 14'
+
+
+def test_the_device_cannot_overrule_a_choice_made_mid_session(owner):
+    """The switch in the sidebar rewrites the preference without reloading. If
+    the listener decided once, at registration, that this session was following
+    the device, it would go on repainting over a deliberate choice."""
+    client, _business_id = owner
+    body = client.get('/').get_data(as_text=True)
+    script = body[body.index('<script>'):body.index('</script>')]
+
+    # The guard has to sit inside the function the listener calls, not outside
+    # it: a return before the wiring would skip registration instead.
+    guard = script.index("themePref !== 'system'")
+    assert script.index('function apply') < guard,         'the preference is read once at startup, not on every change'
+    assert guard < script.index('addListener'),         'the listener is wired up before the guard it depends on'
+
+
 def test_a_broken_resolver_cannot_break_the_page(owner):
     """matchMedia is missing in some embedded webviews. Losing the preference is
     survivable; losing the page is not."""
@@ -183,7 +211,7 @@ def test_a_stale_read_does_not_record_a_change_nobody_made(owner):
 
     assert response.status_code == 204
     db.session.expire_all()
-    assert User.query.get(user.id).theme_pref == 'light'
+    assert db.session.get(User, user.id).theme_pref == 'light'
     assert AuditLog.query.filter_by(action='user.theme_changed').count() == 0
 
 
@@ -245,8 +273,9 @@ def test_the_light_theme_actually_repaints(owner):
     def token(block, name):
         section = css[css.index(block):]
         section = section[:section.index('}')]
-        line = [l for l in section.splitlines() if l.strip().startswith(name + ':')]
-        return line[0].split(':', 1)[1].split(';')[0].strip() if line else None
+        matches = [line for line in section.splitlines()
+                   if line.strip().startswith(name + ':')]
+        return matches[0].split(':', 1)[1].split(';')[0].strip() if matches else None
 
     for name in ('--bg-page', '--text-primary', '--accent-primary', '--table-head-bg'):
         dark = token(':root {', name)

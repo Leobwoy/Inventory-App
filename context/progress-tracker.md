@@ -547,18 +547,35 @@ byte-identical to `data-bs-theme="light"`. Every modal, dropdown, offcanvas and 
 been running Bootstrap's *light* theme inside this dark app since it was built, surviving
 only because `style.css` overrides the handful in use. Setting the attribute fixes it.
 
-**Contrast findings carried into the palette:** the current accent `#3b82f6` is 3.98:1 on
-the dark card — already under AA for body text. The obvious light-theme slate `#64748b`
-fails at 4.2:1; the palette uses `#52627a` (5.9:1) and `#2563eb` (4.9:1).
+**Contrast findings carried into the palette:** the old accent `#3b82f6` is 3.98:1 on the
+dark card — already under AA for body text; dark now uses `#60a5fa` with `#06142b` on top.
+The obvious light-theme slate `#64748b` fails at 4.2:1, so light uses `#52627a`. The light
+accent went to `#1d4ed8`, not `#2563eb`: I computed 4.60 for `#2563eb` against the wrong
+surface (`#eef2f7` rather than the palette's `#e9eef5`), told the browser its 4.43 reading
+was measurement error, and was wrong. Measure against the colour actually in the palette.
 
 ## In Progress
 
-- Nothing. Everything through F-51 is committed on `stage-1-finish`, awaiting merge.
-- **Next is undecided and is the user's call.** The roadmap says Stage 2.6 (supplier
-  scorecards), but 2.6 and 2.7 both score suppliers from purchase history and need 20–30
-  completed orders before they show anything — and there are no real customers yet, so both
-  would ship as empty screens. Bringing Stage 3 (the interface revamp) forward instead is a
-  reasonable alternative. Raised with the user 2026-08-12; not answered.
+- **Stage 3 — the interface redesign.** Shell complete: tokenised palette, light theme with
+  a per-user switch, the sidebar narrowed to a 140px icon-and-label rail, and phone
+  navigation moved to a bottom bar. Individual pages are still the old layouts in new
+  colours; the sale form and goods receipt are next, because that is where the user found a
+  real problem rather than a cosmetic one.
+- **Answered 2026-08-13: Stage 3 first, as a full redesign.** 2.6 and 2.7 both score
+  suppliers from purchase history and need 20–30 completed orders before they show
+  anything — with no real customers yet, both would ship as empty screens. The user chose
+  the interface revamp instead, and chose a full redesign over a recolour: designs approved
+  in Claude Design first, then built page by page. Direction B on desktop, C on phone.
+
+- **CodeRabbit review, round 2 — 14 findings, all verified valid, all fixed.** Worth keeping
+  two of them. The nav-label test ended in `or word in body`, which every word it checks
+  satisfies from the page content alone — it would have stayed green with the labels
+  stripped out entirely. And the media-query test sliced from `@media (max-width: 991px)` to
+  the end of the stylesheet, so a rule in a *different* block answered for the one under
+  test; there are two such blocks. Both now assert against a bounded region, and both were
+  falsified. The contrast sweep also had a `length > 90` filter that was quietly skipping
+  most of the prose on every page — removing it took the swept node count from 942 to 1266,
+  still with zero failures.
 
 ## Next Up
 
@@ -568,8 +585,8 @@ fails at 4.2:1; the palette uses `#52627a` (5.9:1) and `#2563eb` (4.9:1).
 4. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
    registration premise was wrong and the account is pre-approved. See Open Questions:
    no payout has been received, and neither collection path has taken real money yet.
-5. **Stage 3** — Interface revamp (light theme, self-hosted assets, barcode sale entry,
-   branded invoices)
+(Stage 3 is in progress — see In Progress above. Barcode sale entry and branded invoices
+were folded into it; branded invoices already shipped as F-36.)
 
 - **Cramped fields on goods receipt.** Reported from the running app with a screenshot.
   On `templates/purchases/receive.html` the "Receiving now" input is about one digit wide and

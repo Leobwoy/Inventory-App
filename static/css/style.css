@@ -53,6 +53,7 @@
   --focus-ring: rgba(96, 165, 250, 0.3);
   --progress-track: rgba(148, 163, 184, 0.2);
   --nav-hover: rgba(255, 255, 255, 0.06);
+  --stat-danger-bg: rgba(239, 68, 68, 0.12);
   --sunken: rgba(0, 0, 0, 0.22);
 
   /* Bootstrap's contextual backgrounds are rewritten wholesale further down,
@@ -110,6 +111,7 @@
   --focus-ring: rgba(29, 78, 216, 0.28);
   --progress-track: rgba(15, 23, 42, 0.12);
   --nav-hover: rgba(29, 78, 216, 0.09);
+  --stat-danger-bg: rgba(185, 28, 28, 0.10);
   --sunken: rgba(15, 23, 42, 0.05);
 
   /* Opaque rather than translucent: a 20% tint over white is nearly white, so
@@ -392,7 +394,7 @@ body {
 h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
   font-weight: 600;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .text-muted {
@@ -413,7 +415,7 @@ h1, h2, h3, h4, h5, h6 {
 .stat-primary { background: rgba(59,130,246,0.1); color: var(--accent-primary); }
 .stat-success { background: rgba(16,185,129,0.1); color: var(--accent-success); }
 .stat-warning { background: rgba(245,158,11,0.1); color: var(--accent-warning); }
-.stat-danger  { background: rgba(239,68,68,0.1);  color: var(--accent-danger); }
+.stat-danger  { background: var(--stat-danger-bg); color: var(--accent-danger); }
 
 /* Buttons */
 .btn {
@@ -434,6 +436,9 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--on-accent);
 }
 .btn-primary:hover {
+  /* The plain value first: a browser without color-mix drops the second
+     declaration and would otherwise be left with no hover background at all. */
+  background: var(--accent-primary);
   background: color-mix(in srgb, var(--accent-primary) 85%, var(--text-primary));
   color: var(--on-accent);
   transform: translateY(-1px);
@@ -683,7 +688,7 @@ thead.table-light>tr>th {
 /* =============================================
    RESPONSIVE: Tablets & Mobile (< 992px)
    ============================================= */
-@media (max-width: 991px) {
+@media (max-width: 991.98px) {
   /* --- Sidebar --- */
   .sidebar {
     left: -260px;
@@ -813,7 +818,7 @@ thead.table-light>tr>th {
     border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
     gap: 0.75rem;
     text-align: right;
-    word-break: break-word;
+    overflow-wrap: anywhere;
   }
 
   .table-cards tbody td:last-child {
@@ -1011,6 +1016,11 @@ a.text-decoration-none:hover {
 }
 
 /* Pagination followed .bg-dark + .text-light, so it inverted on light. */
+.page-link-active {
+  background: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+  color: var(--on-accent) !important;
+}
 .page-link-themed {
   background: var(--bg-card) !important;
   border-color: var(--border-color) !important;
@@ -1048,7 +1058,7 @@ a.text-decoration-none:hover {
 
 
 /* --- Rail footer -----------------------------------------------------------
-   Role View, the light/dark switch and Logout, in 84px. Stacked and centred;
+   Role View, the light/dark switch and Logout, in 140px. Stacked and centred;
    the role name wraps rather than being cut off. */
 @media (min-width: 992px) {
   .sidebar > .mt-auto {
@@ -1070,7 +1080,7 @@ a.text-decoration-none:hover {
   }
   .sidebar > .mt-auto > .fw-bold {
     font-size: 0.75rem;
-    word-break: break-word;
+    overflow-wrap: anywhere;
   }
   .sidebar > .mt-auto > .btn {
     font-size: 0.72rem;
@@ -1080,7 +1090,7 @@ a.text-decoration-none:hover {
 
 /* Below 992px the sidebar slides out as a drawer with room to spare, so it
    keeps full-width rows: icon beside the word, the way it has always been. */
-@media (max-width: 991px) {
+@media (max-width: 991.98px) {
   .sidebar {
     width: 260px;
     min-width: 260px;

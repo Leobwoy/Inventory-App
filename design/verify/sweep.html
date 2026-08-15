@@ -61,7 +61,10 @@ function sweep(doc,win){
     if(el.children.length && el.textContent.trim() ===
        [...el.children].map(c=>c.textContent).join('').trim()) return;
     const txt=(el.textContent||'').trim();
-    if(!txt || txt.length>90) return;
+    // No length cap. It was skipping every paragraph over ninety characters —
+    // which is most of the explanatory prose on the page, and prose is exactly
+    // what has to stay readable. Only the failure line is truncated, below.
+    if(!txt) return;
     const cs=win.getComputedStyle(el);
     if(cs.display==='none'||cs.visibility==='hidden'||el.offsetParent===null) return;
     checked++;
@@ -85,6 +88,14 @@ function sweep(doc,win){
       const d=f.contentDocument, w=f.contentWindow;
       const declared=d.documentElement.getAttribute('data-theme');
       const cssHref=(d.querySelector('link[href*="style.css"]')||{}).href||'?';
+      // A capture rendered in the wrong theme would sweep clean and mean
+      // nothing. Report it as a failure rather than counting it as a pass.
+      if(declared !== theme){
+        bad++;
+        lines.push(`${(page+'/'+theme).padEnd(20)} WRONG THEME: file says ${declared}`);
+        f.remove();
+        continue;
+      }
       const {checked,fails}=sweep(d,w);
       total+=checked; bad+=fails.length;
       lines.push(`${(page+'/'+theme).padEnd(20)} theme=${declared} css=${cssHref.split('v=')[1]||'?'} checked=${String(checked).padStart(3)} ${fails.length?'FAIL '+fails.length:'clean'}`);
