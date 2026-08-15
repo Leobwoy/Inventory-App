@@ -27,6 +27,21 @@ PAGES = {'dashboard': '/', 'products': '/products/', 'sale': '/sales/add',
          'credit': '/credit/', 'alerts': '/products/alerts',
          'settings': '/auth/settings', 'purchases': '/purchases/'}
 
+#: Pages that show one pane at a time. The sweep measures what is *visible*, so
+#: without this the second pane of the sale form is never checked at all - and
+#: it says nothing when it skips it. `sale` quietly dropped from 80 nodes to 78
+#: when the page gained a second pane, which is not a number anyone would
+#: notice. These get a second capture with the stepping script removed, so the
+#: server-rendered `data-steps="off"` survives and both panes stay on screen.
+PANED = {'sale'}
+
+#: Built from chr() rather than written out: an earlier version of this
+#: pattern picked up a literal backspace byte from a stray escape, which
+#: terminals and grep both render as nothing. The source read perfectly and
+#: matched no scripts at all, and the sweep went on reporting the same node
+#: count as before without a word.
+SCRIPT_TAG = chr(60) + 'script[^>]*' + chr(62) + '.*?' + chr(60) + '/script' + chr(62)
+
 a = appmod.create_app()
 stamp = int(time.time())
 
@@ -63,6 +78,22 @@ with a.app_context():
                 html = re.sub(r'(href="/static/css/[^"]+?)(")',
                               rf'\1?v={stamp}\2', html)
                 (OUT / f'{name}-{theme}.html').write_text(html, encoding='utf-8')
+
+                if name in PANED:
+                    # Every script, not just the stepping one. The first attempt
+                    # removed only the inline resolver and the sweep reported the
+                    # exact same node count - the script at the foot of the page
+                    # calls showStep() too and had put the pane straight back.
+                    #
+                    # No script at all is also the state a phone with a failed
+                    # download is in, and `data-steps="off"` is what the server
+                    # sends, so this measures a real state rather than a rigged
+                    # one. The theme is already concrete in the server's HTML.
+                    both = re.sub(SCRIPT_TAG, '', html, flags=re.S | re.I)
+                    if 'data-steps="off"' not in both:
+                        print(f'  {name}/{theme}: WARNING the both-panes capture '
+                              'is not in the no-script state; it measures nothing new')
+                    (OUT / f'{name}both-{theme}.html').write_text(both, encoding='utf-8')
     finally:
         owner.theme_pref = original
         db.session.commit()

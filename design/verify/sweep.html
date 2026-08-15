@@ -9,7 +9,10 @@
    sweep, and that cached sweep loaded cached pages linking cached stylesheets.
    Three layers of stale, all producing numbers that looked real and described
    an older build. Hence BUST on every URL below. */
-const PAGES  = ['dashboard','products','sale','credit','alerts','settings','purchases'];
+// 'saleboth' is the sale form with its stepping script stripped, so the
+// payment pane is on screen to be measured. A sweep only sees what is
+// visible, and it does not say when that is less than it was.
+const PAGES  = ['dashboard','products','sale','saleboth','credit','alerts','settings','purchases'];
 const THEMES = ['light','dark'];
 const BUST   = Date.now();
 

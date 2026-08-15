@@ -39,6 +39,9 @@
   --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
   --glass-backdrop: blur(10px);
   --rail-w: 140px;        /* the sidebar on a desktop screen */
+  --phone-tab-h: 58px;    /* the tappable row in the bottom bar */
+  --phone-tabs-h: 59px;   /* the bar itself, border included, so a sticky
+                             action bar can sit exactly on top of it */
 
   /* Surfaces that were literals until now, which is precisely why a light
      theme could not exist: every one of these is a white or black wash, and a
@@ -426,6 +429,14 @@ h1, h2, h3, h4, h5, h6 {
   white-space: nowrap;
 }
 
+/* Restores what `.btn` above quietly took away: this file's own .btn rule sets
+   padding at the same specificity as Bootstrap's .btn-lg and comes after it, so
+   btn-lg has never made a button any larger anywhere in the app. */
+.btn-lg {
+  padding: 0.6rem 1.25rem;
+  font-size: 1.05rem;
+}
+
 .btn-primary {
   background: var(--accent-primary);
   border: none;
@@ -797,7 +808,7 @@ thead.table-light>tr>th {
   /* --- Each row becomes a stacked card --- */
   .table-cards tbody tr {
     display: block;
-    background: rgba(0, 0, 0, 0.15);
+    background: var(--sunken);
     border: 1px solid var(--border-color);
     border-radius: 0.75rem;
     padding: 0.75rem 1rem;
@@ -815,7 +826,7 @@ thead.table-light>tr>th {
     align-items: flex-start;
     padding: 0.4rem 0 !important;
     border: none !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+    border-bottom: 1px solid var(--border-color) !important;
     gap: 0.75rem;
     text-align: right;
     overflow-wrap: anywhere;
@@ -854,7 +865,7 @@ thead.table-light>tr>th {
   .table-cards tbody td.cell-actions {
     justify-content: flex-end;
     padding-top: 0.5rem !important;
-    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-top: 1px solid var(--border-color) !important;
     border-bottom: none !important;
     margin-top: 0.25rem;
   }
@@ -1175,7 +1186,7 @@ a.text-decoration-none:hover {
   .phone-tab {
     flex: 1 1 0;                /* however many survive the permission checks */
     min-width: 0;
-    min-height: 58px;
+    min-height: var(--phone-tab-h);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1235,5 +1246,440 @@ a.text-decoration-none:hover {
      underneath it - including the Record Sale button at the foot of a form. */
   .main-content {
     padding-bottom: calc(70px + env(safe-area-inset-bottom, 0)) !important;
+  }
+}
+
+
+/* =============================================
+   RECORD A SALE — Phase C3
+
+   The page the business runs on, and the one most often held in one hand in a
+   doorway. Three things drive the layout:
+
+   1. It is two questions, not one. What is being bought, then who bought it and
+      how they paid. Asking both at once is what made the old page a wall.
+   2. The running total has to be visible while the items are being typed, not
+      only after scrolling past them.
+   3. Every control that gets tapped is 44px, because the alternative is a
+      mis-tap on a page that moves stock and takes money.
+   ============================================= */
+
+/* --- the two panes ---------------------------------------------------------
+
+   data-steps is "off" until the inline script sets it, so a browser with no
+   JavaScript gets both panes, no step indicator, and the plain long form that
+   worked before any of this. */
+.sale-form[data-steps="1"] .sale-pane[data-sale-step="2"],
+.sale-form[data-steps="2"] .sale-pane[data-sale-step="1"] {
+  display: none;
+}
+
+.sale-form[data-steps="off"] .sale-steps,
+.sale-form[data-steps="off"] .sale-next,
+.sale-form[data-steps="off"] .sale-back,
+.sale-form[data-steps="1"] .sale-submit,
+.sale-form[data-steps="1"] .sale-back,
+.sale-form[data-steps="2"] .sale-next {
+  display: none;
+}
+
+.sale-steps {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.25rem;
+}
+
+.sale-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.sale-step-n {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  font-size: 0.72rem;
+}
+
+.sale-step.is-current {
+  color: var(--text-primary);
+}
+
+.sale-step.is-current .sale-step-n {
+  background: var(--accent-primary);
+  border-color: transparent;
+  color: var(--on-accent);
+}
+
+.sale-step-line {
+  flex: 1 1 auto;
+  max-width: 3rem;
+  height: 2px;
+  background: var(--border-color);
+}
+
+/* --- the shape of the page ------------------------------------------------- */
+
+.sale-layout {
+  display: grid;
+  /* minmax(0, …) rather than a bare fraction: a grid track defaults to
+     min-content, so one long product name in the table would push the column
+     wider than its share and shove the summary off the screen. */
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.sale-main {
+  min-width: 0;
+}
+
+.sale-summary {
+  position: sticky;
+  top: 1rem;
+}
+
+.sale-summary-head,
+.sale-pane-head {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 0 0 1rem;
+}
+
+.sale-pane-head {
+  margin-top: 0.5rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sale-pane-head:first-child {
+  margin-top: 0;
+}
+
+.sale-totals {
+  margin: 0;
+}
+
+.sale-total-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.sale-total-row dt {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.sale-total-row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.sale-total-grand {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.sale-total-grand dt {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.sale-total-grand dd {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--accent-success);
+}
+
+.sale-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+/* --- fields ----------------------------------------------------------------
+
+   auto-fit rather than a fixed column count. The old page pinned four fields to
+   col-md-3, so on a narrow screen each got a quarter of very little; here a
+   column that cannot hold 220px stops being a column. */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+/* --- chips, standing in for two dropdowns ----------------------------------
+
+   The styling lives on the span rather than on `.chip:has(input:checked)`.
+   `:has` is unsupported on the older Android WebViews this is used on, and the
+   failure would be silent and total: no chip would ever look chosen. */
+.chip-set {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.chip-set-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+
+.chip {
+  position: relative;
+  display: flex;
+  margin: 0;
+}
+
+.chip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.chip span {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.chip input:checked + span {
+  background: var(--accent-primary);
+  border-color: transparent;
+  color: var(--on-accent);
+}
+
+.chip input:focus-visible + span {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* --- the item rows ---------------------------------------------------------- */
+
+.table-sale-items .col-qty {
+  width: 10.5rem;
+}
+
+.table-sale-items .col-price {
+  width: 11rem;
+}
+
+.table-sale-items .col-line {
+  width: 8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.table-sale-items .col-remove {
+  width: 3.5rem;
+}
+
+.remove-word {
+  display: none;
+}
+
+.qty-stepper {
+  display: flex;
+  align-items: stretch;
+}
+
+.qty-step {
+  flex: none;
+  width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--border-color);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.qty-step:first-child {
+  border-radius: 0.5rem 0 0 0.5rem;
+}
+
+.qty-step:last-child {
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.qty-stepper .qty-input {
+  min-width: 0;
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The buttons are the control now, and the native spinners are 12px of target
+   sitting inside a 44px one. */
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.qty-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.line-total {
+  color: var(--text-secondary);
+}
+
+/* =============================================
+   RECORD A SALE — narrow screens
+   ============================================= */
+
+@media (max-width: 991.98px) {
+  .sale-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The total follows you down the page instead of living under the items.
+     Sticky, not fixed: it settles into the end of the document rather than
+     covering the last row of a long sale. */
+  .sale-summary {
+    position: sticky;
+    top: auto;
+    bottom: 0;
+    z-index: 1030;              /* under the phone tab bar (1040) */
+  }
+
+  .sale-summary-card {
+    /* Frosting is transparency, and content scrolling underneath a translucent
+       action bar is unreadable at exactly the moment it matters. */
+    background: var(--bg-page);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0.75rem 0.75rem 0 0;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .sale-summary-head {
+    display: none;
+  }
+
+  .sale-totals {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .sale-total-row {
+    margin-bottom: 0;
+  }
+
+  .sale-total-grand {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .sale-actions {
+    flex-direction: row;
+    margin-top: 0.75rem;
+  }
+
+  .sale-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  /* Room for a thumb, not a mouse pointer. */
+  .sale-cancel {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 767.98px) {
+  /* Clear of the tab bar, which is fixed to the bottom of the viewport. */
+  .sale-summary {
+    bottom: calc(var(--phone-tabs-h) + env(safe-area-inset-bottom, 0));
+  }
+
+  /* 44px is the smallest target a thumb hits reliably. Measured rather than
+     assumed: every button on this form came out at 35px, because the padding
+     rule above is the only thing setting their height. */
+  .sale-form .btn {
+    min-height: 44px;
+  }
+
+  /* Each item is a card here, so the word earns its place beside the icon -
+     a lone bin at the foot of a card does not say what it removes. */
+  .remove-word {
+    display: inline;
+  }
+
+  .table-sale-items .remove-item {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  /* One field per line, full width. The whole complaint about this page was
+     three inputs sharing the space five read-only columns had left over. */
+  .table-cards.table-sale-items tbody td {
+    padding: 0.5rem 0 !important;
+  }
+
+  .table-sale-items .col-line {
+    width: auto;
+    display: flex !important;
+    justify-content: space-between;
+    text-align: left;
+  }
+
+  .table-sale-items .col-line::before {
+    display: inline !important;
+    margin-bottom: 0 !important;
+  }
+
+  .table-sale-items .line-total {
+    color: var(--text-primary);
+    font-weight: 700;
   }
 }

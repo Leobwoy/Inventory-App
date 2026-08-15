@@ -556,11 +556,12 @@ was measurement error, and was wrong. Measure against the colour actually in the
 
 ## In Progress
 
-- **Stage 3 — the interface redesign.** Shell complete: tokenised palette, light theme with
-  a per-user switch, the sidebar narrowed to a 140px icon-and-label rail, and phone
-  navigation moved to a bottom bar. Individual pages are still the old layouts in new
-  colours; the sale form and goods receipt are next, because that is where the user found a
-  real problem rather than a cosmetic one.
+- **Stage 3 — the interface redesign.** Shell complete (C1): tokenised palette, light theme
+  with a per-user switch, the sidebar narrowed to a 140px icon-and-label rail, and phone
+  navigation moved to a bottom bar. **C3, the sale form, is complete** — see below.
+  **C2, the dashboard, is still the old layout** and was skipped by mistake, not by
+  decision; it is the next thing to pick up. The remaining pages are still old layouts in
+  new colours.
 - **Answered 2026-08-13: Stage 3 first, as a full redesign.** 2.6 and 2.7 both score
   suppliers from purchase history and need 20–30 completed orders before they show
   anything — with no real customers yet, both would ship as empty screens. The user chose
@@ -576,6 +577,48 @@ was measurement error, and was wrong. Measure against the colour actually in the
   falsified. The contrast sweep also had a `length > 90` filter that was quietly skipping
   most of the prose on every page — removing it took the swept node count from 942 to 1266,
   still with zero failures.
+
+**C3 — Record a sale.** Two panes, one form: what is being bought, then who bought it and
+how they paid. The split is presentation only — one POST, one route, nothing held in the
+session between steps, and with no JavaScript both panes render and the page works exactly
+as it did. Which pane opens is decided *server-side* from where validation failed, because a
+rejected field behind a hidden pane is a page that reloads looking unchanged. On a desktop
+the running total sits beside the items; on a phone it sticks to the bottom of the screen
+directly above the tab bar. The two dropdowns became radio chips, styled through
+`input:checked + span` rather than `:has()`, which the older Android WebViews in this market
+do not support and would have failed at silently and totally.
+
+Three real defects found by measuring the page rather than looking at it:
+
+- **The sale date was `required` with no default**, so the browser refused to submit until
+  someone picked today's date by hand — every sale, from a phone. The first end-to-end
+  attempt produced no POST at all and no message. Now `default=date.today` (the callable: a
+  frozen `date.today()` would have the server offering the day it booted a week later).
+- **`.btn-lg` has never worked anywhere in the app.** This file's own `.btn { padding }`
+  rule matches at the same specificity as Bootstrap's `.btn-lg` and comes after it, so every
+  large button in every page has been rendering at the ordinary size.
+- **A required field on a hidden pane cannot be focused**, and a browser that cannot focus an
+  invalid control refuses to submit and says nothing — no bubble, no POST. Guarded on both
+  the step change and the submit.
+
+Measured at 375px: every tap target ≥ 44px, no horizontal overflow, the sticky total bar
+lands exactly on the tab bar's top edge. Contrast clean in both themes, worst 5.32:1 light
+and 6.10:1 dark.
+
+**The sweep had a blind spot, and it is closed.** It measures what is *visible*, so the
+second pane of a two-pane page was invisible to it — `sale` dropped from 80 checked nodes to
+78 when the page gained a pane, and said nothing. `capture.py` now takes a second shot of
+any page in `PANED` with every `<script>` stripped, which leaves the server's own
+`data-steps="off"` in place and both panes on screen. That is also the state a phone whose
+script failed to download is in, so it is worth measuring in its own right. `saleboth`
+checks 100 nodes against `sale`'s 78.
+
+Getting there cost an hour to a byte. The strip regex was written with `` in it, which
+became a **literal backspace character** in the source; `grep` and the terminal both render
+0x08 as nothing, so the line read perfectly, matched no scripts at all, and the sweep went
+on reporting the same node count. `findall` with the same pattern typed fresh matched 11.
+Only printing `repr()` of the source line found it. The pattern is now built from `chr()`
+calls, and the capture warns if the stripped copy is not in the no-script state.
 
 ## Next Up
 

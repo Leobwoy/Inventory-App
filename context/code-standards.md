@@ -41,6 +41,13 @@
   is the most likely cause of real-world abandonment.
 - Never trust a posted foreign key. Resolve it scoped to the business
   (see `_scoped_catalogue()` in `products/routes.py`).
+- A required field needs a default, or the browser blocks the submit and nothing on the
+  page says why. `DataRequired` renders `required`, and the browser then refuses to post
+  until the field is filled - no flash, no error, no request. `sale_date` sat like this
+  from the start: every sale needed today's date picked by hand, from a phone. Where the
+  answer is almost always the same, supply it: `default=date.today`, the **callable**, not
+  `date.today()`, which is evaluated once at import and leaves a long-running server
+  offering the day it booted.
 
 ## Templates
 
@@ -58,6 +65,24 @@
   has shipped twice: `offline.html` in 2.4b and the change-password gate in F-46, where a
   new employee was told to set a password on a page with no form. A signed-in page that
   wants the centred layout passes `standalone=True` and keeps `auth_content`.
+
+- **Never hide a pane that contains a required field.** A control the browser cannot focus
+  cannot be reported on, so an invalid one behind `display: none` makes the form refuse to
+  submit in complete silence - no bubble, no POST, nothing in the console. Any page that
+  shows part of a form at a time must find the first invalid field, bring its pane back and
+  call `reportValidity()` there. `templates/sales/add.html` does this on both the step
+  change and the submit.
+- **Do not rely on `.btn-lg`, `.btn-sm` or any Bootstrap sizing class for height.** This
+  project's own `.btn { padding: 0.5rem 1rem }` matches at the same specificity as
+  Bootstrap's size classes and is written after them, so it wins. `.btn-lg` did nothing
+  anywhere in the app until Phase C3 gave it a rule of its own. Measure a control's real
+  height in the browser before trusting a class name for it.
+
+- **Never write a regex through a shell heredoc without checking the bytes.** `` in a
+  pattern passed through one became a literal backspace (0x08) in the source. `grep`, the
+  terminal and every editor render it as nothing, so the line read exactly right, matched
+  nothing, and the tool it was in reported success. Build such patterns from `chr()` or
+  verify with `repr()` of the source line - not by looking at it.
 
 ## Migrations
 
