@@ -1130,3 +1130,100 @@ a.text-decoration-none:hover {
     border-left: 3px solid var(--accent-primary);
   }
 }
+
+/* --- Phone navigation -------------------------------------------------------
+
+   Hidden above 768px, where the rail already answers the question. Below it,
+   five destinations pinned under the thumb.
+
+   The drawer is not removed - More opens it, and it still holds everything.
+   This is a shortcut to the four things people actually open the app to do,
+   not a replacement for the menu. */
+
+.phone-tabs {
+  display: none;
+}
+
+@media (max-width: 767.98px) {
+  .phone-tabs {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1040;              /* under the drawer (1050), over the page */
+    background: var(--bg-sidebar);
+    border-top: 1px solid var(--border-color);
+    /* Solid, not frosted. A blur here costs GPU on the budget hardware this
+       market runs, on the one surface that is always on screen. */
+    backdrop-filter: none;
+    /* Clear of the iOS home indicator and Android gesture bar, which otherwise
+       sit on top of the last row of buttons. */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .phone-tab {
+    flex: 1 1 0;                /* however many survive the permission checks */
+    min-width: 0;
+    min-height: 58px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 0.4rem 0.15rem;
+    border: 0;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    text-transform: uppercase;
+    position: relative;
+  }
+
+  .phone-tab i {
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+
+  .phone-tab.active {
+    color: var(--accent-primary);
+  }
+
+  /* The mark sits on the top edge, where it reads as "this one" without
+     stealing height from a bar that has little to spare. */
+  .phone-tab.active::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 22%;
+    right: 22%;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--accent-primary);
+  }
+
+  .phone-tab .tab-count {
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    margin-left: 4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--accent-danger);
+    color: #fff;
+    font-size: 0.6rem;
+    line-height: 16px;
+    text-align: center;
+  }
+
+  /* The bar is fixed, so the last thing on every page would otherwise sit
+     underneath it - including the Record Sale button at the foot of a form. */
+  .main-content {
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0)) !important;
+  }
+}

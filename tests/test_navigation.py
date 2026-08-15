@@ -240,3 +240,66 @@ def test_the_tour_can_still_find_every_anchor(register, make_product):
 
     for anchor in anchors:
         assert f'id="{anchor}"' in body, f'the tour points at #{anchor}, which is gone'
+
+
+# --- the phone tab bar --------------------------------------------------------
+
+def test_the_phone_bar_offers_the_four_things_people_open_the_app_to_do(register):
+    """The drawer needs a stretch to the top-left corner — the hardest place to
+    reach one-handed, and this app is used one-handed, standing up."""
+    client, _business_id = register()
+    body = client.get('/').get_data(as_text=True)
+
+    for tab in ('tab-today', 'tab-sell', 'tab-stock', 'tab-owed', 'tab-more'):
+        assert f'id="{tab}"' in body, f'{tab} is missing from the phone bar'
+
+
+def test_the_bar_respects_permissions_like_every_other_link(register, make_staff):
+    """A clerk who cannot record a sale must not be given a Sell button that
+    403s. The bar flexes to whatever survives, so three tabs share the width
+    evenly rather than leaving a hole."""
+    _client, business_id = register()
+    clerk = make_staff(business_id, 'Sales Staff', 'clerk@ab.example.com',
+                       permissions=['products.view'])
+
+    body = clerk.get('/').get_data(as_text=True)
+
+    assert 'id="tab-stock"' in body
+    assert 'id="tab-sell"' not in body
+    assert 'id="tab-owed"' not in body
+    assert 'id="tab-more"' in body          # always, it is the way to everything
+
+
+def test_more_opens_the_same_drawer_as_the_hamburger(register):
+    """One menu, not two lists that can disagree about what exists."""
+    client, _business_id = register()
+    body = client.get('/').get_data(as_text=True)
+
+    script = body[body.index("const moreTab"):body.index('</script>', body.index("const moreTab"))]
+    assert "sidebar.classList.add('show')" in script
+
+
+def test_the_bar_is_phone_only(register):
+    """Above 768px the rail already answers the question, and a second
+    navigation would be two answers to it."""
+    client, _business_id = register()
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    default = css[css.index('.phone-tabs {'):]
+    default = default[:default.index('}')]
+    assert 'display: none' in default
+
+    phone = css[css.index('@media (max-width: 767.98px)'):]
+    assert 'display: flex' in phone[:phone.index('.phone-tab {')]
+
+
+def test_the_page_does_not_end_underneath_the_bar(register):
+    """It is fixed, so without room reserved the last thing on every page sits
+    behind it — including the Record Sale button at the foot of the form."""
+    client, _business_id = register()
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    phone = css[css.index('@media (max-width: 767.98px)'):]
+    assert 'padding-bottom: calc(70px' in phone
+    # And clear of the iOS home indicator, which sits on top of everything.
+    assert 'safe-area-inset-bottom' in phone

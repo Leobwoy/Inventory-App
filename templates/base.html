@@ -239,6 +239,43 @@
             {% block content %}{% endblock %}
         </div>
     </main>
+
+    {# --- Phone navigation --------------------------------------------------
+
+       The drawer needs a stretch to the top-left corner, which is the hardest
+       place on a phone to reach one-handed - and this app is used one-handed,
+       standing up, in a doorway. These five sit under the thumb.
+
+       Five destinations, not fifteen: the four things people open the app to
+       do, and More for the rest. Needs attention is not a tab - it lives on
+       Today, which is where its count already shows.
+
+       Each one is permission-gated like every other link, and the bar flexes to
+       however many survive, so a clerk with three of them gets three even
+       columns rather than a gap where Money Owed would have been. #}
+    <nav class="phone-tabs" aria-label="Main">
+      <a class="phone-tab" href="/" id="tab-today">
+        <i class="bi bi-grid-1x2"></i><span>Today</span>
+      </a>
+      {% if current_user.can('sales.create') %}
+      <a class="phone-tab" href="/sales/add" id="tab-sell">
+        <i class="bi bi-plus-lg"></i><span>Sell</span>
+      </a>
+      {% endif %}
+      {% if current_user.can('products.view') %}
+      <a class="phone-tab" href="/products/" id="tab-stock">
+        <i class="bi bi-box-seam"></i><span>Stock</span>
+      </a>
+      {% endif %}
+      {% if current_user.can('credit.view') and has_feature('credit_ledger') %}
+      <a class="phone-tab" href="/credit/" id="tab-owed">
+        <i class="bi bi-cash-stack"></i><span>Owed</span>
+      </a>
+      {% endif %}
+      <button type="button" class="phone-tab" id="tab-more" aria-label="More">
+        <i class="bi bi-list"></i><span>More</span>
+      </button>
+    </nav>
 </div>
 {% else %}
 <main class="auth-shell d-flex align-items-center justify-content-center flex-grow-1 w-100" style="min-height: 100vh; background-color: var(--bg-page);">
@@ -327,6 +364,32 @@
                 overlay.classList.remove('show');
             });
         }
+
+        // --- phone tabs -----------------------------------------------------
+        // More opens the same drawer the hamburger does, so there is one menu
+        // rather than two lists that can disagree.
+        const moreTab = document.getElementById('tab-more');
+        if (moreTab && sidebar && overlay) {
+            moreTab.addEventListener('click', function () {
+                sidebar.classList.add('show');
+                overlay.classList.add('show');
+            });
+        }
+
+        // Mark the tab you are on. Longest matching path wins, so /products/
+        // stays lit on /products/low-stock rather than falling back to Today.
+        (function () {
+            const tabs = [...document.querySelectorAll('.phone-tab[href]')];
+            let best = null;
+            tabs.forEach(function (tab) {
+                const href = tab.getAttribute('href');
+                const hit = href === '/' ? path === '/' : path.startsWith(href);
+                if (hit && (!best || href.length > best.getAttribute('href').length)) {
+                    best = tab;
+                }
+            });
+            if (best) { best.classList.add('active'); }
+        }());
 
         // --- light / dark ---------------------------------------------------
         // Repaints immediately and tells the server afterwards. Waiting for the
