@@ -224,11 +224,44 @@ def test_the_progress_track_is_not_bootstraps_near_white(client):
     """Bootstrap's `.progress` track is #e9ecef. On a dark card an empty bar
     renders as a solid light bar the full width of the card — reading as
     complete, the exact opposite of "0 of 5". Only visible in a browser, so it
-    is asserted against the stylesheet that ships."""
+    is asserted against the stylesheet that ships.
+
+    Asserts the *intent* rather than a literal. It used to match the exact rgba
+    string, which meant tokenising the colour broke a test that was still
+    perfectly satisfied — the track was as dark as it ever was, just named. A
+    test that fails when nothing it cares about changed is a test that will be
+    edited to pass rather than read.
+    """
+    import re
+
     css = client.get('/static/css/style.css').get_data(as_text=True)
 
-    assert '.progress {' in css
-    assert 'background-color: rgba(148, 163, 184, 0.2)' in css
+    rule = re.search(r'\.progress\s*\{([^}]*)\}', css)
+    assert rule, '.progress rule is gone; Bootstrap default would apply'
+    token = re.search(r'background-color:\s*var\((--[\w-]+)\)', rule.group(1))
+    assert token, '.progress must set a background-color'
+
+    value = re.search(rf'{token.group(1)}:\s*([^;]+);', css)
+    assert value, f'{token.group(1)} is used but never defined'
+
+    raw = value.group(1).strip()
+    # Both notations, because the failure this guards against is Bootstrap's
+    # #e9ecef — a hex. An rgb-only parser reads "#e9ecef" as the single digit 9
+    # and cheerfully passes, which is the one input it had to catch.
+    hex_match = re.fullmatch(r'#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})', raw)
+    if hex_match:
+        digits = hex_match.group(1)
+        if len(digits) == 3:
+            digits = ''.join(c * 2 for c in digits)
+        channels = [int(digits[i:i + 2], 16) for i in (0, 2, 4)]
+    else:
+        channels = [int(n) for n in re.findall(r'\d+', raw)[:3]]
+
+    assert len(channels) == 3, f'could not read a colour out of {raw!r}'
+    # Any dark-enough track passes; only near-white fails. #e9ecef averages 236.
+    assert sum(channels) / 3 < 200, (
+        f'progress track {raw!r} averages {sum(channels) / 3:.0f} — too light '
+        f'to read as empty on a dark card')
 
 
 def test_the_whole_checklist_costs_one_query(shop, make_product):

@@ -1,8 +1,56 @@
 <!DOCTYPE html>
-<html lang="en">
+{# data-bs-theme as well as data-theme, and both always concrete.
+
+   Bootstrap 5.3 scopes its variables as `:root,[data-bs-theme=light]` and ships
+   no prefers-color-scheme support at all, so a *missing* attribute is not
+   neutral - it is Bootstrap's light theme. That is the state this app has been
+   in all along: every modal, dropdown, offcanvas and toast has been running on
+   light defaults inside a dark shell, surviving only because style.css happens
+   to override the handful in use. #}
+<html lang="en" data-theme-pref="{{ theme_pref }}" data-theme="{{ theme }}" data-bs-theme="{{ theme }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    {# First thing in the head, and deliberately blocking. The server cannot
+       know what the device prefers, so "follow my device" has to be resolved
+       here - before anything paints, or every system-light user gets a flash of
+       dark on every page load. Failing silently leaves the server's answer,
+       which is the app exactly as it was. #}
+    <script>
+      (function () {
+        try {
+          var root = document.documentElement;
+          var mq = window.matchMedia('(prefers-color-scheme: light)');
+
+          function apply(notify) {
+            // Re-checked on every call rather than once at startup. The switch
+            // in the sidebar rewrites the preference without reloading, so a
+            // decision taken at registration time would be the wrong one a tap
+            // later - the device would go on overruling a deliberate choice.
+            if (root.dataset.themePref !== 'system') { return; }
+            var theme = mq.matches ? 'light' : 'dark';
+            root.dataset.theme = theme;
+            root.setAttribute('data-bs-theme', theme);
+            if (notify) {
+              document.dispatchEvent(new CustomEvent('tracktrack:theme',
+                                                     { detail: { theme: theme } }));
+            }
+          }
+
+          apply(false);
+
+          // A phone that turns itself dark at sunset does so with the app open.
+          // Following the device has to mean following it, not sampling it once
+          // at load and staying wrong until the next page.
+          if (mq.addEventListener) {
+            mq.addEventListener('change', function () { apply(true); });
+          } else if (mq.addListener) {
+            mq.addListener(function () { apply(true); });  // Safari below 14
+          }
+        } catch (e) { /* keep whatever the server rendered */ }
+      }());
+    </script>
     <title>{% block title %}TrackTrack{% endblock %}</title>
     {# Vendored, not CDN: a service worker cannot reliably cache cross-origin
        responses, and every CDN request is metered mobile data here. #}
@@ -175,8 +223,20 @@
         </nav>
         
         <div class="mt-auto pt-3 border-top" style="border-color: var(--border-color) !important;">
-            <div class="text-muted small mb-2"><i class="bi bi-person-badge"></i> Role View:</div>
-            <div class="text-white fw-bold">{{ current_user.role.name if current_user.role else 'No Role' }}</div>
+            <div class="d-flex align-items-center gap-2 mb-2">
+              <div class="text-muted small"><i class="bi bi-person-badge"></i> Role View:</div>
+              {# In the sidebar, not in Settings. Settings needs the
+                 settings.manage permission and applies to the whole business,
+                 so a sales clerk could never reach it - and the clerk standing
+                 in the sun is exactly who needs to switch to light. #}
+              <button type="button" id="theme-toggle" class="btn btn-sm btn-outline-secondary ms-auto"
+                      title="Switch between light and dark"
+                      aria-label="Switch between light and dark">
+                <i class="bi bi-sun" data-icon-light></i>
+                <i class="bi bi-moon-stars" data-icon-dark hidden></i>
+              </button>
+            </div>
+            <div class="fw-bold">{{ current_user.role.name if current_user.role else 'No Role' }}</div>
             <a href="/auth/logout" class="btn btn-sm btn-outline-danger mt-2 w-100">Logout</a>
         </div>
     </aside>
@@ -190,7 +250,7 @@
                 {% for category, message in messages %}
                   <div class="alert alert-{{ category }} alert-dismissible fade show" role="alert">
                     <i class="bi bi-info-circle me-2"></i> {{ message }}
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="alert" aria-label="Close"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
                   </div>
                 {% endfor %}
               {% endif %}
@@ -201,9 +261,46 @@
             {% block content %}{% endblock %}
         </div>
     </main>
+
+    {# --- Phone navigation --------------------------------------------------
+
+       The drawer needs a stretch to the top-left corner, which is the hardest
+       place on a phone to reach one-handed - and this app is used one-handed,
+       standing up, in a doorway. These five sit under the thumb.
+
+       Five destinations, not fifteen: the four things people open the app to
+       do, and More for the rest. Needs attention is not a tab - it lives on
+       Today, which is where its count already shows.
+
+       Each one is permission-gated like every other link, and the bar flexes to
+       however many survive, so a clerk with three of them gets three even
+       columns rather than a gap where Money Owed would have been. #}
+    <nav class="phone-tabs" aria-label="Main">
+      <a class="phone-tab" href="/" id="tab-today">
+        <i class="bi bi-grid-1x2"></i><span>Today</span>
+      </a>
+      {% if current_user.can('sales.create') %}
+      <a class="phone-tab" href="/sales/add" id="tab-sell">
+        <i class="bi bi-plus-lg"></i><span>Sell</span>
+      </a>
+      {% endif %}
+      {% if current_user.can('products.view') %}
+      <a class="phone-tab" href="/products/" id="tab-stock">
+        <i class="bi bi-box-seam"></i><span>Stock</span>
+      </a>
+      {% endif %}
+      {% if current_user.can('credit.view') and has_feature('credit_ledger') %}
+      <a class="phone-tab" href="/credit/" id="tab-owed">
+        <i class="bi bi-cash-stack"></i><span>Owed</span>
+      </a>
+      {% endif %}
+      <button type="button" class="phone-tab" id="tab-more" aria-label="More">
+        <i class="bi bi-list"></i><span>More</span>
+      </button>
+    </nav>
 </div>
 {% else %}
-<main class="auth-shell d-flex align-items-center justify-content-center flex-grow-1 w-100" style="min-height: 100vh; background-color: var(--bg-dark);">
+<main class="auth-shell d-flex align-items-center justify-content-center flex-grow-1 w-100" style="min-height: 100vh; background-color: var(--bg-page);">
     <div class="container w-100">
         {% block auth_content %}{% endblock %}
     </div>
@@ -287,6 +384,73 @@
             overlay.addEventListener('click', function() {
                 sidebar.classList.remove('show');
                 overlay.classList.remove('show');
+            });
+        }
+
+        // --- phone tabs -----------------------------------------------------
+        // More opens the same drawer the hamburger does, so there is one menu
+        // rather than two lists that can disagree.
+        const moreTab = document.getElementById('tab-more');
+        if (moreTab && sidebar && overlay) {
+            moreTab.addEventListener('click', function () {
+                sidebar.classList.add('show');
+                overlay.classList.add('show');
+            });
+        }
+
+        // Mark the tab you are on. Longest matching path wins, so /products/
+        // stays lit on /products/low-stock rather than falling back to Today.
+        (function () {
+            const tabs = [...document.querySelectorAll('.phone-tab[href]')];
+            let best = null;
+            tabs.forEach(function (tab) {
+                const href = tab.getAttribute('href');
+                const hit = href === '/' ? path === '/' : path.startsWith(href);
+                if (hit && (!best || href.length > best.getAttribute('href').length)) {
+                    best = tab;
+                }
+            });
+            if (best) { best.classList.add('active'); }
+        }());
+
+        // --- light / dark ---------------------------------------------------
+        // Repaints immediately and tells the server afterwards. Waiting for the
+        // round trip would make a one-tap switch feel broken on a slow
+        // connection, and if the save fails the only loss is that it reverts
+        // on the next page - not that the tap did nothing.
+        const themeBtn = document.getElementById('theme-toggle');
+        if (themeBtn) {
+            const root = document.documentElement;
+
+            function paintButton() {
+                const dark = root.getAttribute('data-theme') === 'dark';
+                // Show the thing you would switch *to*, not the state you are in.
+                themeBtn.querySelector('[data-icon-light]').hidden = !dark;
+                themeBtn.querySelector('[data-icon-dark]').hidden = dark;
+                themeBtn.title = dark ? 'Switch to light' : 'Switch to dark';
+                themeBtn.setAttribute('aria-label', themeBtn.title);
+            }
+            paintButton();
+            // The button shows the theme you would switch *to*. When the device
+            // changes it underneath us, the icon has to move with it or it lies.
+            document.addEventListener('tracktrack:theme', paintButton);
+
+            themeBtn.addEventListener('click', function () {
+                const next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                root.setAttribute('data-theme', next);
+                root.setAttribute('data-bs-theme', next);
+                root.setAttribute('data-theme-pref', next);
+                paintButton();
+
+                const body = new FormData();
+                body.append('theme', next);
+                body.append('csrf_token', '{{ csrf_token() }}');
+                fetch('{{ url_for("auth.set_theme") }}', {
+                    method: 'POST', body: body, credentials: 'same-origin'
+                }).catch(function () {
+                    // Offline. The screen is already right; it will revert on the
+                    // next load, which is a smaller failure than blocking the tap.
+                });
             });
         }
     });

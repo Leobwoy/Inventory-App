@@ -1,0 +1,112 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>contrast sweep</title>
+<body style="font:13px/1.5 ui-monospace,monospace;background:#111;color:#eee;padding:16px">
+<pre id="out">running…</pre>
+<script>
+/* Lives outside _shot/ because capture.py clears that directory — when this
+   sat inside it, the file was deleted, the browser served a cached copy of the
+   sweep, and that cached sweep loaded cached pages linking cached stylesheets.
+   Three layers of stale, all producing numbers that looked real and described
+   an older build. Hence BUST on every URL below. */
+const PAGES  = ['dashboard','products','sale','credit','alerts','settings','purchases'];
+const THEMES = ['light','dark'];
+const BUST   = Date.now();
+
+function parse(c){const n=(c.match(/[\d.]+/g)||[0,0,0]).map(Number);
+  return {r:n[0]||0,g:n[1]||0,b:n[2]||0,a:n.length>3?n[3]:1};}
+function over(f,b){return {r:f.a*f.r+(1-f.a)*b.r,g:f.a*f.g+(1-f.a)*b.g,
+  b:f.a*f.b+(1-f.a)*b.b,a:1};}
+function L(p){const m=[p.r,p.g,p.b].map(v=>{v/=255;
+  return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)});
+  return 0.2126*m[0]+0.7152*m[1]+0.0722*m[2];}
+function R(f,b){const x=L(f),y=L(b);
+  return (Math.max(x,y)+0.05)/(Math.min(x,y)+0.05);}
+
+function load(file){
+  return new Promise(res=>{
+    const f=document.createElement('iframe');
+    f.style.cssText='width:1366px;height:1000px;position:absolute;left:-99999px';
+    f.src='/static/_shot/'+file+'?v='+BUST;
+    f.onload=()=>{
+      // Open anything that folds before measuring. Collapsed nav groups are
+      // display:none, so the sweep skipped fourteen links a page - and those
+      // are reachable UI a person sees the moment they tap the group. A check
+      // that quietly stops checking is worse than no check.
+      const d=f.contentDocument;
+      d.querySelectorAll('.collapse').forEach(el=>el.classList.add('show'));
+      setTimeout(()=>res(f),150);
+    };
+    document.body.appendChild(f);
+  });
+}
+
+function sweep(doc,win){
+  function solidBg(el){
+    const stack=[]; let n=el;
+    while(n && n!==doc.documentElement){
+      const c=parse(win.getComputedStyle(n).backgroundColor);
+      if(c.a>0) stack.push(c);
+      if(c.a===1) break;
+      n=n.parentElement;
+    }
+    let base=parse(win.getComputedStyle(doc.body).backgroundColor);
+    if(!base.a) base=parse(win.getComputedStyle(doc.documentElement).backgroundColor);
+    if(!base.a) base={r:255,g:255,b:255,a:1};
+    for(let i=stack.length-1;i>=0;i--) base=over(stack[i],base);
+    return base;
+  }
+  const fails=[], seen={}; let checked=0;
+  doc.querySelectorAll('body *').forEach(el=>{
+    if(el.children.length && el.textContent.trim() ===
+       [...el.children].map(c=>c.textContent).join('').trim()) return;
+    const txt=(el.textContent||'').trim();
+    // No length cap. It was skipping every paragraph over ninety characters —
+    // which is most of the explanatory prose on the page, and prose is exactly
+    // what has to stay readable. Only the failure line is truncated, below.
+    if(!txt) return;
+    const cs=win.getComputedStyle(el);
+    if(cs.display==='none'||cs.visibility==='hidden'||el.offsetParent===null) return;
+    checked++;
+    const bg=solidBg(el), fg=over(parse(cs.color),bg), r=R(fg,bg);
+    const size=parseFloat(cs.fontSize), weight=parseInt(cs.fontWeight)||400;
+    const need = (size>=24 || (size>=18.66 && weight>=700)) ? 3 : 4.5;
+    if(r<need){
+      const key=(el.className||'')+'|'+cs.color;
+      if(!seen[key]){ seen[key]=1;
+        fails.push(`${r.toFixed(2)}/${need}  ${JSON.stringify(txt.slice(0,26))}  .${(el.className||'(none)').toString().slice(0,38)}`);}
+    }
+  });
+  return {checked, fails};
+}
+
+(async ()=>{
+  const lines=[]; let total=0, bad=0;
+  for(const theme of THEMES){
+    for(const page of PAGES){
+      const f=await load(`${page}-${theme}.html`);
+      const d=f.contentDocument, w=f.contentWindow;
+      const declared=d.documentElement.getAttribute('data-theme');
+      const cssHref=(d.querySelector('link[href*="style.css"]')||{}).href||'?';
+      // A capture rendered in the wrong theme would sweep clean and mean
+      // nothing. Report it as a failure rather than counting it as a pass.
+      if(declared !== theme){
+        bad++;
+        lines.push(`${(page+'/'+theme).padEnd(20)} WRONG THEME: file says ${declared}`);
+        f.remove();
+        continue;
+      }
+      const {checked,fails}=sweep(d,w);
+      total+=checked; bad+=fails.length;
+      lines.push(`${(page+'/'+theme).padEnd(20)} theme=${declared} css=${cssHref.split('v=')[1]||'?'} checked=${String(checked).padStart(3)} ${fails.length?'FAIL '+fails.length:'clean'}`);
+      fails.forEach(x=>lines.push('      '+x));
+      f.remove();
+    }
+  }
+  lines.push('');
+  lines.push(`TOTAL  ${total} text nodes, ${bad} distinct failures`);
+  document.getElementById('out').textContent = lines.join('\n');
+  window.__result = lines.join('\n');
+  window.__done = true;
+})();
+</script>

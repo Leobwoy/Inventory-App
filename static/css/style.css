@@ -14,13 +14,12 @@
    complete: the exact opposite of "0 of 5". The filled part is already the
    accent colour, so only the track needs saying. */
 .progress {
-    background-color: rgba(148, 163, 184, 0.2);
+    background-color: var(--progress-track);
 }
 
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
 
 :root {
-  --bg-dark: #0f172a;
+  --bg-page: #0f172a;
   --bg-sidebar: rgba(15, 23, 42, 0.85);
   --bg-card: rgba(30, 41, 59, 0.7);
   --bg-card-hover: rgba(30, 41, 59, 0.9);
@@ -28,8 +27,10 @@
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
   
-  --accent-primary: #3b82f6;
-  --accent-secondary: #8b5cf6;
+  /* Was #3b82f6, which is 3.98:1 on the card - under AA for body text, and
+     it is the link colour, so it was failing on ordinary prose. */
+  --accent-primary: #60a5fa;
+  --on-accent: #06142b;      /* text *on* the accent, e.g. a filled button */
   --accent-success: #10b981;
   --accent-danger: #ef4444;
   --accent-warning: #f59e0b;
@@ -37,6 +38,93 @@
   --border-color: rgba(255, 255, 255, 0.1);
   --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
   --glass-backdrop: blur(10px);
+  --rail-w: 140px;        /* the sidebar on a desktop screen */
+
+  /* Surfaces that were literals until now, which is precisely why a light
+     theme could not exist: every one of these is a white or black wash, and a
+     wash that reads as "slightly lighter" on navy reads as "invisible" on
+     white. Values here are unchanged - this only creates the seam. */
+  --table-stripe: rgba(255, 255, 255, 0.02);
+  --table-stripe-odd: rgba(255, 255, 255, 0.015);
+  --table-hover: rgba(255, 255, 255, 0.04);
+  --table-head-bg: rgba(0, 0, 0, 0.25);
+  --input-bg: rgba(0, 0, 0, 0.2);
+  --input-bg-focus: rgba(0, 0, 0, 0.3);
+  --focus-ring: rgba(96, 165, 250, 0.3);
+  --progress-track: rgba(148, 163, 184, 0.2);
+  --nav-hover: rgba(255, 255, 255, 0.06);
+  --stat-danger-bg: rgba(239, 68, 68, 0.12);
+  --sunken: rgba(0, 0, 0, 0.22);
+
+  /* Bootstrap's contextual backgrounds are rewritten wholesale further down,
+     so these reach roughly fifty badges across the app. */
+  --badge-success-bg: rgba(16, 185, 129, 0.2);
+  --badge-success-fg: #34d399;
+  --badge-success-line: rgba(16, 185, 129, 0.3);
+  --badge-warning-bg: rgba(245, 158, 11, 0.2);
+  --badge-warning-fg: #fbbf24;
+  --badge-warning-line: rgba(245, 158, 11, 0.3);
+  --badge-danger-bg: rgba(239, 68, 68, 0.2);
+  --badge-danger-fg: #f87171;
+  --badge-danger-line: rgba(239, 68, 68, 0.3);
+}
+
+/* --- Light -----------------------------------------------------------------
+
+   The same design in a different key, not a different design. Frosted white
+   cards on a soft blue-grey page, so a card still reads as raised; the blur
+   stays, because the glass is the identity and the user asked to keep it.
+
+   Every colour here was measured against the frosted card rather than picked
+   by eye. Two that look obvious and are not: #64748b, the natural slate for
+   muted text, fails at 4.2:1; and the dark theme's own #3b82f6 falls to 3.3:1
+   on white. Both are corrected below.
+   -------------------------------------------------------------------------- */
+[data-theme="light"] {
+  --bg-page: #e9eef5;
+  --bg-sidebar: rgba(255, 255, 255, 0.88);
+  --bg-card: rgba(255, 255, 255, 0.82);
+  --bg-card-hover: rgba(255, 255, 255, 0.96);
+
+  --text-primary: #0f172a;
+  --text-secondary: #52627a;          /* 5.9:1 — #64748b fails at 4.2 */
+
+  /* 5.8:1 on the page, 6.4 on a card. #2563eb measures 4.43 against this page
+     colour - under, not over, which is why it is not that. */
+  --accent-primary: #1d4ed8;
+  --on-accent: #ffffff;
+  --accent-success: #047857;
+  --accent-danger: #b91c1c;
+  --accent-warning: #854d0e;          /* #a16207 is marginal at 4.4 */
+
+  --border-color: rgba(15, 23, 42, 0.12);
+  --glass-shadow: 0 4px 30px rgba(15, 23, 42, 0.10);
+
+  /* The washes invert. A white wash on navy reads as "slightly raised"; the
+     same wash on white is invisible, so light needs a dark one. */
+  --table-stripe: rgba(15, 23, 42, 0.025);
+  --table-stripe-odd: rgba(15, 23, 42, 0.02);
+  --table-hover: rgba(29, 78, 216, 0.07);
+  --table-head-bg: rgba(15, 23, 42, 0.05);
+  --input-bg: rgba(255, 255, 255, 0.9);
+  --input-bg-focus: #ffffff;
+  --focus-ring: rgba(29, 78, 216, 0.28);
+  --progress-track: rgba(15, 23, 42, 0.12);
+  --nav-hover: rgba(29, 78, 216, 0.09);
+  --stat-danger-bg: rgba(185, 28, 28, 0.10);
+  --sunken: rgba(15, 23, 42, 0.05);
+
+  /* Opaque rather than translucent: a 20% tint over white is nearly white, so
+     the badge would lose its shape entirely. */
+  --badge-success-bg: #d1fae5;
+  --badge-success-fg: #065f46;
+  --badge-success-line: rgba(6, 95, 70, 0.25);
+  --badge-warning-bg: #fef3c7;
+  --badge-warning-fg: #854d0e;
+  --badge-warning-line: rgba(133, 77, 14, 0.25);
+  --badge-danger-bg: #fee2e2;
+  --badge-danger-fg: #991b1b;
+  --badge-danger-line: rgba(153, 27, 27, 0.25);
 }
 
 * {
@@ -45,7 +133,7 @@
 
 body {
   font-family: 'Inter', sans-serif;
-  background-color: var(--bg-dark);
+  background-color: var(--bg-page);
   color: var(--text-primary);
   margin: 0;
   display: flex;
@@ -62,13 +150,13 @@ body {
 }
 
 .sidebar {
-  width: 260px;
-  min-width: 260px;
+  width: var(--rail-w);
+  min-width: var(--rail-w);
   background: var(--bg-sidebar);
   backdrop-filter: var(--glass-backdrop);
   -webkit-backdrop-filter: var(--glass-backdrop);
   border-right: 1px solid var(--border-color);
-  padding: 1.5rem 1rem;
+  padding: 0.75rem 0.55rem;
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -78,10 +166,37 @@ body {
   overflow-y: auto;
 }
 
+/* --- The rail ------------------------------------------------------------
+
+   260px of sidebar was a quarter of a laptop screen spent on words the reader
+   already knows. This is 140px: the same icon, with the word underneath rather
+   than beside it.
+
+   It was 84px first, which technically fitted - but "Needs attention" broke
+   across two lines and "Administration" only just cleared, so every other row
+   was a different height and the whole column read as squeezed. 140 is the
+   width at which every label sits on one line.
+
+   Labels stay, deliberately. Icons alone save another 30px and cost every new
+   staff member their first morning guessing what a picture means - and hover,
+   the usual answer to that, does not exist on a phone.
+
+   Desktop only. Below 992px the sidebar is a slide-out drawer with room for
+   full-width rows, so it keeps them.
+   ------------------------------------------------------------------------- */
+
 .sidebar-header {
-  padding-bottom: 2rem;
-  margin-bottom: 1rem;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.5rem;
   border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: center;
+}
+
+/* The wordmark would fill the rail edge to edge; the logo alone still says
+   whose app it is, and the drawer below 992px puts the name back. */
+.sidebar-brand span {
+  display: none;
 }
 
 .sidebar-brand {
@@ -102,7 +217,7 @@ body {
 .sidebar-nav {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.15rem;
 }
 
 .nav-section-label {
@@ -121,22 +236,33 @@ body {
 
 .nav-group-toggle {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.6rem;
+  justify-content: center;
+  gap: 0.2rem;
   width: 100%;
   background: none;
   border: 0;
-  text-align: left;
-  color: var(--text-primary);
-  padding: 0.6rem 1rem;
-  border-radius: 0.5rem;
-  font-size: 0.95rem;
+  text-align: center;
+  color: var(--text-secondary);
+  padding: 0.5rem 0.3rem;
+  border-radius: 0.6rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1.2;
+  min-height: 60px;
+  position: relative;
+}
+
+.nav-group-toggle > i:first-child {
+  font-size: 1.2rem;
+  line-height: 1;
 }
 
 .nav-group-toggle:hover,
 .nav-group-toggle:focus-visible {
-  background: rgba(148, 163, 184, 0.12);
-  color: #fff;
+  background: var(--nav-hover);
+  color: var(--text-primary);
 }
 
 /* A visible focus ring, because this is a button reachable by keyboard and the
@@ -147,7 +273,12 @@ body {
 }
 
 .nav-group-caret {
-  font-size: 0.75rem;
+  position: absolute;
+  right: 5px;
+  top: 6px;
+  font-size: 0.55rem !important;
+  opacity: 0.7;
+  margin: 0 !important;
   transition: transform 0.18s ease;
 }
 
@@ -160,40 +291,80 @@ body {
 /* Marks the group you are currently inside, which stays useful once it is open
    and the heading is the only thing naming where you are. */
 .nav-group-toggle.has-active {
-  color: #fff;
+  color: var(--text-primary);
   font-weight: 600;
 }
 
+/* Children sit inside a tinted well, so an open group reads as one thing
+   rather than as more top-level items. */
+.nav-group-items {
+  background: var(--nav-hover);
+  border-radius: 0.6rem;
+  margin: 0.1rem 0;
+  padding: 0.15rem 0;
+}
+
 .nav-group-items .nav-link {
-  padding-left: 2.1rem;
-  font-size: 0.92rem;
+  padding: 0.45rem 0.2rem;
+  font-size: 0.66rem;
+  min-height: 48px;
+  gap: 0.2rem;
+}
+
+.nav-group-items .nav-link i {
+  font-size: 1rem;
 }
 
 .nav-link {
   color: var(--text-secondary);
-  padding: 0.75rem 1rem;
-  border-radius: 0.5rem;
+  padding: 0.5rem 0.2rem;
+  border-radius: 0.6rem;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.75rem;
-  font-weight: 500;
-  transition: all 0.2s ease;
+  justify-content: center;
+  gap: 0.3rem;
+  font-weight: 600;
+  font-size: 0.72rem;
+  line-height: 1.2;
+  text-align: center;
+  transition: background 0.15s ease, color 0.15s ease;
   text-decoration: none;
+  position: relative;
+  min-height: 60px;          /* a comfortable target, and even rows */
+}
+
+.nav-link i {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+/* The unread count sat at the end of a row that no longer exists. */
+.nav-link .badge {
+  position: absolute;
+  top: 4px;
+  right: 12px;
+  margin: 0 !important;
+  font-size: 0.6rem;
+  padding: 0.1rem 0.35rem;
 }
 
 .nav-link:hover, .nav-link.active {
-  background: rgba(255,255,255,0.05);
+  background: var(--nav-hover);
   color: var(--text-primary);
 }
 
+/* The active mark moves to the top edge: a left border on a 76px tile reads as
+   a stray line rather than as "you are here". */
 .nav-link.active {
-  background: linear-gradient(90deg, rgba(59,130,246,0.1) 0%, transparent 100%);
-  border-left: 3px solid var(--accent-primary);
+  background: var(--nav-hover);
+  color: var(--text-primary);
+  box-shadow: inset 0 3px 0 var(--accent-primary);
 }
 
 .main-content {
   flex-grow: 1;
-  margin-left: 260px;
+  margin-left: var(--rail-w);
   padding: 2rem;
   min-height: 100vh;
   min-width: 0;
@@ -223,7 +394,7 @@ body {
 h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
   font-weight: 600;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .text-muted {
@@ -244,6 +415,7 @@ h1, h2, h3, h4, h5, h6 {
 .stat-primary { background: rgba(59,130,246,0.1); color: var(--accent-primary); }
 .stat-success { background: rgba(16,185,129,0.1); color: var(--accent-success); }
 .stat-warning { background: rgba(245,158,11,0.1); color: var(--accent-warning); }
+.stat-danger  { background: var(--stat-danger-bg); color: var(--accent-danger); }
 
 /* Buttons */
 .btn {
@@ -257,11 +429,20 @@ h1, h2, h3, h4, h5, h6 {
 .btn-primary {
   background: var(--accent-primary);
   border: none;
+  /* Both halves, or a lighter accent leaves white text on pale blue. */
+  --bs-btn-color: var(--on-accent);
+  --bs-btn-hover-color: var(--on-accent);
+  --bs-btn-active-color: var(--on-accent);
+  color: var(--on-accent);
 }
 .btn-primary:hover {
-  background: #2563eb;
+  /* The plain value first: a browser without color-mix drops the second
+     declaration and would otherwise be left with no hover background at all. */
+  background: var(--accent-primary);
+  background: color-mix(in srgb, var(--accent-primary) 85%, var(--text-primary));
+  color: var(--on-accent);
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(59,130,246,0.3);
+  box-shadow: 0 4px 12px var(--focus-ring);
 }
 
 .btn-outline-primary {
@@ -281,9 +462,9 @@ h1, h2, h3, h4, h5, h6 {
   width: 100%;
   --bs-table-bg: transparent;
   --bs-table-color: var(--text-primary);
-  --bs-table-striped-bg: rgba(255, 255, 255, 0.02);
+  --bs-table-striped-bg: var(--table-stripe);
   --bs-table-striped-color: var(--text-primary);
-  --bs-table-hover-bg: rgba(255, 255, 255, 0.04);
+  --bs-table-hover-bg: var(--table-hover);
   --bs-table-hover-color: var(--text-primary);
   --bs-table-border-color: var(--border-color);
 }
@@ -303,7 +484,7 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-primary);
 }
 .table>thead {
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--table-head-bg);
 }
 .table>thead>tr>th {
   color: var(--text-secondary);
@@ -339,15 +520,15 @@ h1, h2, h3, h4, h5, h6 {
 .table-light>th,
 .table-light>td,
 thead.table-light>tr>th {
-  background-color: rgba(0, 0, 0, 0.25) !important;
+  background-color: var(--table-head-bg) !important;
   color: var(--text-secondary) !important;
-  --bs-table-bg: rgba(0, 0, 0, 0.25);
+  --bs-table-bg: var(--table-head-bg);
 }
 
 /* Override Bootstrap .table-striped */
 .table-striped>tbody>tr:nth-of-type(odd)>* {
-  background-color: rgba(255, 255, 255, 0.015);
-  --bs-table-bg-type: rgba(255, 255, 255, 0.015);
+  background-color: var(--table-stripe-odd);
+  --bs-table-bg-type: var(--table-stripe-odd);
 }
 
 /* Cards (Bootstrap .card used in invoices) – dark override */
@@ -365,16 +546,16 @@ thead.table-light>tr>th {
 
 /* Forms */
 .form-control, .form-select {
-  background-color: rgba(0,0,0,0.2);
+  background-color: var(--input-bg);
   border: 1px solid var(--border-color);
   color: var(--text-primary);
   border-radius: 0.5rem;
   padding: 0.75rem 1rem;
 }
 .form-control:focus, .form-select:focus {
-  background-color: rgba(0,0,0,0.3);
+  background-color: var(--input-bg-focus);
   border-color: var(--accent-primary);
-  box-shadow: 0 0 0 0.25rem rgba(59,130,246,0.25);
+  box-shadow: 0 0 0 0.25rem var(--focus-ring);
   color: var(--text-primary);
 }
 .form-label {
@@ -389,9 +570,9 @@ thead.table-light>tr>th {
   font-weight: 500;
   font-size: 0.75rem;
 }
-.bg-success { background-color: rgba(16,185,129,0.2) !important; color: #34d399 !important; border: 1px solid rgba(16,185,129,0.3); }
-.bg-warning { background-color: rgba(245,158,11,0.2) !important; color: #fbbf24 !important; border: 1px solid rgba(245,158,11,0.3); }
-.bg-danger { background-color: rgba(239,68,68,0.2) !important; color: #f87171 !important; border: 1px solid rgba(239,68,68,0.3); }
+.bg-success { background-color: var(--badge-success-bg) !important; color: var(--badge-success-fg) !important; border: 1px solid var(--badge-success-line); }
+.bg-warning { background-color: var(--badge-warning-bg) !important; color: var(--badge-warning-fg) !important; border: 1px solid var(--badge-warning-line); }
+.bg-danger { background-color: var(--badge-danger-bg) !important; color: var(--badge-danger-fg) !important; border: 1px solid var(--badge-danger-line); }
 
 /* Alerts */
 .alert {
@@ -507,7 +688,7 @@ thead.table-light>tr>th {
 /* =============================================
    RESPONSIVE: Tablets & Mobile (< 992px)
    ============================================= */
-@media (max-width: 991px) {
+@media (max-width: 991.98px) {
   /* --- Sidebar --- */
   .sidebar {
     left: -260px;
@@ -637,7 +818,7 @@ thead.table-light>tr>th {
     border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
     gap: 0.75rem;
     text-align: right;
-    word-break: break-word;
+    overflow-wrap: anywhere;
   }
 
   .table-cards tbody td:last-child {
@@ -799,5 +980,260 @@ thead.table-light>tr>th {
   .btn-sm {
     font-size: 0.75rem;
     padding: 0.3rem 0.5rem;
+  }
+}
+
+
+/* --- Things the light theme exposed ---------------------------------------
+
+   None of these were wrong before, exactly; they were unstated, and an unstated
+   colour falls through to a Bootstrap default chosen for a white page. On navy
+   that was invisible or ignored. On white it is simply wrong. */
+
+a {
+  color: var(--accent-primary);
+}
+a:hover {
+  color: var(--accent-primary);
+}
+/* Links wrapping a whole card must not paint their contents blue. */
+a.text-decoration-none,
+a.text-decoration-none:hover {
+  color: inherit;
+}
+
+/* Totals rows: a band that reads as a summary in either theme, replacing
+   .bg-dark, which was a near-black stripe across a white table. */
+.table-total > * {
+  background: var(--table-head-bg) !important;
+  font-weight: 600;
+}
+
+/* The sale form's totals panel, and anything else that should read as inset. */
+.panel-sunken {
+  background: var(--sunken);
+  border: 1px solid var(--border-color);
+}
+
+/* Pagination followed .bg-dark + .text-light, so it inverted on light. */
+.page-link-active {
+  background: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+  color: var(--on-accent) !important;
+}
+.page-link-themed {
+  background: var(--bg-card) !important;
+  border-color: var(--border-color) !important;
+  color: var(--text-primary) !important;
+}
+.page-link-themed.disabled {
+  color: var(--text-secondary) !important;
+}
+
+/* Bootstrap's own semantic colours are tuned for a white page, and land just
+   under AA on our light card: #dc3545 at 4.45, #0d6efd at 4.43, #6c757d at
+   4.02. Point them at the tokens, which are measured in both themes. */
+.btn-outline-primary {
+  --bs-btn-color: var(--accent-primary);
+  --bs-btn-border-color: var(--accent-primary);
+  --bs-btn-hover-bg: var(--accent-primary);
+  --bs-btn-hover-border-color: var(--accent-primary);
+}
+.btn-outline-secondary {
+  --bs-btn-color: var(--text-secondary);
+  --bs-btn-border-color: var(--border-color);
+  --bs-btn-hover-bg: var(--nav-hover);
+  --bs-btn-hover-color: var(--text-primary);
+  --bs-btn-hover-border-color: var(--text-secondary);
+}
+.btn-outline-danger {
+  --bs-btn-color: var(--accent-danger);
+  --bs-btn-border-color: var(--accent-danger);
+  --bs-btn-hover-bg: var(--accent-danger);
+  --bs-btn-hover-border-color: var(--accent-danger);
+}
+.text-danger { color: var(--accent-danger) !important; }
+.text-success { color: var(--accent-success) !important; }
+.text-warning { color: var(--accent-warning) !important; }
+
+
+/* --- Rail footer -----------------------------------------------------------
+   Role View, the light/dark switch and Logout, in 140px. Stacked and centred;
+   the role name wraps rather than being cut off. */
+@media (min-width: 992px) {
+  .sidebar > .mt-auto {
+    text-align: center;
+  }
+  .sidebar > .mt-auto > .d-flex {
+    flex-direction: column;
+    gap: 0.35rem !important;
+    align-items: center;
+  }
+  .sidebar > .mt-auto > .d-flex > .text-muted {
+    font-size: 0.65rem;
+    line-height: 1.2;
+  }
+  .sidebar > .mt-auto #theme-toggle {
+    margin: 0 !important;
+    width: 38px;
+    padding: 0.25rem 0;
+  }
+  .sidebar > .mt-auto > .fw-bold {
+    font-size: 0.75rem;
+    overflow-wrap: anywhere;
+  }
+  .sidebar > .mt-auto > .btn {
+    font-size: 0.72rem;
+    padding: 0.3rem 0.2rem;
+  }
+}
+
+/* Below 992px the sidebar slides out as a drawer with room to spare, so it
+   keeps full-width rows: icon beside the word, the way it has always been. */
+@media (max-width: 991.98px) {
+  .sidebar {
+    width: 260px;
+    min-width: 260px;
+    padding: 1.5rem 1rem;
+  }
+  .sidebar-header {
+    justify-content: flex-start;
+    padding-bottom: 2rem;
+    margin-bottom: 1rem;
+  }
+  .sidebar-brand span {
+    display: inline;
+  }
+  .sidebar-nav {
+    gap: 0.5rem;
+  }
+  .nav-link,
+  .nav-group-toggle {
+    flex-direction: row;
+    justify-content: flex-start;
+    text-align: left;
+    gap: 0.75rem;
+    font-size: 0.95rem;
+    padding: 0.75rem 1rem;
+    min-height: 0;
+  }
+  .nav-link .badge {
+    position: static;
+    margin-left: auto !important;
+    font-size: 0.75rem;
+  }
+  .nav-group-caret {
+    position: static;
+    font-size: 0.75rem !important;
+    margin-left: auto !important;
+  }
+  .nav-group-items {
+    background: none;
+  }
+  .nav-group-items .nav-link {
+    padding: 0.6rem 1rem 0.6rem 2.1rem;
+    font-size: 0.92rem;
+    min-height: 0;
+  }
+  .nav-link.active {
+    box-shadow: none;
+    border-left: 3px solid var(--accent-primary);
+  }
+}
+
+/* --- Phone navigation -------------------------------------------------------
+
+   Hidden above 768px, where the rail already answers the question. Below it,
+   five destinations pinned under the thumb.
+
+   The drawer is not removed - More opens it, and it still holds everything.
+   This is a shortcut to the four things people actually open the app to do,
+   not a replacement for the menu. */
+
+.phone-tabs {
+  display: none;
+}
+
+@media (max-width: 767.98px) {
+  .phone-tabs {
+    display: flex;
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1040;              /* under the drawer (1050), over the page */
+    background: var(--bg-sidebar);
+    border-top: 1px solid var(--border-color);
+    /* Solid, not frosted. A blur here costs GPU on the budget hardware this
+       market runs, on the one surface that is always on screen. */
+    backdrop-filter: none;
+    /* Clear of the iOS home indicator and Android gesture bar, which otherwise
+       sit on top of the last row of buttons. */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  .phone-tab {
+    flex: 1 1 0;                /* however many survive the permission checks */
+    min-width: 0;
+    min-height: 58px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 0.4rem 0.15rem;
+    border: 0;
+    background: none;
+    color: var(--text-secondary);
+    font-size: 0.625rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-decoration: none;
+    text-transform: uppercase;
+    position: relative;
+  }
+
+  .phone-tab i {
+    font-size: 1.15rem;
+    line-height: 1;
+  }
+
+  .phone-tab.active {
+    color: var(--accent-primary);
+  }
+
+  /* The mark sits on the top edge, where it reads as "this one" without
+     stealing height from a bar that has little to spare. */
+  .phone-tab.active::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 22%;
+    right: 22%;
+    height: 3px;
+    border-radius: 0 0 3px 3px;
+    background: var(--accent-primary);
+  }
+
+  .phone-tab .tab-count {
+    position: absolute;
+    top: 5px;
+    left: 50%;
+    margin-left: 4px;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 4px;
+    border-radius: 8px;
+    background: var(--accent-danger);
+    color: #fff;
+    font-size: 0.6rem;
+    line-height: 16px;
+    text-align: center;
+  }
+
+  /* The bar is fixed, so the last thing on every page would otherwise sit
+     underneath it - including the Record Sale button at the foot of a form. */
+  .main-content {
+    padding-bottom: calc(70px + env(safe-area-inset-bottom, 0)) !important;
   }
 }

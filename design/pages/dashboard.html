@@ -1,0 +1,303 @@
+<!-- @dsCard group="Pages" -->
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Dashboard — desktop and phone</title>
+<link rel="stylesheet" href="../tokens.css">
+<style>
+  body { margin: 0; background: #f8fafc; font-family: system-ui, sans-serif; }
+  @media (prefers-color-scheme: dark) { body { background: #020617; }
+    .band { color: #94a3b8 !important; } }
+  .wrap { max-width: 1060px; margin: 0 auto; padding: 24px; }
+  .band { font: 600 12px system-ui; letter-spacing: 0.08em; text-transform: uppercase;
+    color: #64748b; margin: 30px 0 10px; }
+  .band:first-child { margin-top: 0; }
+  .pair { display: flex; gap: 24px; flex-wrap: wrap; align-items: flex-start; }
+
+  /* --- desktop shell (Direction B) --- */
+  .desk { display: grid; grid-template-columns: var(--rail-w) 1fr; min-height: 540px; }
+  .rail { background: var(--rail); backdrop-filter: var(--blur);
+    border-right: 1px solid var(--line); display: flex; flex-direction: column;
+    align-items: center; padding: var(--s3) 0; gap: var(--s1); }
+  .logo { width: 30px; height: 30px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--accent), #22c55e); margin-bottom: var(--s4); }
+  .ic { width: 38px; height: 38px; border-radius: 10px; display: grid; place-items: center;
+    color: var(--ink-soft); font-size: 16px; position: relative; cursor: pointer; }
+  .ic.on { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
+  .ic .pip { position: absolute; top: 6px; right: 6px; width: 7px; height: 7px;
+    border-radius: 50%; background: var(--bad); }
+  .ic.last { margin-top: auto; }
+  .shell { display: flex; flex-direction: column; min-width: 0; }
+  .bar { display: flex; align-items: center; gap: var(--s3); padding: var(--s3) var(--s5);
+    background: var(--bar); backdrop-filter: var(--blur);
+    border-bottom: 1px solid var(--line); }
+  .bar h1 { font-size: var(--t-lg); font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+  .find { flex: 1; max-width: 320px; margin-left: var(--s3); display: flex;
+    align-items: center; gap: var(--s2);
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    border: 1px solid var(--line); border-radius: var(--radius-sm);
+    padding: 7px var(--s3); color: var(--ink-soft); font-size: var(--t-sm); }
+  .body { padding: var(--s5); overflow: auto; }
+  .cols { display: grid; grid-template-columns: 1.6fr 1fr; gap: var(--s4); }
+  .chart { width: 100%; height: 148px; display: block; }
+  .feed { list-style: none; margin: 0; padding: 0; }
+  .feed li { display: flex; gap: var(--s3); padding: var(--s3) 0;
+    border-bottom: 1px solid var(--line); font-size: var(--t-sm); align-items: flex-start; }
+  .feed li:last-child { border-bottom: 0; }
+  .feed .tag { width: 5px; align-self: stretch; border-radius: 3px; flex: none; }
+  .feed .tag.b { background: var(--bad); }
+  .feed .tag.s { background: var(--good); }
+  .feed .tag.p { background: var(--accent); }
+  .feed .tag.w { background: var(--warn); }
+  .feed .t { color: var(--ink-soft); font-size: var(--t-xs); margin-left: auto; }
+  .feed b { font-weight: 600; }
+  .feed .q { color: var(--ink-soft); font-size: var(--t-xs); }
+
+  /* --- phone shell (Direction C) --- */
+  .phone { width: 375px; }
+  .ptop { display: flex; align-items: center; gap: var(--s3); padding: var(--s4);
+    border-bottom: 2px solid var(--line); background: var(--bar); }
+  .ptop .biz { font-size: var(--t-xs); color: var(--ink-soft);
+    text-transform: uppercase; letter-spacing: 0.08em; }
+  .ptop h1 { font-size: var(--t-lg); font-weight: 700; margin: 1px 0 0; }
+  .ptop .sw { margin-left: auto; width: 44px; height: 44px; flex: none;
+    border: 2px solid var(--line); background: transparent; color: var(--ink);
+    border-radius: 11px; font-size: 16px; cursor: pointer; }
+  .pbody { padding: var(--s4); display: grid; gap: var(--s3); }
+  .duo { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3); }
+  .box { background: var(--surface); border: 2px solid var(--line);
+    border-radius: var(--radius); padding: var(--s4); }
+  .box .lab { font-size: var(--t-xs); color: var(--ink-soft); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.06em; }
+  .box .val { font-size: var(--t-xl); font-weight: 800; line-height: 1.15; margin-top: 2px; }
+  .box .val.bad { color: var(--bad); }
+  .plist { list-style: none; margin: 0; padding: 0; border: 2px solid var(--line);
+    border-radius: var(--radius); overflow: hidden; }
+  .plist li { display: flex; align-items: center; gap: var(--s3); min-height: var(--tap);
+    padding: var(--s3) var(--s4); border-bottom: 1px solid var(--line);
+    background: var(--surface); }
+  .plist li:last-child { border-bottom: 0; }
+  .plist .nm { font-weight: 600; font-size: var(--t-sm); }
+  .plist .sub { font-size: var(--t-xs); color: var(--ink-soft); }
+  .plist .badge { margin-left: auto; }
+  .h2 { font-size: var(--t-xs); text-transform: uppercase; font-weight: 700;
+    letter-spacing: 0.08em; color: var(--ink-soft); margin: var(--s2) 0 0; }
+  .tabs { display: grid; grid-template-columns: repeat(5, 1fr);
+    border-top: 2px solid var(--line); background: var(--bar); }
+  .tab { min-height: 58px; display: grid; place-items: center; gap: 3px;
+    color: var(--ink-soft); font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.03em; padding: var(--s2) 0;
+    position: relative; cursor: pointer; }
+  .tab i { font-size: 18px; }
+  .tab.on { color: var(--accent); }
+  .tab.on::before { content: ""; position: absolute; top: 0; left: 24%; right: 24%;
+    height: 3px; background: var(--accent); border-radius: 0 0 3px 3px; }
+  .tab .pip { position: absolute; top: 6px; right: 50%; margin-right: -19px;
+    min-width: 17px; height: 17px; border-radius: 9px; background: var(--bad);
+    color: #fff; font-size: 10px; display: grid; place-items: center; padding: 0 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="band">Desktop · dark · frosted glass kept</div>
+  <div class="tt" data-theme="dark">
+    <div class="desk">
+      <aside class="rail">
+        <div class="logo"></div>
+        <div class="ic on"><i class="bi bi-grid-1x2"></i></div>
+        <div class="ic"><i class="bi bi-bell"></i><span class="pip"></span></div>
+        <div class="ic"><i class="bi bi-box-seam"></i></div>
+        <div class="ic"><i class="bi bi-cart3"></i></div>
+        <div class="ic"><i class="bi bi-truck"></i></div>
+        <div class="ic"><i class="bi bi-cash-stack"></i></div>
+        <div class="ic"><i class="bi bi-bar-chart"></i></div>
+        <div class="ic last"><i class="bi bi-moon-stars"></i></div>
+      </aside>
+      <div class="shell">
+        <div class="bar">
+          <h1>Dashboard</h1>
+          <div class="find"><i class="bi bi-search"></i> Search products, sales, customers…</div>
+          <button class="btn btn-primary" style="margin-left:auto"><i class="bi bi-plus-lg"></i> Record a sale</button>
+          <button class="btn btn-ghost btn-icon"><i class="bi bi-bell"></i></button>
+        </div>
+        <div class="body">
+          <div class="strip" style="margin-bottom:var(--s4)">
+            <div class="cell"><div class="lab">Sales · 7 days</div>
+              <div class="val accent">₵785</div><div class="d up">▲ ₵620 on last week</div></div>
+            <div class="cell"><div class="lab">Owed to you</div>
+              <div class="val">₵1,240</div><div class="d">3 customers</div></div>
+            <div class="cell"><div class="lab">Restock</div>
+              <div class="val">3</div><div class="d">1 out of stock</div></div>
+            <div class="cell"><div class="lab">Products</div>
+              <div class="val">16</div><div class="d">tracked</div></div>
+          </div>
+          <div class="cols">
+            <div class="card">
+              <h2><i class="bi bi-graph-up-arrow"></i> Sales trend
+                <a class="more" href="#">Full report →</a></h2>
+              <svg class="chart" viewBox="0 0 520 148" preserveAspectRatio="none">
+                <defs><linearGradient id="d1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.30"/>
+                  <stop offset="100%" stop-color="#60a5fa" stop-opacity="0"/></linearGradient></defs>
+                <line x1="0" y1="37" x2="520" y2="37" stroke="rgba(148,163,184,0.13)"/>
+                <line x1="0" y1="74" x2="520" y2="74" stroke="rgba(148,163,184,0.13)"/>
+                <line x1="0" y1="111" x2="520" y2="111" stroke="rgba(148,163,184,0.13)"/>
+                <path d="M0,132 L87,130 L174,128 L260,104 L347,120 L434,124 L520,26 L520,148 L0,148 Z" fill="url(#d1)"/>
+                <path d="M0,132 L87,130 L174,128 L260,104 L347,120 L434,124 L520,26"
+                      fill="none" stroke="#60a5fa" stroke-width="2.5" stroke-linejoin="round"/>
+                <circle cx="520" cy="26" r="4.5" fill="#60a5fa"/>
+              </svg>
+            </div>
+            <div class="card">
+              <h2><i class="bi bi-bell"></i> Needs attention
+                <span class="badge badge-bad" style="margin-left:var(--s2)">3</span>
+                <a class="more" href="#">View all →</a></h2>
+              <ul class="feed">
+                <li><span class="tag b"></span><span><b>1 product out of stock</b><br><span class="q">Club Beer 330ml — every sale you cannot make</span></span></li>
+                <li><span class="tag w"></span><span><b>2 batches expiring soon</b><br><span class="q">Earliest goes on 24 Aug</span></span></li>
+                <li><span class="tag w"></span><span><b>1 customer overdue past 60 days</b><br><span class="q">Adjei Enterprise — ₵420, 62 days</span></span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="band">Desktop · light</div>
+  <div class="tt" data-theme="light">
+    <div class="desk">
+      <aside class="rail">
+        <div class="logo"></div>
+        <div class="ic on"><i class="bi bi-grid-1x2"></i></div>
+        <div class="ic"><i class="bi bi-bell"></i><span class="pip"></span></div>
+        <div class="ic"><i class="bi bi-box-seam"></i></div>
+        <div class="ic"><i class="bi bi-cart3"></i></div>
+        <div class="ic"><i class="bi bi-truck"></i></div>
+        <div class="ic"><i class="bi bi-cash-stack"></i></div>
+        <div class="ic"><i class="bi bi-bar-chart"></i></div>
+        <div class="ic last"><i class="bi bi-sun"></i></div>
+      </aside>
+      <div class="shell">
+        <div class="bar">
+          <h1>Dashboard</h1>
+          <div class="find"><i class="bi bi-search"></i> Search products, sales, customers…</div>
+          <button class="btn btn-primary" style="margin-left:auto"><i class="bi bi-plus-lg"></i> Record a sale</button>
+          <button class="btn btn-ghost btn-icon"><i class="bi bi-bell"></i></button>
+        </div>
+        <div class="body">
+          <div class="strip" style="margin-bottom:var(--s4)">
+            <div class="cell"><div class="lab">Sales · 7 days</div>
+              <div class="val accent">₵785</div><div class="d up">▲ ₵620 on last week</div></div>
+            <div class="cell"><div class="lab">Owed to you</div>
+              <div class="val">₵1,240</div><div class="d">3 customers</div></div>
+            <div class="cell"><div class="lab">Restock</div>
+              <div class="val">3</div><div class="d">1 out of stock</div></div>
+            <div class="cell"><div class="lab">Products</div>
+              <div class="val">16</div><div class="d">tracked</div></div>
+          </div>
+          <div class="cols">
+            <div class="card">
+              <h2><i class="bi bi-graph-up-arrow"></i> Sales trend
+                <a class="more" href="#">Full report →</a></h2>
+              <svg class="chart" viewBox="0 0 520 148" preserveAspectRatio="none">
+                <defs><linearGradient id="d2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#2563eb" stop-opacity="0.20"/>
+                  <stop offset="100%" stop-color="#2563eb" stop-opacity="0"/></linearGradient></defs>
+                <line x1="0" y1="37" x2="520" y2="37" stroke="rgba(15,23,42,0.07)"/>
+                <line x1="0" y1="74" x2="520" y2="74" stroke="rgba(15,23,42,0.07)"/>
+                <line x1="0" y1="111" x2="520" y2="111" stroke="rgba(15,23,42,0.07)"/>
+                <path d="M0,132 L87,130 L174,128 L260,104 L347,120 L434,124 L520,26 L520,148 L0,148 Z" fill="url(#d2)"/>
+                <path d="M0,132 L87,130 L174,128 L260,104 L347,120 L434,124 L520,26"
+                      fill="none" stroke="#2563eb" stroke-width="2.5" stroke-linejoin="round"/>
+                <circle cx="520" cy="26" r="4.5" fill="#2563eb"/>
+              </svg>
+            </div>
+            <div class="card">
+              <h2><i class="bi bi-bell"></i> Needs attention
+                <span class="badge badge-bad" style="margin-left:var(--s2)">3</span>
+                <a class="more" href="#">View all →</a></h2>
+              <ul class="feed">
+                <li><span class="tag b"></span><span><b>1 product out of stock</b><br><span class="q">Club Beer 330ml — every sale you cannot make</span></span></li>
+                <li><span class="tag w"></span><span><b>2 batches expiring soon</b><br><span class="q">Earliest goes on 24 Aug</span></span></li>
+                <li><span class="tag w"></span><span><b>1 customer overdue past 60 days</b><br><span class="q">Adjei Enterprise — ₵420, 62 days</span></span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="band">Phone · solid surfaces, no blur, navigation in thumb reach</div>
+  <div class="pair">
+    <div class="tt phone is-phone" data-theme="light">
+      <div class="ptop">
+        <div><div class="biz">Accra Beverage</div><h1>Today</h1></div>
+        <button class="sw"><i class="bi bi-moon-stars"></i></button>
+      </div>
+      <div class="pbody">
+        <div class="hero">
+          <div class="lab">Sales this week</div>
+          <div class="val">₵785.00</div>
+          <div class="d">▲ ₵620 on last week</div>
+        </div>
+        <div class="duo">
+          <div class="box"><div class="lab">Owed to you</div><div class="val num">₵1,240</div></div>
+          <div class="box"><div class="lab">Restock</div><div class="val num bad">3</div></div>
+        </div>
+        <button class="btn btn-primary btn-lg"><i class="bi bi-plus-lg"></i> Record a sale</button>
+        <h3 class="h2">Needs you today</h3>
+        <ul class="plist">
+          <li><div><div class="nm">Club Beer 330ml</div><div class="sub">0 left · reorder at 24</div></div><span class="badge badge-bad">Out</span></li>
+          <li><div><div class="nm">Malta Guinness</div><div class="sub">6 left · reorder at 24</div></div><span class="badge badge-warn">Low</span></li>
+          <li><div><div class="nm">Adjei Enterprise</div><div class="sub">₵420 · 62 days</div></div><span class="badge badge-warn">Overdue</span></li>
+        </ul>
+      </div>
+      <nav class="tabs">
+        <div class="tab on"><i class="bi bi-grid-1x2"></i>Today</div>
+        <div class="tab"><i class="bi bi-plus-lg"></i>Sell</div>
+        <div class="tab"><i class="bi bi-box-seam"></i>Stock</div>
+        <div class="tab"><i class="bi bi-cash-stack"></i>Owed<span class="pip">3</span></div>
+        <div class="tab"><i class="bi bi-list"></i>More</div>
+      </nav>
+    </div>
+
+    <div class="tt phone is-phone" data-theme="dark">
+      <div class="ptop">
+        <div><div class="biz">Accra Beverage</div><h1>Today</h1></div>
+        <button class="sw"><i class="bi bi-sun"></i></button>
+      </div>
+      <div class="pbody">
+        <div class="hero">
+          <div class="lab">Sales this week</div>
+          <div class="val">₵785.00</div>
+          <div class="d">▲ ₵620 on last week</div>
+        </div>
+        <div class="duo">
+          <div class="box"><div class="lab">Owed to you</div><div class="val num">₵1,240</div></div>
+          <div class="box"><div class="lab">Restock</div><div class="val num bad">3</div></div>
+        </div>
+        <button class="btn btn-primary btn-lg"><i class="bi bi-plus-lg"></i> Record a sale</button>
+        <h3 class="h2">Needs you today</h3>
+        <ul class="plist">
+          <li><div><div class="nm">Club Beer 330ml</div><div class="sub">0 left · reorder at 24</div></div><span class="badge badge-bad">Out</span></li>
+          <li><div><div class="nm">Malta Guinness</div><div class="sub">6 left · reorder at 24</div></div><span class="badge badge-warn">Low</span></li>
+          <li><div><div class="nm">Adjei Enterprise</div><div class="sub">₵420 · 62 days</div></div><span class="badge badge-warn">Overdue</span></li>
+        </ul>
+      </div>
+      <nav class="tabs">
+        <div class="tab on"><i class="bi bi-grid-1x2"></i>Today</div>
+        <div class="tab"><i class="bi bi-plus-lg"></i>Sell</div>
+        <div class="tab"><i class="bi bi-box-seam"></i>Stock</div>
+        <div class="tab"><i class="bi bi-cash-stack"></i>Owed<span class="pip">3</span></div>
+        <div class="tab"><i class="bi bi-list"></i>More</div>
+      </nav>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

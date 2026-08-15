@@ -29,6 +29,27 @@ GROUPS = ['nav-group-catalogue', 'nav-group-sales',
           'nav-group-purchasing', 'nav-group-admin']
 
 
+def media_block(css, opener, which=0):
+    """One @media block, ended at its matching brace.
+
+    Slicing to the end of the stylesheet meant a rule several blocks later could
+    satisfy an assertion about this one. `which` picks among repeats of the same
+    selector; -1 takes the last.
+    """
+    starts = [m.start() for m in re.finditer(re.escape(opener), css)]
+    assert starts, f'no {opener} block in the stylesheet'
+    i = starts[which]
+    depth, j = 0, css.index('{', i)
+    for k in range(j, len(css)):
+        if css[k] == '{':
+            depth += 1
+        elif css[k] == '}':
+            depth -= 1
+            if depth == 0:
+                return css[i:k + 1]
+    raise AssertionError(f'{opener} is never closed')
+
+
 def sidebar(body):
     """Just the sidebar, so a match in the page body cannot be mistaken for nav."""
     start = body.find('<aside class="sidebar"')
@@ -192,3 +213,122 @@ def test_a_stored_null_cannot_take_the_sidebar_down(register):
 
     assert "typeof parsed === 'object'" in body
     assert 'Array.isArray(parsed)' in body
+
+
+# --- the rail ----------------------------------------------------------------
+
+def test_every_nav_item_still_carries_its_words(register):
+    """The sidebar narrowed from 260px to 140px, icon above label rather than
+    beside it. Icons alone would have saved another 50px and cost every new
+    staff member their first morning guessing what a picture means, and hover,
+    the usual answer, does not exist on a phone.
+
+    Asserted against the sidebar alone. The first version of this ended in
+    `or word in body`, which every one of these words satisfies from the page
+    content by itself - it would have stayed green with the labels stripped
+    out entirely.
+    """
+    client, _business_id = register()
+    nav = sidebar(client.get('/').get_data(as_text=True))
+
+    for word in ('Dashboard', 'Needs attention', 'Products', 'Catalogue',
+                 'Sales', 'Purchasing', 'Reports', 'Administration'):
+        assert word in nav, f'{word} lost its label'
+
+
+def test_the_rail_is_desktop_only(register):
+    """Below 992px the sidebar is a slide-out drawer with room to spare, so it
+    keeps full-width rows. Narrowing it there would shrink a menu that already
+    had the whole screen."""
+    client, _business_id = register()
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    mobile = media_block(css, '@media (max-width: 991.98px)', which=-1)
+    # Anchored: a bare `'width: 260px' in mobile` is also satisfied by the
+    # `min-width` on the next line, so the width itself could go and this would
+    # not notice.
+    assert re.search(r'(?<!-)width:\s*260px', mobile), 'the drawer must stay wide'
+    assert 'flex-direction: row' in mobile, 'rows go back to icon-beside-word'
+
+
+def test_the_tour_can_still_find_every_anchor(register, make_product):
+    """The tour points at seven ids that live in this sidebar, and a step whose
+    anchor is missing is dropped **silently** — by design, so permissions work.
+    Restructuring the nav could therefore shorten the tour with nothing
+    reporting it."""
+    import re
+
+    client, business_id = register()
+    make_product(business_id, sku='BA-750')
+    body = client.get('/').get_data(as_text=True)
+
+    steps = re.search(r'var steps = \[(.*?)\];', body, re.S)
+    assert steps, 'the tour step list is gone'
+    anchors = re.findall(r"anchor:\s*'#([^']+)'", steps.group(1))
+    assert len(anchors) >= 6, f'only {len(anchors)} steps survived'
+
+    for anchor in anchors:
+        assert f'id="{anchor}"' in body, f'the tour points at #{anchor}, which is gone'
+
+
+# --- the phone tab bar --------------------------------------------------------
+
+def test_the_phone_bar_offers_the_four_things_people_open_the_app_to_do(register):
+    """The drawer needs a stretch to the top-left corner — the hardest place to
+    reach one-handed, and this app is used one-handed, standing up."""
+    client, _business_id = register()
+    body = client.get('/').get_data(as_text=True)
+
+    for tab in ('tab-today', 'tab-sell', 'tab-stock', 'tab-owed', 'tab-more'):
+        assert f'id="{tab}"' in body, f'{tab} is missing from the phone bar'
+
+
+def test_the_bar_respects_permissions_like_every_other_link(register, make_staff):
+    """A clerk who cannot record a sale must not be given a Sell button that
+    403s. The bar flexes to whatever survives, so three tabs share the width
+    evenly rather than leaving a hole."""
+    _client, business_id = register()
+    clerk = make_staff(business_id, 'Sales Staff', 'clerk@ab.example.com',
+                       permissions=['products.view'])
+
+    body = clerk.get('/').get_data(as_text=True)
+
+    assert 'id="tab-stock"' in body
+    assert 'id="tab-sell"' not in body
+    assert 'id="tab-owed"' not in body
+    assert 'id="tab-more"' in body          # always, it is the way to everything
+
+
+def test_more_opens_the_same_drawer_as_the_hamburger(register):
+    """One menu, not two lists that can disagree about what exists."""
+    client, _business_id = register()
+    body = client.get('/').get_data(as_text=True)
+
+    script = body[body.index("const moreTab"):body.index('</script>', body.index("const moreTab"))]
+    assert "sidebar.classList.add('show')" in script
+
+
+def test_the_bar_is_phone_only(register):
+    """Above 768px the rail already answers the question, and a second
+    navigation would be two answers to it."""
+    client, _business_id = register()
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    default = css[css.index('.phone-tabs {'):]
+    default = default[:default.index('}')]
+    assert 'display: none' in default
+
+    phone = css[css.index('@media (max-width: 767.98px)'):]
+    assert 'display: flex' in phone[:phone.index('.phone-tab {')]
+
+
+def test_the_page_does_not_end_underneath_the_bar(register):
+    """It is fixed, so without room reserved the last thing on every page sits
+    behind it — including the Record Sale button at the foot of the form."""
+    client, _business_id = register()
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    phone = css[css.index('@media (max-width: 767.98px)'):]
+    assert 'padding-bottom: calc(70px' in phone
+    # And clear of the iOS home indicator, which sits on top of everything.
+    assert 'safe-area-inset-bottom' in phone

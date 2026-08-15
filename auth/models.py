@@ -82,6 +82,25 @@ class User(UserMixin, db.Model):
     # has been shown the app, not whether this browser has.
     tour_seen_at = db.Column(db.DateTime)
 
+    # 'system' | 'light' | 'dark'. Same reasoning as tour_seen_at - it belongs
+    # to the person, not the browser, so the shop tablet and their own phone
+    # agree. And not to the business: the owner at a desk and the clerk in a
+    # market doorway want opposite things, and only one of them could win.
+    #
+    # 'system' is stored as itself rather than resolved to a colour. Saving the
+    # resolved value would freeze whatever the device said on the day they
+    # registered and never follow it again.
+    theme_pref = db.Column(db.String(8), nullable=False, server_default='system')
+
+    #: What the server renders before the browser has had a say. 'system'
+    #: resolves to dark here and is corrected in the page head - so with
+    #: JavaScript off you get exactly the app that existed before this feature.
+    THEMES = ('system', 'light', 'dark')
+
+    @property
+    def resolved_theme(self):
+        return self.theme_pref if self.theme_pref in ('light', 'dark') else 'dark'
+
     permissions = db.relationship(
         'Permission',
         secondary='user_permission',

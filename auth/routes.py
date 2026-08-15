@@ -401,6 +401,37 @@ def tour_seen():
     return '', 204
 
 
+@auth_bp.route('/theme', methods=['POST'])
+@login_required
+def set_theme():
+    """Record which theme this person wants. Not permission-gated, on purpose.
+
+    Settings is behind `settings.manage` and is a business-wide form, so a
+    control living only there would be unreachable for a Sales Staff member -
+    and the clerk standing in a market doorway in full sun is exactly who needs
+    to switch to light.
+
+    204 rather than a redirect: the caller is a fetch from the page they are
+    still reading, and the browser has already applied the change locally.
+    """
+    wanted = (request.form.get('theme') or '').strip()
+    if wanted not in User.THEMES:
+        return jsonify({'error': 'Unknown theme.'}), 400
+
+    # Conditional UPDATE, and the audit entry follows the rowcount rather than
+    # the in-memory value. `current_user` can be stale - a second device, or a
+    # double tap whose first request has not committed - and an entry written
+    # for an UPDATE that changed nothing is a record of a decision nobody made.
+    changed = (User.query
+               .filter(User.id == current_user.id, User.theme_pref != wanted)
+               .update({'theme_pref': wanted}, synchronize_session=False))
+    if changed == 1:
+        audit.log('user.theme_changed', entity_type='user',
+                  entity_id=current_user.id, theme=wanted)
+    db.session.commit()
+    return '', 204
+
+
 @auth_bp.route('/users/<int:user_id>/reset_password', methods=['POST'])
 @login_required
 @permission_required('users.manage')

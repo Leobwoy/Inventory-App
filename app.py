@@ -165,7 +165,15 @@ def create_app():
         # from the value the subscription is actually created with. The register
         # page has three separate render calls; passing it to each is how the
         # fourth one ends up saying nothing.
-        return {'has_feature': has_feature, 'uom': uom, 'trial_days': TRIAL_DAYS}
+        # Theme travels with every render because it sits on <html>, which is
+        # above every block a template could set it from.
+        theme_pref = 'system'
+        if getattr(current_user, 'is_authenticated', False):
+            theme_pref = current_user.theme_pref or 'system'
+        resolved = theme_pref if theme_pref in ('light', 'dark') else 'dark'
+
+        return {'has_feature': has_feature, 'uom': uom, 'trial_days': TRIAL_DAYS,
+                'theme_pref': theme_pref, 'theme': resolved}
 
     @app.route('/sw.js')
     def service_worker():

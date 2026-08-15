@@ -24,3 +24,6 @@ restore_upload.sql
 .idea/
 *.swp
 *.swo
+design/tokens.css
+static/_shot/
+static/_sweep.html
