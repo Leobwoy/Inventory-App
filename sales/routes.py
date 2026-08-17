@@ -14,7 +14,7 @@ from auth.decorators import permission_required, requires_feature
 from sqlalchemy import func
 from sqlalchemy.orm import joinedload
 from decimal import Decimal
-from services import audit, credit as credit_service, limits, listing, pricing, stock
+from services import audit, credit as credit_service, limits, listing, pricing, stock, uom
 
 # Sorting by value needs the totals subquery, so it is applied in the view
 # rather than here; it still has to be in the whitelist to be accepted.
@@ -183,6 +183,21 @@ def add_sale():
                                can_discount=current_user.can('sales.discount'),
                                max_discount=current_user.business.max_discount_percent)
 
+                # Which unit this line was rung up in. Gated three times, in
+                # this order and for the same reasons purchases/routes.py does
+                # it: the plan may not include conversion, the product may not
+                # have one, and the business may not sell that unit. Hiding the
+                # selector enforces nothing - a hand-posted unit must not buy a
+                # conversion nobody paid for.
+                sold_unit = uom.BASE
+                if limits.has_feature('uom_conversion'):
+                    asked = item_form.sell_unit.data or uom.BASE
+                    if asked in uom.sell_units(product):
+                        sold_unit = asked
+
+                typed_quantity = item_form.quantity.data
+                base_quantity = uom.to_base(product, typed_quantity, sold_unit)
+
                 # The server decides the price. A posted value is only a request:
                 # readonly in the template never stopped an edited POST (F-07).
                 charged, deviation = pricing.resolve(
@@ -190,21 +205,27 @@ def add_sale():
                     business=current_user.business,
                     requested_price=item_form.price_at_sale.data,
                     may_discount=current_user.can('sales.discount'),
+                    unit=sold_unit,
                 )
 
                 sale_item = SaleItem()
                 sale_item.product_id = product.id
-                sale_item.quantity = item_form.quantity.data
-                sale_item.price_at_sale = charged
+                # Base units on the row; what was rung up alongside it, so the
+                # invoice can say "2 cartons" without any sum having to know.
+                sale_item.quantity = base_quantity
+                sale_item.sell_unit = sold_unit
+                sale_item.sold_quantity = typed_quantity
+                sale_item.price_at_sale = uom.price_to_base(product, charged, sold_unit)
                 # Keep what it listed for, so a discount is still visible on the
                 # invoice and in reports long after the product is repriced.
-                sale_item.list_price = Decimal(product.unit_price or 0)
+                sale_item.list_price = uom.price_to_base(
+                    product, uom.price_for(product, sold_unit), sold_unit)
                 sale.items.append(sale_item)
                 deviations.append((product, deviation))
 
                 # Stock moves only through the service, which draws down FEFO and
                 # refreshes the cached quantity from the batch sum (F-12).
-                stock.deduct_fefo(product, item_form.quantity.data, current_user.business_id)
+                stock.deduct_fefo(product, base_quantity, current_user.business_id)
 
             db.session.flush()   # sale.id, needed by the audit entries
             for product, deviation in deviations:

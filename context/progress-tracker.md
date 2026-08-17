@@ -835,6 +835,50 @@ sentence reading back the derived per-piece figure, so a carton price typed into
 box shows ₵1,050.00 a bottle *before* saving rather than weeks later.
 `uom.cost_per_purchase_unit()` already existed for this and was called from nowhere.
 
+### Stage U progress
+
+**U1 — a pack has a price of its own.** `Product.pack_price` (nullable, null means
+`count × unit_price`) and `Product.sell_unit`. Two CHECK constraints, one overdue:
+`units_per_purchase_uom >= 1` was never enforced — `uom.factor()` clamped bad counts at read
+time, hiding broken rows rather than preventing them. `to_base`/`cost_to_base` now check
+`has_conversion` themselves; they were correct only because both call sites happened to guard
+first, and the sale path is the third caller.
+
+**U2 — the sale path.** A sale line carries the unit it was rung up in.
+`SaleItem.quantity` stays base units and `price_at_sale` stays per base unit, so the four
+places that sum `price_at_sale * quantity` — `services/credit.py:47`, `credit/models.py:71`,
+`reports/routes.py:94,100` — keep working untouched, as does every stock query. `sell_unit`
+and `sold_quantity` are added only so the invoice can say "2 cartons" instead of "48
+bottles", and both are frozen history for the same reason `list_price` is.
+
+Three things that would have been wrong and were caught by writing the arithmetic down:
+
+- **F-41, again, on the side the customer pays.** A carton at ₵1,000 for 24 is ₵41.666… a
+  bottle; at two decimals two cartons bill ₵2,000.16 against the ₵2,000.00 agreed.
+  `price_at_sale` and `list_price` widened to `Numeric(14,6)`, matching
+  `PurchaseOrderItem.unit_cost`.
+- **The below-cost floor compared a carton price against a bottle's cost.** Cost is stored
+  per base unit; `requested` is per unit sold. A carton that cost ₵921.60 would have passed
+  the floor at ₵500. It converts with `uom.cost_per_purchase_unit` now.
+- **`pricing.resolve` skipped the `is_finite()` check** that `code-standards.md:131` requires
+  and `api/routes.py:226` already performed. `NumberRange(min=0)` has no max, so
+  `Decimal('Infinity')` reached it and came back out as the charged price.
+
+**The widening leaked, and the suite caught it.** Two tests failed the moment
+`price_at_sale` became `Numeric(14,6)`: a total read `0.300000`, and the overpayment guard
+compared a tendered `800.00` against an outstanding `800.000000` and refused a correct
+payment. Storage precision was right; letting it escape was not. Money now rounds once at
+the boundary where a person reads or pays it — `credit.sale_total()` quantises, and the SQL
+sum in `services/credit.py` rounds. The old test asserting `str(total) == '0.30'` was
+asserting the *column width*, not the guarantee, and now asserts at the money boundary
+instead. A new test covers what a customer is told they owe, which nothing covered before.
+
+**A gate that is defensive rather than testable, recorded so nobody deletes it as dead.**
+The API path checks `uom_conversion` before honouring a posted unit, but `offline` and
+`uom_conversion` are both `standard` tier, so every plan that can sync also has conversion.
+They are two features sharing a tier, not one feature — and a queued sale can arrive days
+after a downgrade. The product-level half of that gate *is* reachable and is tested.
+
 ## Open Questions
 
 - **Self-service password reset still does not exist (F-43), but the lockout risk is

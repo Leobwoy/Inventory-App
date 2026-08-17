@@ -44,7 +44,15 @@ def _sale_totals_subquery(business_id):
     return (
         db.session.query(
             SaleItem.sale_id.label('sale_id'),
-            func.coalesce(func.sum(SaleItem.price_at_sale * SaleItem.quantity), 0).label('total'),
+            # Rounded to pesewas here, not left at the column's precision.
+            # price_at_sale is Numeric(14, 6) so that a pack price divided by its
+            # count stays exact in storage - but a sale is worth an amount of
+            # money a person pays, and 0.300000 is not a sum anyone hands over.
+            # Leaving it wide also broke the overpayment guard, which compared a
+            # tendered 800.00 against an outstanding 800.000000.
+            func.round(
+                func.coalesce(func.sum(SaleItem.price_at_sale * SaleItem.quantity), 0),
+                2).label('total'),
         )
         .join(Sale, Sale.id == SaleItem.sale_id)
         .filter(Sale.business_id == business_id)

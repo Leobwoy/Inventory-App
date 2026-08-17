@@ -17,6 +17,12 @@ class SaleItemForm(FlaskForm):
     # Optional: the server resolves the price from the product and treats anything
     # submitted here as a request, subject to the discount policy (F-07).
     price_at_sale = DecimalField('Unit Price', validators=[Optional(), NumberRange(min=0)])
+    # Which unit the quantity and price above are in. The server re-decides it
+    # against the plan and the product, exactly as the purchase order does -
+    # this only says what was asked for.
+    sell_unit = SelectField('Sold by', coerce=str, default='base',
+                            choices=[('base', 'Single'), ('purchase', 'Carton')],
+                            validators=[Optional()])
 
 class SaleForm(FlaskForm):
     items = FieldList(FormField(SaleItemForm), min_entries=1, max_entries=20)

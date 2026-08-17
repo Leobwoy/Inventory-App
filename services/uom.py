@@ -179,3 +179,19 @@ def unit_label(product, unit=BASE):
     if unit == PURCHASE and has_conversion(product):
         return product.purchase_uom or 'unit'
     return product.base_uom or 'pcs'
+
+
+def price_to_base(product, price, unit=BASE):
+    """A price for one sold unit, expressed per base unit.
+
+    Six decimals when it is derived, for the reason F-41 established on the buy
+    side and which bites harder here: a carton at 1,000 for 24 is 41.666... a
+    bottle, and rounding that to 41.67 bills 2,000.16 for the 48 bottles the
+    customer agreed 2,000.00 for. A price typed directly in base units is
+    already exact and stays at 2dp.
+    """
+    price = Decimal(str(price or 0))
+    if unit != PURCHASE or not has_conversion(product):
+        return price.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
+    return (price / Decimal(factor(product))).quantize(
+        Decimal('0.000001'), rounding=ROUND_HALF_UP)

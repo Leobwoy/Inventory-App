@@ -162,7 +162,17 @@ def test_totals_are_summed_as_decimal_not_float(shop_with_sales):
     total = sum((i.price_at_sale * i.quantity for i in SaleItem.query.all()), Decimal('0'))
     assert isinstance(total, Decimal)
     assert total == Decimal('0.30')
-    assert str(total) == '0.30'
+    assert total == Decimal('0.30')
+
+    # Not `str(total) == '0.30'` any more. price_at_sale is Numeric(14, 6)
+    # since packs could be sold - a pack price divided by its count has to
+    # stay exact in storage - so a raw row sum reads 0.300000. That is the
+    # column doing its job, not a defect. What must be exactly two decimals
+    # is money at the point a person reads or pays it, so assert it there.
+    from credit.models import sale_total
+    from sales.models import Sale
+
+    assert str(sale_total(Sale.query.first())) == '0.30'
 
 
 def test_stored_prices_are_decimal(shop_with_sales):

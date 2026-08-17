@@ -131,6 +131,13 @@
   `pack_price` are typed, `Numeric(10,2)`. `PurchaseOrderItem.unit_cost` is derived by
   dividing a pack cost by its count and is `Numeric(14,6)` — at 2dp, ₵1.00 a carton of 24
   records ₵96.00 against ₵100.00 paid over 100 cartons (F-41).
+- **Six decimals are for storage; two are for people.** Widening a money column to hold a
+  derived figure exactly is right, and letting that width escape is not. `price_at_sale`
+  went to `Numeric(14,6)` and immediately leaked: a total read `0.300000`, and the
+  overpayment guard compared a tendered `800.00` against an outstanding `800.000000` and
+  refused a correct payment. Money rounds **once**, at the boundary where it is read or
+  compared — `credit.sale_total()` and the SQL sum in `services/credit.py` both quantise.
+  A test asserting `str(total)` is asserting the column width, not the money.
 - **A price that cannot be derived must be stored.** A pack price is not `count × unit_price`
   — the difference *is* the wholesale discount. Deriving it silently would delete the reason
   a shop buys a case.
