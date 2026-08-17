@@ -14,7 +14,7 @@
 | Reports | ReportLab, pandas, openpyxl, XlsxWriter | PDF / Excel / CSV export |
 | Hosting | Render (app) + Neon (Postgres), Frankfurt | Free tier, no expiry clock |
 | Server | Gunicorn, via the repo `Dockerfile` | Runs `flask db upgrade` on start |
-| Tests | pytest against real PostgreSQL | 458 tests; migrations, not `create_all()` |
+| Tests | pytest against real PostgreSQL | 665 tests; migrations, not `create_all()` |
 | Scheduling | GitHub Actions cron to an HTTP endpoint | No worker process; see Subscription Lifecycle |
 
 Frankfurt is chosen over US or Cape Town regions because West African undersea cables
@@ -73,7 +73,15 @@ Blueprints must not import each other's route modules. Cross-domain work goes th
   `PurchaseOrderItem.unit_cost` is `Numeric(14, 6)` because it is *derived*, by dividing a
   line cost by a pack quantity; at two decimals that rounding is real money across a carton
   of 24. Money a human types or reads stays at two.
-- Quantities are integers in **base units**.
+- Quantities are integers in **base units**, on every side. Buying converts at the edge
+  (`services/uom.to_base`) and, since Stage U, so does selling: a sale line carries the unit
+  it was typed in and is converted before `services/stock.py` sees it. Nothing downstream of
+  that ever asks which unit a number is in.
+- **Two selling prices, one of them not derivable.** `Product.unit_price` is per base unit;
+  `Product.pack_price` is per pack and nullable, where null means "count × unit_price". A
+  stored pack price is a negotiated wholesale price - a carton of 24 at ₵1,050 is ₵43.75 a
+  bottle against ₵48 singly - and no arithmetic on the single price can produce that gap.
+  `Product.sell_unit` (`base` | `purchase` | `both`) says what may be chosen.
 - Free-form context on audit entries and payment payloads is JSON in a `Text` column.
 
 ## Auth and Access Model
@@ -111,7 +119,16 @@ Rules the codebase must never violate. Each was learned from a real defect.
    either directly is how the two silently diverged before (F-12).
 
 3. **The server decides prices and unit conversions.** A posted price or unit is a
-   *request*. `readonly` in a template is a rendering hint, never a control (F-07).
+   *request*. `readonly` in a template is a rendering hint, never a control (F-07). A posted
+   *unit* is gated three times over, in this order: does the plan include `uom_conversion`,
+   does the product have a real conversion, and is the unit one `uom.sell_units()` offers.
+   Hiding a selector is not enforcing anything - a hand-posted unit must not buy a
+   conversion the plan does not include.
+
+14. **Conversion guards live in `services/uom.py`, not in its callers.** `to_base` and
+    `cost_to_base` check `has_conversion` themselves. They multiplied on the pack count
+    alone until Stage U, and were safe only because both call sites happened to guard
+    first; safety that lives in the callers lasts until the third caller.
 
 4. **Money is `Decimal` end to end.** `float()` only at an export boundary, never before
    a sum.
@@ -158,6 +175,31 @@ Rules the codebase must never violate. Each was learned from a real defect.
     does not cover. `notifications.ALERT_PERMISSIONS` holds the exceptions, and both the
     page and the badge count go through `for_user()` - a badge counting what the page
     then withholds is its own bug.
+
+## Interface Architecture
+
+Server-rendered Jinja with a small number of hand-written components. There is no build
+step and no framework - every asset is vendored under `static/`, and
+`tests/test_assets.py` fails the build if a CDN link reappears.
+
+- **Theme.** `User.theme_pref` (`system` | `light` | `dark`) plus a blocking pre-paint script
+  in `base.html` that resolves `system` from `prefers-color-scheme` before anything renders.
+  `<html>` always carries a concrete `data-theme` *and* `data-bs-theme`: Bootstrap 5.3 scopes
+  its variables as `:root,[data-bs-theme=light]` and ships no `prefers-color-scheme` support,
+  so a missing attribute is not neutral - it is Bootstrap's light theme. Colours are tokens
+  in `static/css/style.css`; nothing may hardcode one.
+- **The product picker** (`static/js/picker.js`, `templates/_partials/product_picker.html`)
+  is the only way a product is chosen. It is the app's **first and only Bootstrap modal** -
+  the JS bundle was already loaded and precached on every page, so it cost nothing new. The
+  `<select>` stays in the DOM, keeps its name and stays the source of truth; the dialog
+  writes to it and fires a bubbling `change`. It is hidden by script, never by the server, so
+  a browser running no JavaScript still has a working page.
+- **Canvas ignores CSS.** Chart.js reads palette tokens through `getComputedStyle` at build
+  time and redraws on `tracktrack:theme` and a `MutationObserver` on `data-theme`.
+- **`design/verify/`** renders every page server-side in both themes and measures composited
+  contrast in a browser. It is not shipped; it is how "does this page read" stops being an
+  opinion. Paned and dialog states get their own captures, because a sweep only measures what
+  is visible and says nothing when that is less than it was.
 
 ## Two Identity Systems
 

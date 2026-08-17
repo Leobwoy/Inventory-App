@@ -41,6 +41,11 @@
   is the most likely cause of real-world abandonment.
 - Never trust a posted foreign key. Resolve it scoped to the business
   (see `_scoped_catalogue()` in `products/routes.py`).
+- **A posted unit is gated three times, in this order:** does the plan include
+  `uom_conversion`, does the product have a real conversion, and is the unit one that
+  `services/uom.sell_units()` offers. `purchases/routes.py` is the model. Hiding a selector
+  enforces nothing — this project has already shipped one route that read a hand-posted unit
+  the plan did not include.
 - A required field needs a default, or the browser blocks the submit and nothing on the
   page says why. `DataRequired` renders `required`, and the browser then refuses to post
   until the field is filled - no flash, no error, no request. `sale_date` sat like this
@@ -122,6 +127,13 @@
 
 ## Data
 
+- **Money the user types is 2dp; money the code derives is 6dp.** `unit_price` and
+  `pack_price` are typed, `Numeric(10,2)`. `PurchaseOrderItem.unit_cost` is derived by
+  dividing a pack cost by its count and is `Numeric(14,6)` — at 2dp, ₵1.00 a carton of 24
+  records ₵96.00 against ₵100.00 paid over 100 cartons (F-41).
+- **A price that cannot be derived must be stored.** A pack price is not `count × unit_price`
+  — the difference *is* the wholesale discount. Deriving it silently would delete the reason
+  a shop buys a case.
 - Quantities are stored in **base units**, always. The purchase unit exists only at the
   input and display boundaries (`services/uom.py`).
 - Money is `Numeric(10, 2)` and `Decimal` in Python. A **derived** per-unit figure may take

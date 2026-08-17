@@ -773,14 +773,24 @@ mean, and all three falsify.
 
 ## Next Up
 
-1. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
-2. **Stage 2.7** — Smart reorder
-3. **Stage 2.8** — Dashboard rebuild
-4. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
+**Stage 3 is paused after the dashboard.** Units and pricing jump the queue at the user's
+direction (2026-08-17): "of importance and urgency". The remaining redesign pages resume
+after it, because the product form and list are exactly where the new fields live and
+rebuilding them first would mean rebuilding them twice.
+
+1. **Stage U — Sell by the carton.** U1 schema and services, U2 the sale path, U3 the sale
+   form, U4 the product form in plain language, U5 three correctness fixes. See
+   Architecture Decisions below for the model and the research behind it.
+2. **Stage 3 C4** — Products pages to the design (list, add/edit, alerts, low stock)
+3. **Stage 3 C5–C8** — Money owed, purchasing lists, reports, settings, auth, print documents
+4. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
+5. **Stage 2.7** — Smart reorder
+6. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
    registration premise was wrong and the account is pre-approved. See Open Questions:
    no payout has been received, and neither collection path has taken real money yet.
-(Stage 3 is in progress — see In Progress above. Barcode sale entry and branded invoices
-were folded into it; branded invoices already shipped as F-36.)
+
+(Stage 2.8, the dashboard rebuild, shipped as Stage 3 C2. Barcode sale entry and branded
+invoices were folded into Stage 3; branded invoices already shipped as F-36.)
 
 - **Cramped fields on goods receipt.** Reported from the running app with a screenshot.
   On `templates/purchases/receive.html` the "Receiving now" input is about one digit wide and
@@ -790,6 +800,40 @@ were folded into it; branded invoices already shipped as F-36.)
   a layout change, not a width tweak: the inputs should lead. Due in Phase C6 when Purchasing
   is rebuilt; noted here so it is not lost, since it is the page where a typo costs real
   stock. Same shape of problem is likely on the sale form, which has the same pattern.
+
+### Decision — selling by the carton (2026-08-17)
+
+**Asked for directly:** wholesalers "sell by the crate or carton, not one-one like a
+provision store", the price should be the carton price, and the add-product form's unit
+fields are "confusing to a business owner… they wouldn't understand".
+
+**What the app did.** UOM was applied on the buy side *only*. Zero occurrences of `uom.`,
+`base_uom`, `purchase_uom` or `order_unit` anywhere under `sales/`. `sales/routes.py` passed
+`item_form.quantity.data` straight to `stock.deduct_fefo`. Selling three cartons of 24 meant
+typing 72. One price existed, per single, and nothing in the schema or the form said so.
+
+**Research.** Ghanaian packs are 12 and 24: Club Premium Lager 330ml ships 24 × 330ml with
+12-bottle cartons also sold; Voltic 500ml ships in packs of 24 across 500ml/750ml/1.5L/19.5L.
+The distribution industry models three levels — each, inner pack, case pack — and the ERP
+convention is that **buy units and sell units are independent**: an item may be bought in a
+case, pack or each and sold in an each, a case, a pack, or not have all options for sales.
+This app had one conversion applied on one side. That was the gap.
+
+**The model.** Stock stays in base units — that invariant is what makes FEFO, batches and
+`flask reconcile-stock` work, and it does not move. Only what is charged and what is typed
+change:
+
+- `Product.pack_price`, nullable. Null means a carton is `count × unit_price`. A value means
+  a real wholesale carton price, which **cannot be derived** — the gap between ₵48 a bottle
+  and ₵43.75 a bottle inside a ₵1,050 carton is the entire reason a shop buys a carton.
+- `Product.sell_unit` — `base` | `purchase` | `both`.
+- The sale line carries a unit; `deduct_fefo` still receives base units.
+
+**The form drops the jargon.** "Base UoM / Purchase UoM / Units per Purchase UoM" became
+"How is it packed? Carton of 24 bottles", "What do you sell by?", and two prices — with a
+sentence reading back the derived per-piece figure, so a carton price typed into the singles
+box shows ₵1,050.00 a bottle *before* saving rather than weeks later.
+`uom.cost_per_purchase_unit()` already existed for this and was called from nowhere.
 
 ## Open Questions
 

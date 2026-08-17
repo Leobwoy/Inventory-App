@@ -57,7 +57,15 @@ These are not style preferences. Each cost real debugging time.
 3. `flask db upgrade` succeeds against an **empty** database.
 4. `python seed_db.py --yes` completes and the affected pages render.
 5. `flask reconcile-stock` reports no drift if stock was touched.
-6. `progress-tracker.md` reflects the work.
+6. Layout measured at **375, 1024, 1280 and 1440** if anything visual changed. Two widths is
+   not a curve: the product picker was verified at 1280 and 1440 and shipped, and every width
+   between 992 and 1200 was broken, with a quantity box 20px wide holding no digits at all.
+7. Contrast swept in **both themes** — `python design/verify/capture.py <port>`, then
+   `/static/_sweep.html`. A page with a dialog or a hidden pane needs its own capture; the
+   sweep measures what is visible and says nothing when that is less than it was.
+8. **Every context file the change touched is updated, in the same commit.** Not just
+   `progress-tracker.md`. Three of the six went stale for a fortnight during Stage 3 while
+   this rule was already written below — the rule was not the problem, the checklist was.
 
 ## Protected Files
 
