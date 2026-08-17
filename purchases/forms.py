@@ -1,3 +1,5 @@
+from datetime import date
+
 from flask_wtf import FlaskForm
 from wtforms import SelectField, IntegerField, DecimalField, StringField, DateField, SubmitField, FieldList, FormField
 from wtforms.validators import DataRequired, NumberRange, Optional
@@ -13,7 +15,10 @@ class PurchaseOrderItemForm(FlaskForm):
 
 class PurchaseOrderForm(FlaskForm):
     supplier_id = SelectField('Supplier', coerce=int, validators=[Optional()])
-    order_date = DateField('Order Date', validators=[DataRequired()])
+    # The callable, not date.today(): evaluated per form rather than once at
+    # import. Without a default DataRequired renders `required`, and the browser
+    # silently refuses to submit until someone types today's date by hand.
+    order_date = DateField('Order Date', default=date.today, validators=[DataRequired()])
     expected_date = DateField('Expected Date', validators=[Optional()])
     items = FieldList(FormField(PurchaseOrderItemForm), min_entries=1)
     submit = SubmitField('Create Purchase Order')

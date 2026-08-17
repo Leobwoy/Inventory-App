@@ -101,3 +101,33 @@ still posts its value, so the page works with JavaScript off.
 
 Bootstrap Icons 1.11 (`bi bi-*`). Inline in buttons with `me-1`; standalone at `fs-1` in
 empty states.
+
+## Choosing a product
+
+Products are chosen in a **dialog**, never in a table cell. `templates/_partials/product_picker.html`
+plus `static/js/picker.js`, opened by a `.picker-button` carrying
+`data-picker-for="<selector>"`. One dialog per page serves every line on it.
+
+The reason is arithmetic. On a 1440px laptop the sale form's product cell was 130px and the
+search box inside it 98px, while the longest product name needed 169. Five columns wanted
+about a 1500px window; no width tuning fixes that.
+
+Rules for any page that adopts it:
+
+- The `<select>` stays in the DOM, keeps its name, and stays the source of truth. The picker
+  writes to it and dispatches a bubbling `change`, so existing listeners keep working.
+- The select is hidden by `picker.js` adding `line-enhanced`, **never by the server**. With
+  no script the select is the control and the page still works.
+- Each line wrapper carries `data-line`; the select carries `data-picker-select`.
+- Whatever is worth knowing beside a product - its price on a sale, its last cost on a
+  purchase order - goes on the `<option>` as `data-meta`. The picker itself knows nothing
+  about products.
+
+Lines that used to be table rows with three inputs in them are **cards** instead: purchase
+order lines and goods receipt lines both use this shape, with `.field-grid` inside. A table
+row cannot hold a product name, a quantity, a unit dropdown, a cost and a total at any screen
+width a shop actually owns.
+
+This is the app's **first and only Bootstrap modal**. Bootstrap's JS bundle was already
+loaded and precached on every page, so it cost nothing new. `.modal-content` is solid
+(`--bg-card-solid`), not frosted - a dialog is the one surface with a whole page behind it.

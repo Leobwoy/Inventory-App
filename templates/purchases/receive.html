@@ -52,89 +52,82 @@
             without them that ordering cannot work.
         </p>
 
-        <div class="table-responsive">
-            <table class="table table-hover table-cards align-middle">
-                <thead>
-                    <tr>
-                        <th>Product</th>
-                        <th class="text-end">Ordered</th>
-                        <th class="text-end">Already in</th>
-                        <th class="text-end">Outstanding</th>
-                        <th style="width: 120px;">Receiving now</th>
-                        <th style="width: 160px;">Batch number</th>
-                        <th style="width: 170px;">Expiry date</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for item in po.items %}
-                    {% set outstanding = item.quantity_ordered - (item.quantity_received or 0) %}
-                    <tr class="{{ 'opacity-50' if outstanding <= 0 }}">
-                        <td data-label="Product">
-                            <div class="fw-bold">{{ item.product.name if item.product else '—' }}</div>
-                            <small class="text-muted font-monospace">{{ item.product.sku if item.product else '' }}</small>
-                        </td>
-                        <td data-label="Ordered" class="text-end">{{ item.quantity_ordered }}</td>
-                        <td data-label="Already in" class="text-end text-muted">{{ item.quantity_received or 0 }}</td>
-                        <td data-label="Outstanding" class="text-end">
-                            {% if outstanding > 0 %}
-                            <span class="badge bg-warning text-dark">{{ outstanding }}</span>
-                            {% if item.product and uom.has_conversion(item.product) %}
-                            <div class="text-muted" style="font-size: 0.75rem;">
-                                {{ uom.describe(item.product, outstanding) }}
-                            </div>
+        {# One card per line, not a seven-column table. Five of those columns were
+           read-only and the three that are typed into - the ones that decide what
+           stock the business believes it has - were sharing whatever width was
+           left over. Here they lead. #}
+        <div class="recv-lines">
+            {% for item in po.items %}
+            {% set outstanding = item.quantity_ordered - (item.quantity_received or 0) %}
+            <div class="recv-line {{ 'is-complete' if outstanding <= 0 }}">
+                <div class="recv-head">
+                    <div class="recv-what">
+                        <div class="recv-name">{{ item.product.name if item.product else '&mdash;' }}</div>
+                        <div class="recv-sub">
+                            {% if item.product and item.product.sku %}
+                            <span class="font-monospace">{{ item.product.sku }}</span> &middot;
                             {% endif %}
-                            {% else %}
-                            <span class="badge bg-success">Complete</span>
+                            {{ item.quantity_ordered }} ordered
+                            {% if item.quantity_received %}
+                            &middot; {{ item.quantity_received }} already in
                             {% endif %}
-                        </td>
-                        <td data-label="Receiving now">
-                            {% if outstanding > 0 %}
-                            {% set convertible = has_feature('uom_conversion') and item.product
-                                                 and uom.has_conversion(item.product) %}
-                            <div class="input-group">
-                                <input type="number" name="qty_{{ item.id }}" class="form-control qty-input"
-                                       min="0" max="{{ outstanding }}" value="0"
-                                       data-outstanding="{{ outstanding }}"
-                                       data-per="{{ item.product.units_per_purchase_uom if item.product else 1 }}">
-                                {% if convertible %}
-                                {# Deliveries arrive in whatever the supplier ships;
-                                   the server converts to base units either way. #}
-                                <select name="unit_{{ item.id }}" class="form-select unit-select"
-                                        style="max-width: 8rem;">
-                                    <option value="purchase">{{ item.product.purchase_uom }}</option>
-                                    <option value="base">{{ item.product.base_uom }}</option>
-                                </select>
-                                {% endif %}
-                            </div>
+                        </div>
+                    </div>
+                    <div class="recv-status">
+                        {% if outstanding > 0 %}
+                        <span class="badge bg-warning text-dark">{{ outstanding }} outstanding</span>
+                        {% if item.product and uom.has_conversion(item.product) %}
+                        <div class="recv-sub">{{ uom.describe(item.product, outstanding) }}</div>
+                        {% endif %}
+                        {% else %}
+                        <span class="badge bg-success">Complete</span>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if outstanding > 0 %}
+                {% set convertible = has_feature('uom_conversion') and item.product
+                                     and uom.has_conversion(item.product) %}
+                <div class="field-grid recv-fields">
+                    <div class="field">
+                        <label class="form-label" for="qty_{{ item.id }}">Receiving now</label>
+                        <div class="input-group">
+                            <input type="number" id="qty_{{ item.id }}" name="qty_{{ item.id }}"
+                                   class="form-control qty-input" min="0" max="{{ outstanding }}"
+                                   value="0" inputmode="numeric"
+                                   data-outstanding="{{ outstanding }}"
+                                   data-per="{{ item.product.units_per_purchase_uom if item.product else 1 }}">
                             {% if convertible %}
-                            <small class="text-muted qty-hint" data-for="{{ item.id }}"></small>
+                            {# Deliveries arrive in whatever the supplier ships;
+                               the server converts to base units either way. #}
+                            <select name="unit_{{ item.id }}" class="form-select unit-select">
+                                <option value="purchase">{{ item.product.purchase_uom }}</option>
+                                <option value="base">{{ item.product.base_uom }}</option>
+                            </select>
                             {% endif %}
-                            {% else %}
-                            <span class="text-muted">&mdash;</span>
-                            {% endif %}
-                        </td>
-                        <td data-label="Batch number">
-                            {% if outstanding > 0 %}
-                            <input type="text" name="batch_{{ item.id }}" class="form-control"
-                                   placeholder="Auto" maxlength="100">
-                            {% else %}
-                            <span class="text-muted">&mdash;</span>
-                            {% endif %}
-                        </td>
-                        <td data-label="Expiry date">
-                            {% if outstanding > 0 %}
-                            {# The server requires expiry strictly after the receipt date,
-                               so the picker must not offer today itself. #}
-                            <input type="date" name="expiry_{{ item.id }}" class="form-control"
-                                   min="{{ earliest_expiry.isoformat() }}">
-                            {% else %}
-                            <span class="text-muted">&mdash;</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
+                        </div>
+                        {% if convertible %}
+                        <small class="text-muted qty-hint" data-for="{{ item.id }}"></small>
+                        {% endif %}
+                    </div>
+
+                    <div class="field">
+                        <label class="form-label" for="batch_{{ item.id }}">Batch number</label>
+                        <input type="text" id="batch_{{ item.id }}" name="batch_{{ item.id }}"
+                               class="form-control" placeholder="Auto" maxlength="100">
+                    </div>
+
+                    <div class="field">
+                        <label class="form-label" for="expiry_{{ item.id }}">Expiry date</label>
+                        {# The server requires expiry strictly after the receipt date,
+                           so the picker must not offer today itself. #}
+                        <input type="date" id="expiry_{{ item.id }}" name="expiry_{{ item.id }}"
+                               class="form-control" min="{{ earliest_expiry.isoformat() }}">
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
         </div>
 
         <div class="d-flex gap-2 border-top border-secondary pt-4 mt-4">

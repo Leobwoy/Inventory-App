@@ -58,9 +58,13 @@ def test_bootstrap_icons_css_points_at_the_fonts_we_vendored():
         assert (STATIC / 'vendor/bootstrap-icons' / href).is_file(), f'{href} not vendored'
 
 
-def test_sale_form_uses_the_local_combobox(register, make_product):
+def test_choosing_a_product_needs_nothing_from_the_network(register, make_product):
     """The sale form was the only page needing jQuery and Select2 - 150KB for one
-    dropdown. If they come back, they come back as a network dependency."""
+    dropdown. If they come back, they come back as a network dependency.
+
+    The component that replaced them is the picker rather than the combobox now;
+    what this test is really about is that neither of those two ever returns.
+    """
     client, business_id = register()
     make_product(business_id, name='Club Beer 625ml')
 
@@ -68,7 +72,14 @@ def test_sale_form_uses_the_local_combobox(register, make_product):
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert '/static/js/combobox.js' in body
-    assert 'data-combobox' in body
+    assert '/static/js/picker.js' in body
+    assert 'data-picker-for' in body
     assert 'select2' not in body.lower()
     assert 'jquery' not in body.lower()
+
+
+def test_the_picker_is_vendored_like_everything_else(client):
+    """It is the first Bootstrap modal in the app, so it is the first thing to
+    need Bootstrap's JS bundle at run time rather than just on the page."""
+    assert (STATIC / 'js/picker.js').is_file()
+    assert (STATIC / 'vendor/bootstrap/bootstrap.bundle.min.js').is_file()

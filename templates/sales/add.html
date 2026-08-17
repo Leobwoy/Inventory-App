@@ -1,9 +1,7 @@
 {% extends 'base.html' %}
 {% block title %}Record Sale | TrackTrack{% endblock %}
 
-{% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/combobox.css') }}">
-{% endblock %}
+{% block head %}{% endblock %}
 
 {#
    Two panes, one form.
@@ -95,11 +93,20 @@
                         </thead>
                         <tbody>
                             {% for subform in form.items %}
-                            <tr>
+                            <tr data-line>
                                 <td data-label="Product" class="col-product">
-                                    {{ subform.product_id(class_='form-control product-select' + (' is-invalid' if subform.product_id.errors else ''), data_combobox='true', data_combobox_placeholder='Search products') }}
+                                    {# The button is shown and the select hidden only once
+                                       picker.js has run. With no script the select is the
+                                       control, exactly as it has always been. #}
+                                    <button type="button" class="picker-button"
+                                            data-picker-for=".product-select"
+                                            data-picker-title="Add a product to this sale">
+                                        <i class="bi bi-search" aria-hidden="true"></i>
+                                        <span class="picker-button-name">Choose a product</span>
+                                    </button>
+                                    {{ subform.product_id(class_='form-select product-select' + (' is-invalid' if subform.product_id.errors else ''), data_picker_select='true') }}
                                     {% for error in subform.product_id.errors %}
-                                    <div class="invalid-feedback">{{ error }}</div>
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
                                     {% endfor %}
                                 </td>
                                 <td data-label="Quantity" class="col-qty">
@@ -276,6 +283,8 @@
     </div>
 </form>
 
+{% include '_partials/product_picker.html' %}
+
 {# Runs the moment the form is parsed, before anything below it paints, so the
    second pane is never briefly visible. Anything needing the whole document
    stays in the block at the foot of the page. #}
@@ -288,15 +297,14 @@
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/combobox.js') }}"></script>
+<script src="{{ url_for('static', filename='js/picker.js') }}"></script>
 <script type="application/json" id="product-prices-data">
   {{ product_prices|tojson }}
 </script>
 <script>
 /*
- * Deliberately runs at parse time rather than on DOMContentLoaded: the row
- * template must be captured before combobox.js enhances the first row, and its
- * enhancement is itself a DOMContentLoaded handler registered before this one.
+ * Runs at parse time rather than on DOMContentLoaded, so the row template is
+ * taken from the server's own markup before anything has touched it.
  */
 (function () {
   'use strict';
@@ -392,6 +400,33 @@
   showStep(form.dataset.startStep || '1');
 
   // --- prices, discounts and the running total ------------------------------
+
+  // What the picker shows beside each product. The picker itself knows nothing
+  // about prices; every page decides what is worth saying about its own list.
+  function attachMeta(row) {
+    var select = row.querySelector('.product-select');
+    if (!select) {
+      return;
+    }
+    Array.prototype.forEach.call(select.options, function (option) {
+      if (productPrices[option.value] !== undefined) {
+        option.dataset.meta = '₵' + productPrices[option.value].toFixed(2);
+      }
+    });
+  }
+
+  // The row shows the chosen product as a fact, not as an empty field.
+  function paintPicker(row) {
+    var select = row.querySelector('.product-select');
+    var button = row.querySelector('.picker-button');
+    if (!select || !button) {
+      return;
+    }
+    var label = window.ProductPicker.labelOf(select);
+    button.querySelector('.picker-button-name').textContent =
+      label || 'Choose a product';
+    button.classList.toggle('is-chosen', Boolean(label));
+  }
 
   function updatePrice(row) {
     var select = row.querySelector('.product-select');
@@ -555,7 +590,9 @@
     });
 
     body.appendChild(row);
-    Combobox.enhance(row);
+    window.ProductPicker.enhance(row);
+    attachMeta(row);
+    paintPicker(row);
     updatePrice(row);
     refresh();
   });
@@ -580,11 +617,14 @@
     }
   });
 
-  // The combobox writes to the native <select> and dispatches a bubbling
-  // 'change', so one delegated listener covers both input styles.
+  // The picker writes to the native <select> and dispatches a bubbling
+  // 'change', so this one delegated listener covers both a product chosen in the
+  // dialog and one chosen from the plain select when no script is running.
   table.addEventListener('change', function (event) {
     if (event.target.classList.contains('product-select')) {
-      updatePrice(event.target.closest('tr'));
+      var row = event.target.closest('tr');
+      updatePrice(row);
+      paintPicker(row);
     }
     refresh();
   });
@@ -599,7 +639,11 @@
     }
   });
 
-  rows().forEach(updatePrice);
+  rows().forEach(function (row) {
+    attachMeta(row);
+    paintPicker(row);
+    updatePrice(row);
+  });
   syncWalkIn();
   refresh();
 

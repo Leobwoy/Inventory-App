@@ -130,7 +130,12 @@ def add_purchase():
                     db.session.rollback()
                     flash('One of the selected products is no longer available. '
                           'Nothing was ordered.', 'danger')
+                    # product_uom too: the template feeds it to |tojson, and
+                    # leaving it out raised inside this try, where the generic
+                    # handler swallowed it and replaced this specific message
+                    # with "Something went wrong".
                     return render_template('purchases/add.html', form=form,
+                                           product_uom=product_uom,
                                            price_history=price_history)
 
                 # Entered in cartons or pieces; stored in base units either way,

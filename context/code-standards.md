@@ -78,6 +78,14 @@
   anywhere in the app until Phase C3 gave it a rule of its own. Measure a control's real
   height in the browser before trusting a class name for it.
 
+- **Never measure geometry while a CSS transition or animation is running.** The browser
+  pane does not composite while it is hidden, so a transition can sit unfinished
+  indefinitely and `getBoundingClientRect` returns a frame no real device would ever hold.
+  This produced three separate false readings: a `.glass-card` background read mid-fade
+  (which looked like fourteen contrast failures that did not exist), a `scroll-behavior:
+  smooth` scroll that had not started, and a Bootstrap modal measured at `translate(0,
+  -50px)` that looked like a dialog hanging off the top of the screen. Remove the
+  transition, or the `.fade` class, before reading anything.
 - **Never write a regex through a shell heredoc without checking the bytes.** `` in a
   pattern passed through one became a literal backspace (0x08) in the source. `grep`, the
   terminal and every editor render it as nothing, so the line read exactly right, matched

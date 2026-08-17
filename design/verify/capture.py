@@ -25,7 +25,8 @@ SWEEP = ROOT / 'design' / 'verify' / 'sweep.html'
 
 PAGES = {'dashboard': '/', 'products': '/products/', 'sale': '/sales/add',
          'credit': '/credit/', 'alerts': '/products/alerts',
-         'settings': '/auth/settings', 'purchases': '/purchases/'}
+         'settings': '/auth/settings', 'purchases': '/purchases/',
+         'po': '/purchases/add'}
 
 #: Pages that show one pane at a time. The sweep measures what is *visible*, so
 #: without this the second pane of the sale form is never checked at all - and
@@ -34,6 +35,12 @@ PAGES = {'dashboard': '/', 'products': '/products/', 'sale': '/sales/add',
 #: notice. These get a second capture with the stepping script removed, so the
 #: server-rendered `data-steps="off"` survives and both panes stay on screen.
 PANED = {'sale'}
+
+#: Pages carrying a dialog. Bootstrap's `.modal` is `display: none` until shown,
+#: so a sweep of the ordinary capture measures none of it and reports clean
+#: without having looked. These get a shot with the dialog forced open and the
+#: page behind it removed, so what is measured is what a person actually sees.
+DIALOGS = {'sale', 'po'}
 
 #: Built from chr() rather than written out: an earlier version of this
 #: pattern picked up a literal backspace byte from a stray escape, which
@@ -78,6 +85,31 @@ with a.app_context():
                 html = re.sub(r'(href="/static/css/[^"]+?)(")',
                               rf'\1?v={stamp}\2', html)
                 (OUT / f'{name}-{theme}.html').write_text(html, encoding='utf-8')
+
+                if name in DIALOGS:
+                    # Forced open by class, not by script: the capture has no
+                    # Bootstrap and no events, and `.show` plus an inline display
+                    # is exactly the state Bootstrap leaves the element in.
+                    shot = html.replace(
+                        'class="modal fade picker-modal"',
+                        'class="modal picker-modal show" style="display:block"')
+                    if shot == html:
+                        print(f'  {name}/{theme}: WARNING dialog capture changed '
+                              'nothing - has the picker markup moved?')
+                    # The list is filled by picker.js from the <select>, and
+                    # nothing runs here, so it would be an empty box. Write the
+                    # rows in from the same source the script uses.
+                    options = re.findall(
+                        r'<option value="(\d+)"[^>]*>([^<]+)</option>', shot)
+                    rows = ''.join(
+                        f'<li class="picker-option" role="option">'
+                        f'<span class="picker-option-name">{label}</span>'
+                        f'<span class="picker-option-meta">₵ 0.00</span></li>'
+                        for _value, label in options[:12])
+                    shot = re.sub(
+                        r'(<ul class="picker-list"[^>]*>)\s*(</ul>)',
+                        lambda m: m.group(1) + rows + m.group(2), shot)
+                    (OUT / f'{name}dlg-{theme}.html').write_text(shot, encoding='utf-8')
 
                 if name in PANED:
                     # Every script, not just the stepping one. The first attempt

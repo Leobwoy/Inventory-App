@@ -620,6 +620,52 @@ on reporting the same node count. `findall` with the same pattern typed fresh ma
 Only printing `repr()` of the source line found it. The pattern is now built from `chr()`
 calls, and the capture warns if the stripped copy is not in the no-script state.
 
+**C3 fix + C6 — the product picker.** Reported from the running app with two screenshots: on
+the sale form the product box read "BelA", and on Create Purchase Order the quantity and cost
+controls had collapsed into nested, disconnected boxes.
+
+Measured before touching anything. At 1280px the sale table got 583px and the product input
+**60px**; at 1440px — an ordinary laptop — it was **98px**, against a longest product name
+needing 169. Five columns wanted roughly a 1500px window. Notably this was **desktop-only**:
+on a phone the row stacks and the field gets 301px, so the C3 rebuild had fixed the phone and
+broken the laptop.
+
+The answer was the user's own designs, which show every cell in both the sale cart and the PO
+order-lines table as **plain text**, with "Add line" beneath. Products are now chosen in a
+dialog: `templates/_partials/product_picker.html` + `static/js/picker.js`, one per page,
+serving every line. Bootstrap's Modal, because its bundle was already loaded and precached on
+every page — the first modal this app has ever had. The `<select>` stays, keeps its name, and
+stays the source of truth; `picker.js` hides it, never the server, so no-JS still works.
+Result: product name space went 60px → 168px at 1280px, and 15 of 16 catalogue names now fit
+on one line.
+
+Three defects fixed alongside, all worse than cosmetic:
+
+- **A purchase order could only ever have one line.** No add-row control, no cloning script;
+  the route never appended entries. Every PO this app has created has had exactly one product
+  on it. Now adds and removes lines, with the sale form's renumbering.
+- **`purchases/routes.py` crashed on the "product no longer available" path**, re-rendering
+  without `product_uom` which the template feeds to `|tojson`. It raised inside the `try`, so
+  `except Exception` swallowed it and replaced that specific message with the generic
+  "Something went wrong". Nobody has ever seen the real one.
+- **The PO page rendered no validation errors at all** — no `is-invalid`, no
+  `invalid-feedback`. A refused order came back looking identical to the one sent. Also
+  `order_date` had no default, the same silent submit-blocker the sale form had.
+
+Goods receipt became one card per line — seven columns, five read-only, and the three that
+are typed into were sharing the leftovers on the page where a typo costs real stock.
+
+**Corrected belief, recorded because the obvious guess was wrong:** a *gap* in WTForms
+indexes (`items-0` + `items-2`) is harmless — it compacts. What loses a line is a
+*collision*, which is what removing a middle row causes when the next row is named from
+`length`. Two lines then post under one name and WTForms reads the first. A test asserting
+the gap theory failed, which is how this was found.
+
+**The sweep's dialog blind spot is closed too.** Bootstrap's `.modal` is `display: none`
+until shown, so an ordinary capture measures none of it and reports clean without looking.
+`capture.py` now takes a `dlg` shot with the modal forced open and its list filled from the
+same `<select>` the script reads. 2024 nodes swept across 22 captures, zero failures.
+
 ## Next Up
 
 1. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
