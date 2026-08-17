@@ -104,6 +104,7 @@ def create_app():
     from sales.models import Sale
     from sqlalchemy import func
     import datetime
+    from decimal import Decimal
 
     app.register_blueprint(products_bp, url_prefix='/products')
     app.register_blueprint(sales_bp, url_prefix='/sales')
@@ -239,6 +240,18 @@ def create_app():
             if sale_date in sales_data:
                 sales_data[sale_date] = float(revenue or 0)
 
+        # The same seven days again, a week earlier, so the headline number can
+        # say whether trade is up or down rather than only what it was. One
+        # scalar, not a second trend.
+        previous_total = float(
+            db.session.query(func.coalesce(
+                func.sum(SaleItem.price_at_sale * SaleItem.quantity), 0))
+            .join(Sale, SaleItem.sale_id == Sale.id)
+            .filter(Sale.business_id == business_id,
+                    Sale.sale_date >= window_start - datetime.timedelta(days=7),
+                    Sale.sale_date < window_start)
+            .scalar() or 0)
+
         # Real product count - this card previously rendered len(top_products),
         # which is capped at 5 by the limit below (F-13).
         product_count = db.session.query(func.count(Product.id)).filter(
@@ -247,12 +260,36 @@ def create_app():
 
         # Top 5 products by stock
         top_products = Product.query.filter_by(business_id=business_id).order_by(Product.quantity_in_stock.desc()).limit(5).all()
+        from services import credit, limits, notifications, onboarding
+
+        # What people are asked to chase. Gated twice: the ledger is a paid
+        # feature, and seeing what customers owe is a permission of its own -
+        # a sales clerk has no business reading the debt book.
+        owed = None
+        if limits.has_feature('credit_ledger') and current_user.can('credit.view'):
+            # (Sale, total, paid, balance) tuples, oldest first. Walk-ins are
+            # in there with no customer_id - the money is owed either way, but
+            # they cannot be counted as people to chase.
+            outstanding = credit.outstanding_sales(business_id)
+            owed = {
+                'total': sum((row[3] for row in outstanding), Decimal('0')),
+                'customers': len({row[0].customer_id for row in outstanding
+                                  if row[0].customer_id}),
+                'walk_ins': sum(1 for row in outstanding if not row[0].customer_id),
+            }
+
         from services import onboarding
 
         return render_template(
             'index.html',
             low_stock=low_stock,
+            out_of_stock=[p for p in low_stock if (p.quantity_in_stock or 0) <= 0],
+            owed=owed,
+            # Already permission-filtered, and shared with the badge in the nav
+            # through a per-request cache, so the two cannot disagree.
+            alerts=notifications.for_user(current_user),
             sales_data=sales_data,
+            previous_total=previous_total,
             top_products=top_products,
             product_count=product_count,
             year=today.year,

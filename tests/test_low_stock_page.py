@@ -8,6 +8,8 @@ The page itself is derived, like the alerts: a product leaves it the moment its
 stock goes back above the reorder level, because handling the problem *is*
 receiving the stock. There is nothing to dismiss and nothing to keep in step.
 """
+import re
+
 import pytest
 
 from extensions import db
@@ -124,12 +126,30 @@ def test_it_needs_permission_to_view_products(shop, make_staff):
 # --- the links that were wrong ------------------------------------------------
 
 def test_the_dashboard_card_is_named_after_the_page_it_opens(shop):
-    """It read "Low Stock Items" while opening the stock level report - named
-    for the number on it rather than for where it goes."""
+    """It read "Low Stock Items" while opening the stock level report -
+    named for the number on it rather than for where it goes.
+
+    The card is "Restock" now and it opens the restocking list, so the rule
+    holds under a different name. Asserted as the rule rather than as the
+    old wording: the previous version checked for the literal string
+    "Stock Level Report", which made a correct rename look like a
+    regression.
+    """
     client, _business_id = shop
     body = client.get('/').get_data(as_text=True)
 
-    assert 'Stock Level Report' in body
+    card = re.search(
+        r'<a class="stat-cell" href="([^"]+)">\s*<span class="stat-label">'
+        r'([^<]+)</span>', body)
+    assert card, 'no stat cell on the dashboard at all'
+
+    # Every cell must point somewhere, and the Restock one at the list of
+    # what to reorder.
+    cells = dict(re.findall(
+        r'<a class="stat-cell" href="([^"]+)">\s*<span class="stat-label">([^<]+)',
+        body))
+    assert '/products/low-stock' in cells, 'nothing opens the restocking list'
+    assert cells['/products/low-stock'].strip() == 'Restock'
     assert 'Low Stock Items' not in body
 
 

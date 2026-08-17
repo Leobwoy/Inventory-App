@@ -721,6 +721,56 @@ against a `data-search` attribute holding name and SKU, not the card's text — 
 holds supplier names and prices, so searching "2" against its text would match every product
 whose price contains one.
 
+**C2 — the dashboard.** Skipped by mistake when the sale form was rebuilt, so it sat on the
+old layout two commits longer than it should have.
+
+Four stat cells, then the trend and what needs doing. Every stat is a link: a number you
+cannot act on is a number you stop reading. The week's takings now carry a comparison with
+the week before — the old page gave a total with nothing to judge it against.
+
+**The right-hand panel is Needs attention, not an activity feed**, and this is the decision
+recorded back in the design phase finally implemented. A feed can only come from the audit
+log, which is `advanced`-tier, so Kiosk, Shop and Depot would open the page to an empty panel
+every day forever. Needs attention comes from `services/notifications.for_user()` — already
+permission-filtered, sharing the nav badge's per-request cache so the two cannot disagree,
+and it empties itself when the work is done.
+
+**Money owed is gated twice:** the credit ledger is a paid feature, and reading the debt book
+is a permission of its own. Worth recording that the Sales Staff preset *does* include
+`credit.view` — they are the people who take the payments — so a test asserting the
+permission gate has to set permissions explicitly rather than lean on a role name.
+
+**The chart's eight hardcoded colours are gone.** Chart.js paints to a canvas and cannot
+inherit a CSS variable, so every colour in it was the dark theme's; anyone on light got a
+chart drawn for a background that was not there. It reads the tokens at build time and
+redraws on `tracktrack:theme` — plus a `MutationObserver`, because the sidebar toggle
+rewrites the attribute directly rather than firing the event.
+
+**A phone target fix that should never have been scoped.** `min-height: 44px` on buttons was
+written as `.sale-form .btn` when the problem was first measured there. The dashboard's own
+"Record a sale" then came out at **33px**, because a page-header rule shrinks buttons on a
+phone and overrides `.btn-lg` entirely. It applies to every button now.
+
+**The query-count test caught a real regression, and the budget was raised on purpose.**
+The dashboard went from 9 queries to 20: measured, Needs attention costs 10 and money owed 1.
+The budget is now 22 with the reasoning written into the test.
+
+This deliberately does *not* follow the badge's precedent. `/products/alerts/count` is
+fetched after load because the sidebar renders on fifty-odd routes and computing alerts for
+all of them would charge pages that never show the number. The dashboard is the page that
+does show them - first on the screen, on a phone - so fetching after load would leave the
+most important panel blank exactly when someone opens the app to see what needs doing.
+
+Left undone deliberately: the route counts low stock for the Restock figure and
+`services/notifications` counts it again. Worth collapsing; not worth holding the page for.
+
+**Three tests were asleep when first written**, all the same shape: an assertion satisfied by
+something other than the thing under test. An `or` across two branches that the fallback
+branch satisfied; `tracktrack:theme` named in the comment explaining why it is listened for;
+and a script slice running to the end of the document, which caught **base.html's own**
+`tracktrack:theme` listener for the sidebar toggle. All three now scope to exactly what they
+mean, and all three falsify.
+
 ## Next Up
 
 1. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)

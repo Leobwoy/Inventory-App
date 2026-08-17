@@ -4,146 +4,231 @@
 
 {% block content %}
 <div class="page-header">
-    <h2>Dashboard Overview</h2>
-    <div class="text-muted">{{ year }}</div>
+    <h2>Today</h2>
+    <div class="page-header-actions">
+        {% if current_user.can('sales.create') %}
+        <a href="{{ url_for('sales.add_sale') }}" class="btn btn-primary btn-lg">
+            <i class="bi bi-plus-lg me-1"></i> Record a sale
+        </a>
+        {% endif %}
+    </div>
 </div>
 
 {% include '_partials/onboarding.html' %}
 {% include '_partials/tour.html' %}
 
-<div class="row g-4 mb-4">
-    <!-- Stat Cards -->
-    <div class="col-md-4">
-        <a href="{{ url_for('reports.sales_report') }}" class="text-decoration-none d-block h-100">
-            <div class="glass-card h-100">
-                <div class="stat-icon stat-primary">
-                    <i class="bi bi-currency-dollar"></i>
-                </div>
-                <h5 class="text-muted mb-1">Total Sales (7 Days)</h5>
-                <h3 class="mb-0">₵{{ sales_data.values() | sum | round(2) }}</h3>
-            </div>
-        </a>
-    </div>
-    
-    <div class="col-md-4">
-        <a href="{{ url_for('reports.stock_report') }}" class="text-decoration-none d-block h-100">
-            <div class="glass-card h-100">
-                <div class="stat-icon stat-warning">
-                    <i class="bi bi-exclamation-triangle"></i>
-                </div>
-                <h5 class="text-muted mb-1">Stock Level Report</h5>
-                <h3 class="mb-0">{{ low_stock|length }} <span class="fs-6 text-muted fw-normal">products</span></h3>
-            </div>
-        </a>
-    </div>
+{#
+   Four numbers, then two panels.
 
-    <div class="col-md-4">
-        <a href="{{ url_for('products.list_products') }}" class="text-decoration-none d-block h-100">
-            <div class="glass-card h-100">
-                <div class="stat-icon stat-success">
-                    <i class="bi bi-box-seam"></i>
-                </div>
-                <h5 class="text-muted mb-1">Total Products</h5>
-                <h3 class="mb-0">{{ product_count }} <span class="fs-6 text-muted fw-normal">tracked</span></h3>
-            </div>
-        </a>
-    </div>
+   The right-hand panel is Needs attention, not an activity feed. The only
+   source for a feed is the audit log, which is an `advanced`-tier feature - so
+   on Kiosk, Shop and Depot the panel would open empty and stay that way. Needs
+   attention is derived from stock, expiry and debt, is already permission
+   filtered, and empties itself when the work is done.
+#}
+<div class="stat-strip">
+    <a class="stat-cell" href="{{ url_for('reports.sales_report') }}">
+        <span class="stat-label">Sales &middot; 7 days</span>
+        <span class="stat-value accent">&#8373;{{ '%.2f'|format(sales_data.values()|sum) }}</span>
+        {% set week = sales_data.values()|sum %}
+        {% if previous_total or week %}
+        {% set delta = week - previous_total %}
+        <span class="stat-delta {{ 'is-up' if delta >= 0 else 'is-down' }}">
+            <i class="bi bi-arrow-{{ 'up' if delta >= 0 else 'down' }}-short" aria-hidden="true"></i>
+            &#8373;{{ '%.2f'|format(delta|abs) }} on last week
+        </span>
+        {% else %}
+        <span class="stat-delta">nothing sold yet</span>
+        {% endif %}
+    </a>
+
+    {% if owed %}
+    <a class="stat-cell" href="{{ url_for('credit.dashboard') }}">
+        <span class="stat-label">Owed to you</span>
+        <span class="stat-value">&#8373;{{ '%.2f'|format(owed.total) }}</span>
+        <span class="stat-delta">
+            {% if owed.customers %}
+            {{ owed.customers }} customer{{ '' if owed.customers == 1 else 's' }}
+            {% endif %}
+            {% if owed.walk_ins %}
+            {{ '&middot;'|safe if owed.customers }} {{ owed.walk_ins }} walk-in{{ '' if owed.walk_ins == 1 else 's' }}
+            {% endif %}
+            {% if not owed.customers and not owed.walk_ins %}nobody owes you{% endif %}
+        </span>
+    </a>
+    {% endif %}
+
+    <a class="stat-cell" href="{{ url_for('products.low_stock') }}">
+        <span class="stat-label">Restock</span>
+        <span class="stat-value {{ 'bad' if out_of_stock }}">{{ low_stock|length }}</span>
+        <span class="stat-delta">
+            {% if out_of_stock %}{{ out_of_stock|length }} out of stock
+            {% elif low_stock %}running low
+            {% else %}nothing to reorder{% endif %}
+        </span>
+    </a>
+
+    <a class="stat-cell" href="{{ url_for('products.list_products') }}">
+        <span class="stat-label">Products</span>
+        <span class="stat-value">{{ product_count }}</span>
+        <span class="stat-delta">tracked</span>
+    </a>
 </div>
 
-<div class="row g-4">
-    <!-- Chart Section -->
-    <div class="col-lg-8">
-        <div class="glass-card h-100">
-            <h5 class="mb-4">Sales Trend (Last 7 Days)</h5>
-            <div style="position: relative; width: 100%;">
-                <canvas id="salesChart"></canvas>
-            </div>
+<div class="dash-cols">
+    <section class="glass-card dash-chart">
+        <div class="dash-head">
+            <h5><i class="bi bi-graph-up-arrow me-2" aria-hidden="true"></i>Sales trend</h5>
+            <a href="{{ url_for('reports.sales_report') }}" class="dash-more">
+                Full report <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
         </div>
-    </div>
-    
-    <!-- Low Stock Section -->
-    <div class="col-lg-4">
-        <div class="glass-card h-100">
-            <div class="d-flex justify-content-between align-items-center mb-4">
-                <h5 class="mb-0">Low Stock Alerts</h5>
-                <a href="{{ url_for('products.low_stock') }}" class="btn btn-sm btn-outline-primary">View All</a>
-            </div>
-            
-            {% if low_stock %}
-                <ul class="list-group list-group-flush bg-transparent">
-                {% for item in low_stock %}
-                    <li class="list-group-item bg-transparent px-0 border-secondary d-flex justify-content-between align-items-center">
-                        <div>
-                            <div class="fw-bold">{{ item.name }}</div>
-                            <small class="text-muted">SKU: {{ item.sku }}</small>
-                        </div>
-                        <span class="badge bg-danger rounded-pill">{{ item.quantity_in_stock }} left</span>
-                    </li>
-                {% endfor %}
-                </ul>
-            {% else %}
-                <div class="text-center py-4 text-muted">
-                    <i class="bi bi-check-circle fs-1 text-success mb-2"></i>
-                    <p>All stock levels are healthy!</p>
-                </div>
+        <div class="dash-canvas">
+            <canvas id="salesChart"></canvas>
+        </div>
+    </section>
+
+    <section class="glass-card dash-alerts">
+        <div class="dash-head">
+            <h5><i class="bi bi-exclamation-circle me-2" aria-hidden="true"></i>Needs attention</h5>
+            {% if alerts %}
+            <a href="{{ url_for('products.alerts') }}" class="dash-more">
+                All {{ alerts|length }} <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
             {% endif %}
         </div>
-    </div>
+
+        {% if alerts %}
+        <ul class="alert-list">
+            {# Four, then a link. A panel that scrolls is a page in the wrong
+               place, and the point of this one is to be read at a glance. #}
+            {% for alert in alerts[:4] %}
+            <li class="alert-row">
+                <span class="alert-tag sev-{{ alert.severity }}" aria-hidden="true"></span>
+                <a class="alert-body" href="{{ url_for(alert.endpoint, **alert.params) }}">
+                    <span class="alert-title">{{ alert.title }}</span>
+                    <span class="alert-detail">{{ alert.detail }}</span>
+                </a>
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <div class="dash-clear">
+            <i class="bi bi-check-circle" aria-hidden="true"></i>
+            <p class="mb-0">Nothing needs you right now.</p>
+            <small class="text-muted">Stock, expiry dates and debts are all where they should be.</small>
+        </div>
+        {% endif %}
+    </section>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='vendor/chart/chart.umd.min.js') }}"></script>
+<script type="application/json" id="sales-trend-data">
+  {{ sales_data.values()|list|tojson }}
+</script>
+<script type="application/json" id="sales-trend-labels">
+  {{ sales_data.keys()|map('string')|list|tojson }}
+</script>
 <script>
-    const ctx = document.getElementById('salesChart').getContext('2d');
-    
-    // Prepare data from Jinja safely
-    const labels = JSON.parse('[{% for date in sales_data.keys() %}"{{ date.strftime("%b %d") }}"{% if not loop.last %},{% endif %}{% endfor %}]');
-    const data = JSON.parse('[{% for total in sales_data.values() %}{{ total }}{% if not loop.last %},{% endif %}{% endfor %}]');
-    
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [{
-                label: 'Revenue (₵)',
-                data: data,
-                borderColor: '#3b82f6',
-                backgroundColor: 'rgba(59, 130, 246, 0.1)',
-                borderWidth: 3,
-                tension: 0.4,
-                fill: true,
-                pointBackgroundColor: '#0f172a',
-                pointBorderColor: '#3b82f6',
-                pointBorderWidth: 2,
-                pointRadius: 4,
-                pointHoverRadius: 6
-            }]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: true,
-            plugins: {
-                legend: { display: false }
+/*
+ * Chart.js paints to a canvas, so it cannot inherit a CSS variable the way
+ * everything else on the page does - it had eight colours written into it, all
+ * of them the dark theme's. Read the tokens at build time instead, and rebuild
+ * when the theme changes: `tracktrack:theme` is fired by the resolver in
+ * base.html when the device switches, and the sidebar toggle fires it too.
+ */
+(function () {
+  'use strict';
+
+  var labels = JSON.parse(document.getElementById('sales-trend-labels').textContent);
+  var data = JSON.parse(document.getElementById('sales-trend-data').textContent);
+  var canvas = document.getElementById('salesChart');
+  var chart = null;
+
+  function token(name, fallback) {
+    var value = getComputedStyle(document.documentElement)
+      .getPropertyValue(name).trim();
+    return value || fallback;
+  }
+
+  function shortDate(iso) {
+    var parts = iso.split('-');
+    var d = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  }
+
+  function draw() {
+    if (chart) {
+      chart.destroy();
+    }
+    var accent = token('--accent-primary', '#60a5fa');
+    var muted = token('--text-secondary', '#94a3b8');
+    var grid = token('--border-color', 'rgba(255,255,255,0.1)');
+    var surface = token('--bg-card-solid', '#1e293b');
+
+    chart = new Chart(canvas.getContext('2d'), {
+      type: 'line',
+      data: {
+        labels: labels.map(shortDate),
+        datasets: [{
+          label: 'Revenue',
+          data: data,
+          borderColor: accent,
+          backgroundColor: 'transparent',
+          borderWidth: 2.5,
+          tension: 0.35,
+          fill: false,
+          pointBackgroundColor: surface,
+          pointBorderColor: accent,
+          pointBorderWidth: 2,
+          pointRadius: 4,
+          pointHoverRadius: 6,
+        }],
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: function (item) { return '₵' + Number(item.parsed.y).toFixed(2); },
             },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)',
-                        drawBorder: false
-                    },
-                    ticks: { color: '#94a3b8' }
-                },
-                x: {
-                    grid: {
-                        color: 'rgba(255, 255, 255, 0.05)',
-                        drawBorder: false
-                    },
-                    ticks: { color: '#94a3b8' }
-                }
-            }
-        }
+          },
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            border: { display: false },
+            grid: { color: grid },
+            ticks: { color: muted, maxTicksLimit: 5 },
+          },
+          x: {
+            border: { display: false },
+            grid: { display: false },
+            ticks: { color: muted },
+          },
+        },
+      },
     });
+  }
+
+  draw();
+  document.addEventListener('tracktrack:theme', draw);
+
+  // The sidebar toggle rewrites the attribute directly rather than firing the
+  // event, so watch it too - otherwise the chart keeps the old theme's colours
+  // until the next page load.
+  new MutationObserver(function (records) {
+    for (var i = 0; i < records.length; i++) {
+      if (records[i].attributeName === 'data-theme') {
+        draw();
+        return;
+      }
+    }
+  }).observe(document.documentElement, { attributes: true });
+}());
 </script>
 {% endblock %}

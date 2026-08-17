@@ -78,6 +78,13 @@
   anywhere in the app until Phase C3 gave it a rule of its own. Measure a control's real
   height in the browser before trusting a class name for it.
 
+- **Scope a text assertion to the block it is about.** A slice taken to the end of a rendered
+  page catches `base.html` too: a dashboard test asserting the chart listens for
+  `tracktrack:theme` stayed green with that listener deleted, because the sidebar toggle in
+  the shell listens for the same event. Slice between the block's own anchors.
+- **`assert a in page or b in page` is usually a test that cannot fail.** Where the two are
+  branches of the same `{% if %}`, whichever one renders satisfies it. Arrange the fixture so
+  the branch under test is the one that renders, and assert the other is absent.
 - **A CSS assertion must strip comments first.** A rule explaining that it *used* to say
   `min-width: 0` reads as still saying it, and a comment explaining why `:has()` is avoided
   is itself a match for `:has(`. Both have failed a test that was otherwise correct.

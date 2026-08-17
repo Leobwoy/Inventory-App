@@ -1726,10 +1726,12 @@ a.text-decoration-none:hover {
     bottom: calc(var(--phone-tabs-h) + env(safe-area-inset-bottom, 0));
   }
 
-  /* 44px is the smallest target a thumb hits reliably. Measured rather than
-     assumed: every button on this form came out at 35px, because the padding
-     rule above is the only thing setting their height. */
-  .sale-form .btn {
+  /* 44px is the smallest target a thumb hits reliably, and this is every button
+     in the app rather than one form's. It was scoped to `.sale-form` when the
+     problem was first measured there; the dashboard's "Record a sale" then came
+     out at 33px, because a page-header rule shrinks buttons on a phone and
+     overrides `.btn-lg` entirely. The rule is not per page. */
+  .btn {
     min-height: 44px;
   }
 
@@ -2192,4 +2194,231 @@ a.text-decoration-none:hover {
   flex: none;
   font-size: 0.875rem;
   font-variant-numeric: tabular-nums;
+}
+
+
+/* =============================================
+   DASHBOARD
+
+   Four numbers, then the chart and what needs doing. Every stat is a link -
+   a number you cannot act on is a number you stop reading.
+   ============================================= */
+
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-height: 44px;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.9rem;
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.stat-cell:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value.accent {
+  color: var(--accent-success);
+}
+
+.stat-value.bad {
+  color: var(--accent-danger);
+}
+
+.stat-delta {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.stat-delta.is-up {
+  color: var(--accent-success);
+}
+
+/* Down is not red. A quieter week is information, not an error, and colouring
+   it like a failure teaches people to dread opening the page. */
+.stat-delta.is-down {
+  color: var(--text-secondary);
+}
+
+.dash-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.dash-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.dash-head h5 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.dash-more {
+  flex: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Chart.js sizes to its container, and with maintainAspectRatio off the
+   container is the only thing saying how tall it should be. */
+.dash-canvas {
+  position: relative;
+  height: 17rem;
+}
+
+.alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alert-row {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.alert-row:first-child {
+  padding-top: 0;
+}
+
+.alert-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+/* The severity is a bar down the side rather than a coloured heading: the
+   words stay at full contrast, and the colour still tells you where to look. */
+.alert-tag {
+  flex: none;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--text-secondary);
+}
+
+.alert-tag.sev-critical {
+  background: var(--accent-danger);
+}
+
+.alert-tag.sev-warning {
+  background: var(--accent-warning);
+}
+
+.alert-tag.sev-info {
+  background: var(--accent-primary);
+}
+
+.alert-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-height: 44px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.alert-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.alert-detail {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.alert-body:hover .alert-title {
+  color: var(--accent-primary);
+}
+
+.dash-clear {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.dash-clear .bi {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 2rem;
+  color: var(--accent-success);
+}
+
+@media (max-width: 991.98px) {
+  .dash-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 767.98px) {
+  /* On a phone the numbers come first and the chart last: what was sold this
+     week and what needs doing are the two things worth a glance in a doorway,
+     and a seven-point line graph is not one of them. */
+  .stat-strip {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  /* The week's takings get the full width; the rest pair up beneath it. */
+  .stat-strip .stat-cell:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .dash-cols {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dash-alerts {
+    order: -1;
+  }
+
+  .dash-canvas {
+    height: 13rem;
+  }
 }
