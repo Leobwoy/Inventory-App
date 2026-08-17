@@ -12,6 +12,8 @@ one, and whether the form still works when the script never runs.
 """
 from datetime import date
 
+import re
+
 import pytest
 
 from extensions import db
@@ -183,6 +185,21 @@ def test_a_sale_posted_the_way_the_radios_post_it_is_recorded(shop):
 
 # --- the two CSS decisions that fail silently ---------------------------------
 
+def rule_body(css, selector):
+    """The declarations of the rule whose selector starts a line.
+
+    `css.index('.picker-button {')` finds `[data-line].line-enhanced
+    .picker-button {` first, because that string is inside it - which is how a
+    test asserting a border ended up reading a rule that only sets display.
+    """
+    m = re.search(r'^' + re.escape(selector) + r'\s*\{', css, re.M)
+    assert m, f'no rule for {selector}'
+    body = css[m.end():css.index('}', m.end())]
+    # Comments out. A rule explaining that it *used* to say `min-width: 0`
+    # otherwise reads as still saying it - which is how this test first failed.
+    return re.sub(r'/\*.*?\*/', '', body, flags=re.S)
+
+
 def media_block(css, opener, containing):
     """The one @media block for `opener` that contains `containing`.
 
@@ -245,3 +262,45 @@ def test_a_chosen_chip_does_not_depend_on_has(shop):
                   if '.chip' in line and ':has(' in line]
     assert not chip_rules, f'chips rely on :has(): {chip_rules}'
     assert '.chip input:checked + span' in css, 'nothing marks the chosen chip at all'
+
+
+def test_the_quantity_box_cannot_collapse(shop):
+    """It did. `min-width: 0` is explicit permission to shrink to nothing, and in
+    a 1100px window the box measured 20px with 5px of room inside it - so a
+    quantity of 25 showed as "2", and a quantity of 9 showed as nothing at all.
+    Four digits, because a wholesale line can be 1000 units."""
+    client, _business_id, _product = shop
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    rule = rule_body(css, '.qty-stepper .qty-input')
+
+    assert 'min-width: 0' not in rule, 'the input may collapse to nothing again'
+    assert re.search(r'min-width:\s*3\.5rem', rule), 'no floor on the quantity box'
+
+
+def test_the_columns_only_apply_where_there_are_columns(shop):
+    """Below 768px each row is a card and every cell takes the full width. The
+    column widths were unscoped, so `width: 9rem` still capped the quantity cell
+    at 144px on a phone with 300px going spare."""
+    client, _business_id, _product = shop
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    desktop = media_block(css, '@media (min-width: 768px)',
+                          containing='.table-sale-items .col-qty')
+    assert 'width: 9rem' in desktop
+
+    # And no unscoped copy left behind outside a media query.
+    outside = re.sub(r'@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}', '', css)
+    assert '.table-sale-items .col-qty' not in outside,         'a column width still applies at every screen size'
+
+
+def test_the_summary_only_sits_beside_the_items_when_there_is_room(shop):
+    """The row needs about 610px and the items pane is 1.6 of 2.6 columns, so
+    side by side needs roughly a 1330px viewport. It used to switch at 992,
+    where the table got 473px and the quantity input collapsed."""
+    client, _business_id, _product = shop
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    block = media_block(css, '@media (max-width: 1399.98px)',
+                        containing='.sale-layout')
+    assert 'grid-template-columns: minmax(0, 1fr)' in block

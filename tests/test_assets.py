@@ -25,8 +25,6 @@ VENDORED = [
     'vendor/bootstrap-icons/fonts/bootstrap-icons.woff2',
     'vendor/bootstrap-icons/fonts/bootstrap-icons.woff',
     'vendor/chart/chart.umd.min.js',
-    'js/combobox.js',
-    'css/combobox.css',
 ]
 
 

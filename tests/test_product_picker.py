@@ -264,3 +264,48 @@ def test_the_receipt_keeps_the_field_names_the_route_reads(shop, make_po):
     # The button that fills every line, and the data the script reads off them.
     assert 'id="receive-all"' in page
     assert 'data-outstanding=' in page and 'data-per=' in page
+
+
+@pytest.mark.parametrize('path', ['/sales/add', '/purchases/add'])
+def test_the_button_says_it_opens_something(shop, path):
+    """Reported from the running app: nothing indicated the product box could be
+    tapped. It was true - the border computed to two thirds of a pixel at 10%
+    white, invisible on a dark card, and the search icon was hidden the moment a
+    product was chosen. An affordance that disappears once used is not one."""
+    client, _business_id, _products = shop
+    page = body(client, path)
+
+    assert 'picker-caret' in page, 'nothing marks the button as a control'
+    # Written as markup, not a CSS content escape: a unicode escape written
+    # through tooling has arrived here as a control character three times.
+    assert 'bi-chevron-down picker-caret' in page
+
+
+def test_the_caret_stays_after_a_product_is_chosen(shop):
+    """Only the leading magnifier goes; the caret is what keeps saying the row
+    can be changed."""
+    client, _business_id, _products = shop
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    hidden = css[css.index('.picker-button.is-chosen .picker-button-hint,'):]
+    hidden = hidden[:hidden.index('}')]
+
+    assert '.bi-search' in hidden, 'the magnifier is no longer the thing hidden'
+    assert 'picker-caret' not in hidden, 'the caret is hidden once a product is chosen'
+
+
+def test_the_picker_button_has_a_border_that_can_be_seen(shop):
+    client, _business_id, _products = shop
+    css = client.get('/static/css/style.css').get_data(as_text=True)
+
+    # Anchored to the start of a line: `.picker-button {` also appears inside
+    # `[data-line].line-enhanced .picker-button {`, which only sets display, and
+    # this assertion happily read that instead.
+    m = re.search(r'^\.picker-button\s*\{', css, re.M)
+    assert m, 'no .picker-button rule'
+    # Comments stripped: the rule explains that it used to be `dashed`, and the
+    # assertion below read that explanation as the declaration.
+    rule = re.sub(r'/\*.*?\*/', '', css[m.end():css.index('}', m.end())], flags=re.S)
+
+    assert 'var(--input-border-strong)' in rule,         'back to a border nobody can see against the card'
+    assert 'dashed' not in rule

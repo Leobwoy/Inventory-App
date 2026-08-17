@@ -9,15 +9,16 @@
  * be found anywhere on the row.
  *
  * The <select> stays. It keeps its name, it keeps posting, and it stays the
- * source of truth - the dialog only writes to it and fires the same bubbling
- * 'change' the combobox fired, so every listener already written against that
- * carries on working. With no JavaScript the select is never hidden and the page
- * degrades to the plain dropdown it has always been.
+ * source of truth - the dialog only writes to it and fires an ordinary bubbling
+ * 'change', so every listener already written against that carries on working.
+ * With no JavaScript the select is never hidden and the page degrades to the
+ * plain dropdown it has always been.
  *
- * Keyboard and filtering are modelled on static/js/combobox.js, which this
- * supersedes for products. The list is permanently open and fills the dialog
- * instead of floating: combobox's list is `position: absolute; max-height: 15rem`
- * and would clip inside a scrolling modal body.
+ * Keyboard and filtering are modelled on the searchable-dropdown widget this
+ * replaced (static/js/combobox.js, deleted once nothing used it - see git
+ * history). The one thing not carried over is how the list is positioned: that
+ * list floated at `position: absolute; max-height: 15rem` and would clip inside
+ * a scrolling modal body, so this one is permanently open and fills the dialog.
  */
 (function (window, document) {
     'use strict';

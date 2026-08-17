@@ -103,6 +103,7 @@
                                             data-picker-title="Add a product to this sale">
                                         <i class="bi bi-search" aria-hidden="true"></i>
                                         <span class="picker-button-name">Choose a product</span>
+                                        <i class="bi bi-chevron-down picker-caret" aria-hidden="true"></i>
                                     </button>
                                     {{ subform.product_id(class_='form-select product-select' + (' is-invalid' if subform.product_id.errors else ''), data_picker_select='true') }}
                                     {% for error in subform.product_id.errors %}

@@ -26,7 +26,7 @@ SWEEP = ROOT / 'design' / 'verify' / 'sweep.html'
 PAGES = {'dashboard': '/', 'products': '/products/', 'sale': '/sales/add',
          'credit': '/credit/', 'alerts': '/products/alerts',
          'settings': '/auth/settings', 'purchases': '/purchases/',
-         'po': '/purchases/add'}
+         'po': '/purchases/add', 'compare': '/purchases/compare'}
 
 #: Pages that show one pane at a time. The sweep measures what is *visible*, so
 #: without this the second pane of the sale form is never checked at all - and

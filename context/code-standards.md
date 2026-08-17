@@ -78,6 +78,9 @@
   anywhere in the app until Phase C3 gave it a rule of its own. Measure a control's real
   height in the browser before trusting a class name for it.
 
+- **A CSS assertion must strip comments first.** A rule explaining that it *used* to say
+  `min-width: 0` reads as still saying it, and a comment explaining why `:has()` is avoided
+  is itself a match for `:has(`. Both have failed a test that was otherwise correct.
 - **Never measure geometry while a CSS transition or animation is running.** The browser
   pane does not composite while it is hidden, so a transition can sit unfinished
   indefinitely and `getBoundingClientRect` returns a frame no real device would ever hold.
@@ -86,11 +89,18 @@
   smooth` scroll that had not started, and a Bootstrap modal measured at `translate(0,
   -50px)` that looked like a dialog hanging off the top of the screen. Remove the
   transition, or the `.fade` class, before reading anything.
+- **Measure a layout at four widths, not two.** 375, 1024, 1280, 1440. The product picker
+  was verified at 1280 and 1440 and shipped; every width from 992 to 1200 was broken, with a
+  quantity input 20px wide holding no digits at all. Two points do not describe a curve.
 - **Never write a regex through a shell heredoc without checking the bytes.** `` in a
   pattern passed through one became a literal backspace (0x08) in the source. `grep`, the
   terminal and every editor render it as nothing, so the line read exactly right, matched
   nothing, and the tool it was in reported success. Build such patterns from `chr()` or
-  verify with `repr()` of the source line - not by looking at it.
+  verify with `repr()` of the source line - not by looking at it. This has now happened
+  three times: a backspace in a regex, and a form feed twice in a CSS `content: "\f282"` -
+  the second time inside the comment written to warn about the first. **Do not write a
+  unicode escape at all.** An icon goes in the markup as `<i class="bi bi-…">`, which is how
+  every other icon in this app is written anyway.
 
 ## Migrations
 

@@ -209,8 +209,9 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   `TRIAL_DAYS - 1`, which was accommodating the bug.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
-  `static/js/combobox.js`. No template loads anything from another origin, which is a
-  precondition for the service worker in 2.4b.
+  `static/js/combobox.js` (itself since deleted — the product picker replaced it, see
+  Stage 3). No template loads anything from another origin, which is a precondition for
+  the service worker in 2.4b.
 
 ### Stage 2.5 — Notification centre and expiry alerts (merged)
 
@@ -665,6 +666,60 @@ the gap theory failed, which is how this was found.
 until shown, so an ordinary capture measures none of it and reports clean without looking.
 `capture.py` now takes a `dlg` shot with the modal forced open and its list filled from the
 same `<select>` the script reads. 2024 nodes swept across 22 captures, zero failures.
+
+**Follow-up: the combobox is gone.** `static/js/combobox.js` and `static/css/combobox.css`
+were the picker's predecessor and had no callers left once the dialog landed — but they were
+still in `PRECACHE`, so every user downloaded ~8KB of dead code on first visit. Both deleted,
+dropped from `PRECACHE` and from `VENDORED` in `tests/test_assets.py`, `CACHE_VERSION` bumped
+to `tracktrack-v16`. They were kept for a while as a candidate for the customer and supplier
+selects; nothing was ever scheduled, and git history is a better home for that than the
+precache list. A future searchable select should widen the picker or restore the file from
+history rather than invent a third pattern.
+
+**Follow-up from the running app — three fixes.** Reported with a screenshot: a quantity
+over 9 showed only its first digit, and nothing indicated the product box could be tapped.
+
+Measured at 1100px, both were worse than reported. The quantity input was **20px** with
+**5px** of room inside it, so not even one digit rendered, and the product name had **57px**
+— worse than the 98px the picker had just fixed. Three separate causes, all mine:
+
+- `min-width: 0` on the input is explicit permission to collapse, and it collapsed.
+- The column widths were written outside any media query, so `width: 9rem` still capped the
+  quantity cell at 144px on a phone with 300px going spare.
+- The summary panel started sharing the row at 992px, but the row needs about 610px and the
+  items pane only reaches that at roughly 1330px. It drops beneath the items below 1400 now,
+  which is arithmetic rather than taste: 207 for a name, 157 for the stepper, 112 for the
+  price, 80 for the line total, 54 to remove it.
+
+**The lesson is the measuring, not the CSS.** The first pass checked 1280 and 1440 and
+declared victory; every width between 992 and 1200 was broken and unlooked-at. Layout is now
+measured at 375, 1024, 1280 and 1440 as a matter of course.
+
+| Viewport | Quantity box | 4 digits | Name space | Longest name fits |
+|---|---|---|---|---|
+| 375 | 227px | yes | 275px | yes |
+| 1024 | 56px | yes | 281px | yes |
+| 1280 | 56px | yes | 385px | yes |
+| 1440 | 56px | yes | 216px | yes |
+
+**The affordance.** The picker button's border computed to two thirds of a pixel at 10%
+white — invisible on a dark card — and the search icon was hidden the moment a product was
+chosen, which I had done deliberately to reclaim 24px. A bad trade: it bought width with
+discoverability. There is a chevron pinned to the right now that never hides, and a border
+on its own token (`--input-border-strong`) that can actually be seen.
+
+Written as `<i class="bi bi-chevron-down">` markup rather than a CSS `content` escape,
+because a unicode escape written through tooling arrived here as a **control character for
+the third time** — once as a backspace in a regex, twice as a form feed in this rule, the
+second time inside the comment warning about the first. Control characters render as nothing
+and read as correct. The rule is now: never write one; use markup or `chr()`.
+
+**Supplier prices** gained an instant filter. Deliberately unlike the five paginated list
+pages that use `services/listing.py`: this page has no pagination, renders every row at once
+(15 cards over 5 screens), so everything being searched is already in the browser. Matched
+against a `data-search` attribute holding name and SKU, not the card's text — a card also
+holds supplier names and prices, so searching "2" against its text would match every product
+whose price contains one.
 
 ## Next Up
 

@@ -52,9 +52,14 @@ Chart.js 4.4.1, plus `static/css/style.css`. Nothing loads from another origin �
 worker cannot reliably cache cross-origin responses, and `tests/test_assets.py` fails if a
 CDN link reappears.
 
-Searchable dropdowns use `static/js/combobox.js` (with `static/css/combobox.css`), applied
-by putting `data-combobox` on a `<select>`. The native `<select>` stays in the DOM and
-still posts its value, so the page works with JavaScript off.
+Choosing a product uses `static/js/picker.js` with `templates/_partials/product_picker.html`
+— a dialog opened from a button carrying `data-picker-for`. The native `<select>` stays in
+the DOM and still posts its value, so the page works with JavaScript off.
+
+There is no general searchable-dropdown component. The one that existed
+(`static/js/combobox.js`) was deleted once the picker replaced its only caller; a second
+searchable select — customers or suppliers — should either widen the picker or bring the
+combobox back from git history, not grow a third pattern.
 
 **Two Bootstrap behaviours that have already cost time:**
 
