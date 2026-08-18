@@ -13,7 +13,7 @@ import pandas as pd
 from flask import send_file
 import io
 from flask_login import login_required, current_user
-from auth.decorators import permission_required
+from auth.decorators import permission_required, requires_feature
 from datetime import date, timedelta
 from purchases.models import PurchaseOrder, StockBatch
 from services import audit, limits, listing, uom
@@ -92,6 +92,7 @@ def list_products():
 @products_bp.route('/alerts')
 @login_required
 @permission_required('products.view')
+@requires_feature('notifications')
 def alerts():
     """Everything needing attention, worst first.
 
@@ -132,6 +133,7 @@ def low_stock():
 @products_bp.route('/alerts/count')
 @login_required
 @permission_required('products.view')
+@requires_feature('notifications')
 def alert_count():
     """How many things need attention, for the badge.
 
@@ -640,6 +642,18 @@ def bulk_action():
                 'export_excel': 'reports.export'}.get(action)
     if not required or not current_user.can(required):
         flash('You do not have permission to do that.', 'danger')
+        return redirect(url_for('products.list_products'))
+
+    # And the plan on top of the permission, for the two that take data out of
+    # the building. CSV is on Shop, Excel on Depot. Unlike the report pages
+    # there is nothing to fall back to rendering here - the whole request is the
+    # export - so this returns to the list rather than flashing and continuing.
+    export_feature = {'export_csv': 'exports.csv',
+                      'export_excel': 'exports.all'}.get(action)
+    if export_feature and not limits.has_feature(export_feature):
+        from billing.plans import FEATURES
+        flash(f'{FEATURES[export_feature][0]} is not included in your current plan.',
+              'warning')
         return redirect(url_for('products.list_products'))
 
     products = Product.query.filter(Product.id.in_(ids), Product.business_id == current_user.business_id).all()

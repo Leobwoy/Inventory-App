@@ -1254,6 +1254,62 @@ project, not an oversight. The refusal now comes from ordering more than there i
 exactly, so `price_at_sale x quantity` is 460.000008. Asserted at the boundary where a
 person reads or pays it - the same rule U2 established after the widening leaked.
 
+### The plans now gate what they sell (2026-08-18)
+
+Asked what each subscription tier includes beyond the user and product limits. Answering it
+turned up the real finding: **`billing/plans.py` declared fourteen feature codes and only
+seven were checked anywhere.** A Kiosk account could export to Excel and PDF, read the
+alerts inbox and receive expiry warnings - all three sold as paid capabilities.
+
+**Four gates added.** `exports.csv` on Shop and `exports.all` on Depot, across the three
+report exports and the catalogue bulk export; `notifications` on the alerts inbox, its badge
+route, the sidebar entry and the dashboard panel; `expiry_alerts` on the two expiry entries
+inside `notifications.for_business`.
+
+**Three stay ungated on purpose**, and this is worth keeping visible so nobody "finishes the
+job" by decorating them: `supplier_scorecards` (Stage 2.6, not built), `margin_reports`
+(there is no profit report at all - `cost_price` is read by `services/pricing.py` and the
+catalogue export and nothing else) and `api_access` (there is no public API; the offline sync
+endpoints are gated on `offline`). Gating a capability that does not exist is advertising by
+decorator.
+
+**Exports gate inline rather than by decorator.** Reading a report is free and only taking it
+away costs money, so `_allowed_export()` flashes and renders the report, exactly as the
+`reports.export` permission check already did. Redirecting somebody off a page they are
+entitled to read is a strange way to say a button costs extra. The catalogue export is the
+opposite case - the whole request *is* the export - so it returns to the list.
+
+**Only the expiry alerts are gated, never the tracking underneath.** Batches and expiry dates
+are what FEFO picks stock by, so switching them off on a cheaper plan would change which
+bottle leaves the shelf. That is a correctness change dressed as a billing one, and there is
+a test pinning it.
+
+**A gate that would have introduced a lie.** With the inbox off, `alerts` is empty, and the
+dashboard's empty state read *"Nothing needs you right now - stock, expiry dates and debts
+are all where they should be"* to a shop that might be out of stock across the board. The
+panel now tells three states apart: has alerts, has none, cannot see them - the third
+linking to plans.
+
+**Two things checked before trusting them.** The guided tour anchors a step to `#nav-alerts`,
+which is now hidden on cheaper plans; `static/js/tour.js:43` already keeps only steps whose
+anchor exists, so the step drops rather than leaving an empty bubble. And subscription
+warnings do not travel through the inbox alone - `_partials/onboarding.html` carries the
+trial countdown and the "trial has ended" notice independently - so gating the inbox cannot
+hide a billing state from anyone.
+
+**Three test premises wrong, all found by running them.** Expiry alerts need
+`ItemGroup.track_expiry`, which is off by default and deliberately so. `stock.deduct_fefo`
+takes `business_id` explicitly. And `'nav-alerts' in page` matches the tour's own step list
+on every plan - the fourth time this exact substring trap has appeared, and the reason these
+assertions match elements now.
+
+**A falsification that was inert rather than green.** Mutating `_allowed_export` to return a
+redirect changed nothing, because the caller compares its result to `'csv'`/`'excel'`/`'pdf'`
+and a Response object matches none of them - so it fell through to the same render. The
+faithful mutation is the design the test rules out: gate the whole page the way
+`@requires_feature` would. **A mutation has to be an alternative implementation, not just a
+different line.**
+
 ## Open Questions
 
 - **The offline catalogue still prices in bottles (`api/routes.py:138-140`).** Deliberately

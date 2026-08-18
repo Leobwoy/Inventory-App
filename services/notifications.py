@@ -140,7 +140,13 @@ def for_business(business_id):
 
     alerts = []
 
-    expired = expired_batches(business_id)
+    # Expiry is its own paid capability, gated the same way the credit ledger is
+    # below. Only the *alerts* are gated, never the tracking underneath: batches
+    # and expiry dates are what FEFO picks stock by, so switching them off would
+    # change which bottle leaves the shelf, not just what gets said about it.
+    tracks_expiry = limits.has_feature('expiry_alerts', business_id)
+
+    expired = expired_batches(business_id) if tracks_expiry else []
     if expired:
         units = sum(b.quantity_remaining for b in expired)
         alerts.append(_alert(
@@ -162,7 +168,7 @@ def for_business(business_id):
             + (f' and {len(empty) - 3} more' if len(empty) > 3 else ''),
             'products.low_stock', {}, len(empty)))
 
-    soon = expiring_batches(business_id)
+    soon = expiring_batches(business_id) if tracks_expiry else []
     if soon:
         nearest = soon[0].expiry_date
         alerts.append(_alert(

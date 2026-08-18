@@ -88,6 +88,11 @@
         </div>
     </section>
 
+    {# `alerts` is empty for a plan without the inbox, which the empty state
+       below would have read as "nothing needs you right now" - a reassurance
+       nobody checked, on a shop that might be out of stock across the board.
+       The three states are told apart deliberately: has alerts, has none, and
+       cannot see them. #}
     <section class="glass-card dash-alerts">
         <div class="dash-head">
             <h5><i class="bi bi-exclamation-circle me-2" aria-hidden="true"></i>Needs attention</h5>
@@ -112,6 +117,15 @@
             </li>
             {% endfor %}
         </ul>
+        {% elif not has_feature('notifications') %}
+        <div class="dash-clear">
+            <i class="bi bi-bell-slash" aria-hidden="true"></i>
+            <p class="mb-0">Alerts are not on your plan.</p>
+            <small class="text-muted">
+                Low stock, expiry dates and overdue debts, gathered in one place.
+                <a href="{{ url_for('billing.overview') }}">See plans</a>.
+            </small>
+        </div>
         {% else %}
         <div class="dash-clear">
             <i class="bi bi-check-circle" aria-hidden="true"></i>

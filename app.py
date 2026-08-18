@@ -286,8 +286,11 @@ def create_app():
             out_of_stock=[p for p in low_stock if (p.quantity_in_stock or 0) <= 0],
             owed=owed,
             # Already permission-filtered, and shared with the badge in the nav
-            # through a per-request cache, so the two cannot disagree.
-            alerts=notifications.for_user(current_user),
+            # through a per-request cache, so the two cannot disagree. Empty
+            # rather than absent when the plan does not include the inbox, so
+            # the dashboard panel simply has nothing to show instead of raising.
+            alerts=(notifications.for_user(current_user)
+                    if limits.has_feature('notifications') else []),
             sales_data=sales_data,
             previous_total=previous_total,
             top_products=top_products,

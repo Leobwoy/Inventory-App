@@ -14,7 +14,39 @@ from reportlab.platypus import Table, TableStyle
 import pandas as pd
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
-from services import uom
+from services import limits, uom
+
+
+#: Which plan each export format is on. CSV is Shop, Excel and PDF are Depot.
+EXPORT_FEATURES = {'csv': 'exports.csv', 'excel': 'exports.all', 'pdf': 'exports.all'}
+
+
+def _allowed_export():
+    """The export format the caller may actually have, or None.
+
+    Two gates and both apply, which is the rule this codebase repeats
+    everywhere: `reports.export` asks whether this *person* may take data out of
+    the building, and the plan asks whether this *business* has paid for the
+    format. Neither implies the other.
+
+    Inline rather than @requires_feature, because reading the report is free and
+    only taking it away costs money. Redirecting somebody off a page they are
+    entitled to read is a strange way to say "that button costs extra", so this
+    flashes and renders the report, exactly as the permission check already did.
+    """
+    from billing.plans import FEATURES
+
+    export = request.args.get('export')
+    if not export:
+        return None
+    if not current_user.can('reports.export'):
+        flash('You do not have permission to export reports.', 'danger')
+        return None
+    code = EXPORT_FEATURES.get(export)
+    if code and not limits.has_feature(code):
+        flash(f'{FEATURES[code][0]} is not included in your current plan.', 'warning')
+        return None
+    return export
 
 
 def _order_view(product, *base_quantities):
@@ -142,10 +174,7 @@ def sales_report():
 
     headers = ['Date', 'Product', 'Sold by', 'Quantity', 'Price each', 'Total']
     data_rows.append(['', '', '', '', 'Summary Total', float(total)])
-    export = request.args.get('export')
-    if export and not current_user.can('reports.export'):
-        flash('You do not have permission to export reports.', 'danger')
-        export = None
+    export = _allowed_export()
     if export == 'pdf':
         pdf_buffer = generate_pdf_report('Sales Report', headers, data_rows)
         response = make_response(pdf_buffer.read())
@@ -210,10 +239,7 @@ def purchases_report():
             float((item.unit_cost or 0) * item.quantity_ordered),
         ])
     data_rows.append(['', '', '', '', '', '', '', '', 'Summary Total', float(total)])
-    export = request.args.get('export')
-    if export and not current_user.can('reports.export'):
-        flash('You do not have permission to export reports.', 'danger')
-        export = None
+    export = _allowed_export()
     if export == 'pdf':
         pdf_buffer = generate_pdf_report('Purchases Report', headers, data_rows)
         response = make_response(pdf_buffer.read())
@@ -246,10 +272,7 @@ def stock_report():
             loose if uom.has_conversion(p) else 0,
             p.quantity_in_stock,
         ])
-    export = request.args.get('export')
-    if export and not current_user.can('reports.export'):
-        flash('You do not have permission to export reports.', 'danger')
-        export = None
+    export = _allowed_export()
     if export == 'pdf':
         pdf_buffer = generate_pdf_report('Stock Report', headers, data_rows)
         response = make_response(pdf_buffer.read())

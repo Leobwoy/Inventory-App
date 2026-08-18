@@ -110,7 +110,10 @@
         <nav class="sidebar-nav">
             <a class="nav-link" href="/" id="nav-dashboard"><i class="bi bi-grid-1x2"></i> Dashboard</a>
 
-            {% if current_user.can('products.view') %}
+            {# Both gates, as everywhere in this nav: may this person see stock,
+               and has this business paid for the inbox. Hiding is cosmetic - the
+               route carries the same two checks. #}
+            {% if current_user.can('products.view') and has_feature('notifications') %}
             <a class="nav-link d-flex align-items-center" href="/products/alerts" id="nav-alerts">
               <i class="bi bi-bell"></i> <span class="ms-1">Needs attention</span>
               {# Filled in after load - see the /products/alerts/count route for
