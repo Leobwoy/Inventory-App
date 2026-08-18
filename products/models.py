@@ -77,7 +77,11 @@ class Product(db.Model):
     size_value = db.Column(db.Numeric(10, 2))
     size_unit = db.Column(db.String(20))
     barcode = db.Column(db.String(100))
-    cost_price = db.Column(db.Numeric(10, 2), nullable=False)
+    # Six decimals because it is derived, not typed: the form asks what a carton
+    # costs and this is that divided by the pack size. At two decimals the edit
+    # form's round trip drifts - 1,000 for 24 stores 41.67 and reads back 1,000.08
+    # (F-41, and d7e93b04c815 on the selling side).
+    cost_price = db.Column(db.Numeric(14, 6), nullable=False)
     base_uom = db.Column(db.String(20), nullable=False)
     purchase_uom = db.Column(db.String(20), nullable=False)
     units_per_purchase_uom = db.Column(db.Integer, nullable=False, default=1)

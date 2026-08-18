@@ -68,20 +68,40 @@ Blueprints must not import each other's route modules. Cross-domain work goes th
 - **Client-side** — IndexedDB holds a cached catalogue and a queue of sales recorded
   offline. It is a staging area, never a source of truth: the server re-validates stock and
   price on sync, against the truth *now* rather than the truth the device had.
-- Money is `Numeric(10, 2)`, with two deliberate exceptions.
+- Money is `Numeric(10, 2)`, and the exceptions all follow one rule: **money a human types
+  or reads stays at two decimals; money the app derives by dividing keeps six.**
   `Business.max_discount_percent` is `Numeric(5, 2)` — a percentage, not money.
-  `PurchaseOrderItem.unit_cost` is `Numeric(14, 6)` because it is *derived*, by dividing a
-  line cost by a pack quantity; at two decimals that rounding is real money across a carton
-  of 24. Money a human types or reads stays at two.
+  `PurchaseOrderItem.unit_cost` (F-41), `SaleItem.price_at_sale` and `SaleItem.list_price`
+  (Stage U2) and `Product.cost_price` (Stage W2) are all `Numeric(14, 6)`, because each is a
+  per-single figure obtained by dividing a pack figure. At two decimals that rounding is real
+  money across a carton of 24, and on `cost_price` it also drifts on every edit: 1,000 for 24
+  stores 41.67, which the form reads back as a carton costing 1,000.08.
+  `Product.unit_price` deliberately stays at two. It is a genuine per-bottle selling price,
+  charged in whole pesewas, and it is re-derived from the stored pack price on every save
+  rather than round-tripped through the form, so it cannot drift.
 - Quantities are integers in **base units**, on every side. Buying converts at the edge
   (`services/uom.to_base`) and, since Stage U, so does selling: a sale line carries the unit
   it was typed in and is converted before `services/stock.py` sees it. Nothing downstream of
   that ever asks which unit a number is in.
-- **Two selling prices, one of them not derivable.** `Product.unit_price` is per base unit;
-  `Product.pack_price` is per pack and nullable, where null means "count × unit_price". A
-  stored pack price is a negotiated wholesale price - a carton of 24 at ₵1,050 is ₵43.75 a
-  bottle against ₵48 singly - and no arithmetic on the single price can produce that gap.
-  `Product.sell_unit` (`base` | `purchase` | `both`) says what may be chosen.
+- **The pack is the price.** `Product.pack_price` is what the business types and what the
+  business quotes; `Product.unit_price` and `Product.cost_price` are per base unit and are
+  *derived on save* by dividing the typed pack figures (Stage W2). This inverted in W2 and
+  the direction matters: a wholesaler buys, sells and quotes by the carton, and what one
+  bottle costs is both a figure they never work out and one no two shops agree on.
+
+  The per-single columns stay stored and stay `NOT NULL`. Deriving rather than dropping them
+  is what keeps the change contained — making them nullable would push a NULL into price
+  sorting (`products/routes.py` `PRODUCT_SORTS`, where it orders unpredictably on Postgres),
+  into the offline catalogue payload, and into every report that multiplies by them.
+
+  A stored pack price is a negotiated wholesale price - a carton of 24 at ₵1,050 is ₵43.75 a
+  bottle against ₵48 singly - and no arithmetic on a single price can produce that gap, which
+  is why it is the number that is typed rather than the number that is computed.
+  `pack_price` is still nullable and null still means "count × unit_price" to
+  `services/uom.price_for`, for rows that predate W2; the form no longer creates one.
+  A product with no real pack - loose goods - is priced by the single, and both the form and
+  `uom.sell_units()` fall back to that. `Product.sell_unit` (`base` | `purchase` | `both`)
+  says what may be chosen.
 - Free-form context on audit entries and payment payloads is JSON in a `Text` column.
 
 ## Auth and Access Model

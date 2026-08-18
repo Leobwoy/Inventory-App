@@ -5,6 +5,7 @@ account was effectively an admin account. These tests exercise direct URL
 access, which is the thing that actually failed: hiding a nav link protects
 nothing.
 """
+import re
 import pytest
 
 from auth.models import User
@@ -151,12 +152,24 @@ def test_suspension_takes_effect_on_an_active_session(business, make_staff, app)
 
 
 def test_cost_price_field_is_absent_for_unpermitted_staff(business, make_staff):
-    """Hidden in the template is not enough - the bound field is removed."""
+    """Hidden in the template is not enough - the bound field is removed.
+
+    Both cost boxes, not just one: the form asks for a cost per carton as well
+    as a cost per single, and the pack figure is the same secret multiplied by
+    24. Asserted against a real `<input>` rather than the substring, because the
+    page now carries `[name="cost_price"]` inside a script that reads the box
+    when there is one - a selector that finds nothing is not a leaked cost.
+    """
+    def boxes(client):
+        page = client.get('/products/add').get_data(as_text=True)
+        return {name for name in ('cost_price', 'pack_cost')
+                if re.search(r'<input[^>]*name="%s"' % name, page)}
+
     inventory = make_staff(business, 'Inventory Staff', 'inv@x.example.com')
-    assert 'cost_price' not in inventory.get('/products/add').get_data(as_text=True)
+    assert boxes(inventory) == set()
 
     manager = make_staff(business, 'Manager', 'mgr2@x.example.com')
-    assert 'cost_price' in manager.get('/products/add').get_data(as_text=True)
+    assert boxes(manager) == {'cost_price', 'pack_cost'}
 
 
 def test_posted_cost_price_is_ignored_on_edit(business, make_staff, make_product):

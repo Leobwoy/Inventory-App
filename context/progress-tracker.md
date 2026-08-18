@@ -1027,6 +1027,73 @@ docstring that it passed before the change, because a test that cannot go red is
 keeping only when it is honest about what it pins: the guarantee that an archive from before
 the carton columns still restores.
 
+**W2 — the carton is what you type.** The form asks two questions it never asked before -
+what does a carton sell for, what does a carton cost you - and stops asking the two it used
+to. `unit_price` and `cost_price` are derived on save and stay `NOT NULL`; that is the
+decision that kept this contained, because making them nullable would have pushed a NULL
+into `PRODUCT_SORTS`, the offline catalogue payload and every report that multiplies by
+them. `services/pricing.py` needed no change at all - it reads `uom.price_for` and never
+touches `unit_price`.
+
+Loose goods keep the old path. A product with no real pack is still asked for a single
+price, still saveable and still sellable, which is why the two prices are validated as a
+pair in `ProductForm.validate` rather than by marking either field required: a required
+field on a hidden pane blocks submit with no visible reason and no submit event to catch,
+which this project has already been bitten by once.
+
+**`cost_price` was widened to `Numeric(14, 6)`, and the reason is the round trip rather than
+the sale.** The form now asks for a carton cost and stores it divided. At two decimals a
+carton at 1,000 for 24 stores 41.67 a bottle, which the edit form multiplies back to
+1,000.08 - so simply opening a product and saving it would walk its cost upwards, every
+time. `unit_price` deliberately stays at two: it is a real per-bottle price charged in whole
+pesewas, and it is re-derived from the stored pack price rather than round-tripped, so it
+cannot drift. Only one screen displays a cost - the product export - and it rounds, because
+the last widening leaked six decimals onto a page.
+
+**The low-stock threshold is typed in cartons and rounds up.** Down would not just be less
+safe, it would be unstable: 100 bottles at 24 shows 4 cartons, saves 96, shows 4 again -
+walking the warning level down every time the product was opened. Up settles after one step.
+
+**The audit log now records the price somebody actually typed.** It logged `unit_price`
+only, which after this change is a derived figure - the decision behind it would not have
+appeared anywhere.
+
+**Three tests asserted the old direction and were rewritten rather than patched.**
+`test_a_blank_pack_price_is_not_zero` asserted that a packed product saves with no pack
+price, meaning "a pack is count x the single price". That is exactly what W2 reverses, so it
+is now `test_a_packed_product_is_refused_without_a_carton_price`, with the old guarantee
+named in its docstring and still covered at the service level in `test_pack_pricing.py`. The
+form's warning inverted with the boxes: there is no singles box on a packed product any
+more, so the mistake it watches for is a bottle price typed into the carton box, and the
+signal is a carton selling below its cost.
+
+**A U4 bug found by looking at the page rather than the tests.** The read-back sentence,
+the sell-by dropdown and the new threshold suffix all pluralised by appending an `s`, so the
+default base unit rendered as **"pcss"** - on screen for most products since U4 shipped, and
+"boxs" for anyone selling by the box. There is a `plural()` helper now: unchanged if it
+already ends in `s`, `es` after x/z/ch/sh, `s` otherwise.
+
+**An hour's worth of wrong contrast readings, caught by a control.** Measured on dark, the
+guard sentence came back at 2.32:1 and every field label at 1.75:1. The tell was that a
+label W2 never touched measured 1.75 too - if that were real the whole dark theme would have
+been unreadable since it shipped. The cause: `.glass-card` carries `transition: background
+0.2s`, the Browser pane was not compositing, so the transition never advanced and the card
+stayed frozen at the *previous* theme's colour while `.pack-summary`, which has no
+transition, switched immediately. Every reading was near-white text composited over a
+near-white surface that was not actually on screen.
+
+**Injecting `* { transition: none !important }` before measuring is now the rule**, and it
+is cheap. The real figures: the sentence is 16.36:1 on dark and 15.72:1 on light, the labels
+6.10 and 6.04 - identical to the untouched control, which is the point. Layout measured at
+375 / 1024 / 1280 / 1440: no horizontal overflow, nothing clipped with a five-figure carton
+price, every control 49px tall.
+
+**A permission test that broke for the wrong reason.** `cost_price` is withheld from staff
+without the permission, and the test asserted the substring was absent from the page. The
+new script reads the cost box when there is one, so `[name="cost_price"]` now appears in a
+selector - a selector that finds nothing is not a leaked cost. It asserts against a real
+`<input>` now, and covers `pack_cost` as well, which is the same secret multiplied by 24.
+
 ## Open Questions
 
 - **Self-service password reset still does not exist (F-43), but the lockout risk is

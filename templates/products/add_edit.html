@@ -121,7 +121,42 @@
                 <label class="form-label" for="{{ form.sell_unit.id }}">{{ form.sell_unit.label.text }}</label>
                 {{ form.sell_unit(class_='form-select', id=form.sell_unit.id) }}
             </div>
-            <div class="field">
+            {# The carton is the unit. Only one of these two pairs is on screen at a
+               time: a product with a real pack is priced by the pack and nothing
+               asks what one bottle costs, because that is a figure a wholesaler
+               never quotes and no two shops agree on. The per-single columns are
+               still stored - the route divides - they are just not typed.
+
+               Neither pair is HTML-required. A required field on a hidden pane
+               blocks submit with no visible reason and no submit event to catch,
+               so which pair is demanded is decided in ProductForm.validate. #}
+            <div class="field" id="pack-price-field" hidden>
+                <label class="form-label" for="{{ form.pack_price.id }}">{{ form.pack_price.label.text }}</label>
+                <div class="input-group">
+                    <span class="input-group-text">&#8373;</span>
+                    {{ form.pack_price(class_='form-control' + (' is-invalid' if form.pack_price.errors else ''), inputmode='decimal') }}
+                </div>
+                {% for error in form.pack_price.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            {# Cost price is deliberately withheld from staff without the permission -
+               owners routinely do not want floor staff seeing purchase cost against
+               sale price. The route deletes both bound fields, so every reference to
+               either must stay inside this gate or the page raises at render. #}
+            {% if current_user.can('products.cost_price.view') %}
+            <div class="field" id="pack-cost-field" hidden>
+                <label class="form-label" for="{{ form.pack_cost.id }}">{{ form.pack_cost.label.text }}</label>
+                <div class="input-group">
+                    <span class="input-group-text">&#8373;</span>
+                    {{ form.pack_cost(class_='form-control' + (' is-invalid' if form.pack_cost.errors else ''), inputmode='decimal') }}
+                </div>
+                {% for error in form.pack_cost.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            {% endif %}
+            <div class="field" id="single-price-field">
                 <label class="form-label" for="{{ form.unit_price.id }}">{{ form.unit_price.label.text }}</label>
                 <div class="input-group">
                     <span class="input-group-text">&#8373;</span>
@@ -131,22 +166,8 @@
                 <div class="invalid-feedback d-block">{{ error }}</div>
                 {% endfor %}
             </div>
-            <div class="field" id="pack-price-field" hidden>
-                <label class="form-label" for="{{ form.pack_price.id }}">{{ form.pack_price.label.text }}</label>
-                <div class="input-group">
-                    <span class="input-group-text">&#8373;</span>
-                    {{ form.pack_price(class_='form-control' + (' is-invalid' if form.pack_price.errors else ''), inputmode='decimal', placeholder='Leave blank to use the single price') }}
-                </div>
-                {% for error in form.pack_price.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
-            {# Cost price is deliberately withheld from staff without the permission -
-               owners routinely do not want floor staff seeing purchase cost against
-               sale price. The route deletes the bound field, so every reference to it
-               must stay inside this gate or the page raises at render. #}
             {% if current_user.can('products.cost_price.view') %}
-            <div class="field">
+            <div class="field" id="single-cost-field">
                 <label class="form-label" for="{{ form.cost_price.id }}">{{ form.cost_price.label.text }}</label>
                 <div class="input-group">
                     <span class="input-group-text">&#8373;</span>
@@ -168,7 +189,10 @@
             </div>
             <div class="field">
                 <label class="form-label" for="{{ form.min_stock_alert.id }}"><i class="bi bi-exclamation-triangle me-1 text-warning"></i>{{ form.min_stock_alert.label.text }}</label>
-                {{ form.min_stock_alert(class_='form-control' + (' is-invalid' if form.min_stock_alert.errors else ''), inputmode='numeric') }}
+                <div class="input-group">
+                    {{ form.min_stock_alert(class_='form-control' + (' is-invalid' if form.min_stock_alert.errors else ''), inputmode='numeric') }}
+                    <span class="input-group-text" id="alert-unit">pcs</span>
+                </div>
                 {% for error in form.min_stock_alert.errors %}
                 <div class="invalid-feedback d-block">{{ error }}</div>
                 {% endfor %}
@@ -203,13 +227,41 @@
   var pack = document.getElementById('pack-uom');
   var count = document.getElementById('pack-count');
   var unitPrice = document.querySelector('[name="unit_price"]');
+  var unitCost = document.querySelector('[name="cost_price"]');
   var packPrice = document.querySelector('[name="pack_price"]');
+  var packCost = document.querySelector('[name="pack_cost"]');
   var sellUnit = document.querySelector('[name="sell_unit"]');
+  var minStock = document.querySelector('[name="min_stock_alert"]');
   var summary = document.getElementById('pack-summary');
-  var packField = document.getElementById('pack-price-field');
+  var alertUnit = document.getElementById('alert-unit');
+  // Two pairs of boxes, one pair on screen at a time. The cost half of each pair
+  // is absent for staff who may not see cost, so every one of these is optional.
+  var panes = {
+    packPrice: document.getElementById('pack-price-field'),
+    packCost: document.getElementById('pack-cost-field'),
+    singlePrice: document.getElementById('single-price-field'),
+    singleCost: document.getElementById('single-cost-field')
+  };
   var sellField = document.getElementById('sell-unit-field');
   if (!base || !summary) {
     return;
+  }
+
+  function show(pane, visible) {
+    if (pane) { pane.hidden = !visible; }
+  }
+
+  function amount(el) {
+    return el ? (parseFloat(el.value) || 0) : 0;
+  }
+
+  // These are words the business typed, so they are whatever they are: "pcs",
+  // "box", "crate". Adding a bare 's' made "pcss" and "boxs" - and "pcs" is the
+  // default base unit, so that one was on screen for most products.
+  function plural(word) {
+    if (/s$/i.test(word)) { return word; }
+    if (/(x|z|ch|sh)$/i.test(word)) { return word + 'es'; }
+    return word + 's';
   }
 
   function money(n) {
@@ -221,18 +273,25 @@
     var one = (base.value || 'item').trim();
     var many = (pack.value || '').trim();
     var per = parseInt(count.value, 10) || 1;
-    var single = parseFloat(unitPrice.value) || 0;
-    var whole = parseFloat(packPrice ? packPrice.value : '') || 0;
+    var single = amount(unitPrice);
+    var whole = amount(packPrice);
+    var wholeCost = amount(packCost);
 
     // A pack of one is not a pack, and a pack with no name is not one either.
     var hasPack = per > 1 && many && many.toLowerCase() !== one.toLowerCase();
-    if (packField) { packField.hidden = !hasPack; }
+    show(panes.packPrice, hasPack);
+    show(panes.packCost, hasPack);
+    show(panes.singlePrice, !hasPack);
+    show(panes.singleCost, !hasPack);
     if (sellField) { sellField.hidden = !hasPack; }
+
+    // The threshold is typed in whatever the stock is counted in.
+    if (alertUnit) { alertUnit.textContent = plural(hasPack ? many : one); }
 
     // The dropdown says what may be sold, in the words just typed.
     if (sellUnit && hasPack) {
-      sellUnit.options[0].textContent = one + 's only';
-      sellUnit.options[1].textContent = many + 's only';
+      sellUnit.options[0].textContent = plural(one) + ' only';
+      sellUnit.options[1].textContent = plural(many) + ' only';
       sellUnit.options[2].textContent = 'Both';
     }
 
@@ -243,27 +302,32 @@
       return;
     }
 
-    var each = whole ? whole / per : single;
-    var parts = ['You sell this by the ' + many + ' of ' + per + ' ' + one + 's.'];
+    var parts = ['You sell this by the ' + many + ' of ' + per + ' ' + plural(one) + '.'];
     if (whole) {
+      // The derived figure, which is the only place a bottle price appears at
+      // all. It is also what catches a bottle price typed into this box: 48.00
+      // for a carton of 24 reads back as 2.00 a bottle.
       parts.push('A ' + many + ' is ' + money(whole) + ' — that works out at '
-                 + money(each) + ' a ' + one + '.');
-    } else if (single) {
-      parts.push('No ' + many + ' price set, so a ' + many + ' is ' + per + ' × '
-                 + money(single) + ' = ' + money(single * per) + '.');
+                 + money(whole / per) + ' a ' + one + '.');
     }
     summary.textContent = parts.join(' ');
 
-    // The mistake this whole sentence exists to catch.
-    var suspect = whole && single && single > each * 4;
+    // The mistake the sentence exists to catch, inverted along with the boxes.
+    // It used to be a carton price in the singles box; there is no singles box
+    // now, so it is a single price in the carton box - and the sharpest signal
+    // for that is a carton selling for less than it cost. Silent for staff who
+    // cannot see cost, which is the same trade the rest of this form makes.
+    var suspect = whole && wholeCost && whole < wholeCost;
     summary.classList.toggle('is-warning', Boolean(suspect));
     if (suspect) {
-      summary.textContent += ' Check the single price - ' + money(single)
-        + ' for one ' + one + ' looks like a ' + many + ' price.';
+      summary.textContent += ' Check the ' + many + ' price - ' + money(whole)
+        + ' is less than the ' + money(wholeCost) + ' it costs you. Is that a '
+        + one + ' price?';
     }
   }
 
-  [base, pack, count, unitPrice, packPrice, sellUnit].forEach(function (el) {
+  [base, pack, count, unitPrice, unitCost, packPrice, packCost, sellUnit,
+   minStock].forEach(function (el) {
     if (el) {
       el.addEventListener('input', refresh);
       el.addEventListener('change', refresh);

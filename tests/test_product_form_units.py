@@ -32,7 +32,11 @@ def product_payload(**overrides):
         'name': 'Club Beer 330ml', 'sku': '', 'barcode': '', 'description': '',
         'unit_price': '48.00', 'cost_price': '38.40', 'quantity_in_stock': '0',
         'base_uom': 'bottle', 'purchase_uom': 'carton', 'units_per_purchase_uom': '24',
-        'pack_price': '1050.00', 'sell_unit': 'both', 'min_stock_alert': '24',
+        # W2: the carton is what you type, so a packed product is refused
+        # without both. The per-single figures above are still posted because
+        # the same payload is reused for products with no pack at all.
+        'pack_price': '1050.00', 'pack_cost': '921.60',
+        'sell_unit': 'both', 'min_stock_alert': '1',
         'variant_label': '', 'size_value': '', 'size_unit': '',
     }
     data.update(overrides)
@@ -84,13 +88,20 @@ def test_the_prices_say_which_unit_they_are_in(shop):
 
 
 def test_the_form_reads_back_what_was_typed(shop):
-    """The sentence is the guard. It puts "1,050.00 a bottle" on the screen
-    before Save rather than after the first sale."""
+    """The sentence is the guard. It puts "43.75 a bottle" on the screen
+    before Save rather than after the first sale.
+
+    W2 inverted the mistake it catches along with the boxes. A packed product
+    has no singles box any more, so a carton price cannot be typed into one.
+    What can still happen is the reverse - a bottle price typed into the
+    carton box - and the signal for that is a carton selling below its cost.
+    """
     client, _business_id = shop
     page = form_page(client)
 
     assert 'id="pack-summary"' in page
-    assert 'looks like a ' in page, 'nothing warns about a pack price typed as a single'
+    assert 'that works out at ' in page, 'the per-single figure is not read back'
+    assert 'is less than the ' in page, 'nothing warns about a single typed as a pack'
 
 
 # --- errors, on every field ---------------------------------------------------
@@ -151,10 +162,17 @@ def test_a_real_pack_is_kept(shop, app):
     assert product.units_per_purchase_uom == 24
 
 
-def test_a_blank_pack_price_is_not_zero(shop, app):
-    """Null means "a pack is count x the single price". Zero would mean free."""
+def test_a_packed_product_is_refused_without_a_carton_price(shop, app):
+    """This asserted the opposite until W2, and the reversal is the stage.
+
+    A blank pack price used to mean "a pack is count x the single price",
+    which was reasonable while the single was the price somebody typed. It is
+    not any more: the carton is the unit, so leaving its price blank is
+    leaving the price blank. `uom.price_for` still reads a null that way for
+    rows that predate this - see test_pack_pricing.py - the form just will not
+    make a new one.
+    """
     client, _business_id = shop
     add(client, app, name='No Pack Price', pack_price='')
 
-    product = Product.query.filter_by(name='No Pack Price').one()
-    assert product.pack_price is None
+    assert Product.query.filter_by(name='No Pack Price').count() == 0
