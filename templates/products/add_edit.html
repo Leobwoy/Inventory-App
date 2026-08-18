@@ -264,6 +264,17 @@
     return word + 's';
   }
 
+  // "a pcs" is what naive articles produce, and "pcs" is the default base unit
+  // so it was the common case. The line hint below has always sidestepped this
+  // by saying "each"; this says it the same way.
+  function perUnit(word) {
+    var w = (word || '').trim().toLowerCase();
+    if (!w || w === 'pcs' || w === 'pc' || w === 'unit' || w === 'units') {
+      return 'each';
+    }
+    return 'a ' + word;
+  }
+
   function money(n) {
     return '₵' + n.toLocaleString(undefined, { minimumFractionDigits: 2,
                                                maximumFractionDigits: 2 });
@@ -308,7 +319,7 @@
       // all. It is also what catches a bottle price typed into this box: 48.00
       // for a carton of 24 reads back as 2.00 a bottle.
       parts.push('A ' + many + ' is ' + money(whole) + ' — that works out at '
-                 + money(whole / per) + ' a ' + one + '.');
+                 + money(whole / per) + ' ' + perUnit(one) + '.');
     }
     summary.textContent = parts.join(' ');
 

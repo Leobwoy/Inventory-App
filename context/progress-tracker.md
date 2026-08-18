@@ -1094,6 +1094,41 @@ new script reads the cost box when there is one, so `[name="cost_price"]` now ap
 selector - a selector that finds nothing is not a leaked cost. It asserts against a real
 `<input>` now, and covers `pack_cost` as well, which is the same secret multiplied by 24.
 
+**W3 — the purchase order says which unit its price is in.** The reported confusion, and
+the smallest fix in the stage: the box was labelled "Unit Cost", it is filled in with a
+carton price, and the comparison under it quoted a per-bottle figure. Both numbers were
+right and nothing said they were in different units. The label reads "Cost per carton" now,
+in the product's own word, and the comparison leads with the unit being typed - *"Best so
+far: ₵5.52 a carton from Accra Bulk Beverages"*, with *"That is ₵0.46 each."* as a quiet
+second line. Measured against seeded data: typing ₵7.20 for that carton of 12 reads *"this
+is ₵1.68 more a carton"*, which is 12 × the ₵0.14 per-piece gap.
+
+**`services/sourcing.py` was deliberately not inverted**, and that now has a test of its
+own, because "make it all cartons" is exactly the tidying somebody will attempt later. Two
+suppliers who pack the same drink 12 and 24 to a carton cannot be compared on carton price:
+the one with the smaller box would win every product. The comparison stays per single and
+only the display scales up.
+
+**"a pcs".** Naive articles produced *"₵0.46 a pcs"*, and `pcs` is the default base unit, so
+it was the common case rather than an edge one. The line hint on the same page had already
+solved this by saying *"at ₵0.46 each"*; there is a shared `per()` helper now - "each" for
+pcs/pc/unit, "a <word>" otherwise - used by both pages. The product form had the same bug in
+its read-back sentence.
+
+**The substring trap, three times in one stage, once in a test I had just written.**
+`'cost-unit-word' in page` passes with the span deleted, because the page's script names the
+same class in a `querySelector`. Falsification caught it; the assertions match a real
+`<small>` or `<span>` element now, and `hint_elements()` exists so the next one is written
+correctly by default. The same shape broke `test_cost_price_field_is_absent_for_unpermitted_staff`
+in W2. **Any assertion about markup on a page that carries an inline script has to match an
+element, not a class name.**
+
+**A test premise wrong for the third time in this project.** Setting `subscription.status =
+'active'` and a paid `plan_id` is not enough - `effective_plan` reads `paid_through` and
+falls back to Free without it, so the page under test redirected instead of rendering. The
+existing tests that set only the status pass because they assert a feature is *blocked*, and
+the fallback blocks it for the wrong reason.
+
 ## Open Questions
 
 - **Self-service password reset still does not exist (F-43), but the lockout risk is

@@ -93,7 +93,10 @@
                     </div>
 
                     <div class="field">
-                        <label class="form-label" for="{{ item.form.unit_cost.id }}">{{ item.form.unit_cost.label.text }}</label>
+                        {# The reported confusion: this box is filled in with a carton
+                           price and said so nowhere, while the comparison under it
+                           quoted a per-bottle figure. Both name their unit now. #}
+                        <label class="form-label" for="{{ item.form.unit_cost.id }}">{{ item.form.unit_cost.label.text }}<span class="cost-unit-word"></span></label>
                         <div class="input-group">
                             <span class="input-group-text">&#8373;</span>
                             {{ item.form.unit_cost(class_='form-control cost-input' + (' is-invalid' if item.form.unit_cost.errors else ''), inputmode='decimal') }}
@@ -104,6 +107,12 @@
                         <small class="text-muted line-hint d-block"></small>
                         {% if has_feature('price_comparison') %}
                         <small class="text-muted price-hint d-block"></small>
+                        {# Comparison stays per single internally - see
+                           services/sourcing.py, comparing carton prices across
+                           suppliers who pack differently is the mistake it exists to
+                           prevent - but the buyer is typing a carton price, so the
+                           carton figure leads and this is the quiet second line. #}
+                        <small class="text-muted price-hint-base d-block"></small>
                         {% endif %}
                     </div>
 
@@ -162,6 +171,17 @@
     return Array.prototype.slice.call(container.querySelectorAll('.po-line'));
   }
 
+  // "a pcs" is what naive articles produce, and "pcs" is the default base unit
+  // so it was the common case. The line hint below has always sidestepped this
+  // by saying "each"; this says it the same way.
+  function per(word) {
+    var w = (word || '').trim().toLowerCase();
+    if (!w || w === 'pcs' || w === 'pc' || w === 'unit' || w === 'units') {
+      return 'each';
+    }
+    return 'a ' + word;
+  }
+
   function refreshLine(line) {
     // The unit this line is ordered in, in the product's own word. Filled from
     // the same data the server derives from, so the two cannot disagree.
@@ -174,6 +194,7 @@
 
     var hint = line.querySelector('.line-hint');
     var priceHint = line.querySelector('.price-hint');
+    var priceHintBase = line.querySelector('.price-hint-base');
 
     var productId = line.querySelector('.product-select').value;
     var info = PRODUCT_UOM[productId];
@@ -189,6 +210,14 @@
     var qty = parseInt(line.querySelector('.qty-input').value || '0', 10) || 0;
     var cost = parseFloat(line.querySelector('.cost-input').value || '0') || 0;
 
+    // The word for the unit this line is ordered and priced in, used by the
+    // label and both hints so they cannot end up naming different things.
+    var unitWord = info ? (inPacks ? info.purchase : info.base) : '';
+    var costWord = line.querySelector('.cost-unit-word');
+    if (costWord) {
+      costWord.textContent = unitWord ? ' per ' + unitWord : '';
+    }
+
     var lineTotal = line.querySelector('.po-line-total');
     if (lineTotal) {
       lineTotal.textContent = qty && cost ? '₵' + (qty * cost).toFixed(2) : '—';
@@ -200,19 +229,31 @@
       var known = PRICE_HISTORY[productId];
       if (!known) {
         priceHint.textContent = '';
+        if (priceHintBase) { priceHintBase.textContent = ''; }
       } else {
         var perBase = inPacks
                       ? cost / info.per : cost;
+        // `best` is per single, because that is the only unit two suppliers who
+        // pack differently can be compared in. Everything shown is scaled up to
+        // the unit actually being typed; the comparison itself stays per single.
         var best = parseFloat(known.price);
-        var text = 'Best so far: ₵' + best.toFixed(2) + ' from ' + known.supplier;
+        var bestHere = inPacks ? best * info.per : best;
+        var text = 'Best so far: ₵' + bestHere.toFixed(2) + ' ' + per(unitWord) +
+                   ' from ' + known.supplier;
         priceHint.textContent = text;
         priceHint.classList.remove('text-danger', 'text-success');
         if (cost > 0) {
           priceHint.classList.add(perBase > best ? 'text-danger' : 'text-success');
           if (perBase > best) {
+            var moreHere = (perBase - best) * (inPacks ? info.per : 1);
             priceHint.textContent = text + ' — this is ₵' +
-                (perBase - best).toFixed(2) + ' more';
+                moreHere.toFixed(2) + ' more ' + per(unitWord);
           }
+        }
+        if (priceHintBase) {
+          priceHintBase.textContent = inPacks
+            ? 'That is ₵' + best.toFixed(2) + ' ' + per(info.base) + '.'
+            : '';
         }
       }
     }

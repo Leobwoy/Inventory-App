@@ -11,7 +11,10 @@ class PurchaseOrderItemForm(FlaskForm):
     # answer: stock arrives in crates and cartons, so an order for a product
     # with a pack is placed in packs. purchases/routes.py derives it, and a
     # value posted by hand cannot change what a line means.
-    unit_cost = DecimalField('Unit Cost', validators=[DataRequired(), NumberRange(min=0)])
+    # "Unit Cost" never said which unit, next to a quantity box that is in
+    # cartons. The page completes this with the product's own word - "Cost per
+    # carton" - once a product is chosen; this is what it reads until then.
+    unit_cost = DecimalField('Cost', validators=[DataRequired(), NumberRange(min=0)])
 
 class PurchaseOrderForm(FlaskForm):
     supplier_id = SelectField('Supplier', coerce=int, validators=[Optional()])
