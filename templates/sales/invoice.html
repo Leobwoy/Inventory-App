@@ -57,16 +57,22 @@
                 {% for item in sale.items %}
                 <tr>
                   <td data-label="Item">{{ item.product.name }}</td>
+                  {# Priced and counted in what the customer actually bought. The
+                     line stores 48 bottles because that is what left the shelf;
+                     printing 48 to somebody who handed over money for 2 cartons is
+                     how an invoice starts an argument. The total below is still
+                     price_at_sale x quantity, exactly, so the arithmetic on the
+                     page is the arithmetic in the database. #}
                   <td data-label="Unit Price">
-                    ₵{{ '%.2f'|format(item.price_at_sale) }}
+                    ₵{{ '%.2f'|format(item.price_per_sold_unit) }}
                     {% if item.was_discounted %}
                     <div class="text-muted small">
-                      <s>₵{{ '%.2f'|format(item.list_price) }}</s>
+                      <s>₵{{ '%.2f'|format(item.list_price_per_sold_unit) }}</s>
                       &minus;{{ item.discount_percent }}%
                     </div>
                     {% endif %}
                   </td>
-                  <td data-label="Quantity">{{ item.quantity }}</td>
+                  <td data-label="Quantity">{{ item.sold_as_text }}</td>
                   <td data-label="Total">₵{{ '%.2f'|format(item.price_at_sale * item.quantity) }}</td>
                 </tr>
                 {% set ns.grand_total = ns.grand_total + (item.price_at_sale * item.quantity) %}

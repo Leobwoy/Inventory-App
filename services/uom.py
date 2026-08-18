@@ -181,6 +181,30 @@ def unit_label(product, unit=BASE):
     return product.base_uom or 'pcs'
 
 
+def plural(word):
+    """A unit word for more than one of it.
+
+    These are words the business typed, so they are whatever they are: "pcs",
+    "box", "crate". Appending a bare "s" produced "pcss" and "boxs", and "pcs"
+    is the default base unit, so that was the common case rather than an edge
+    one. Lives here because this module owns what a unit is called; the same
+    three lines run in the browser on the product and purchase order forms.
+    """
+    word = (word or '').strip()
+    if not word or word.lower().endswith('s'):
+        return word
+    if word.lower().endswith(('x', 'z', 'ch', 'sh')):
+        return word + 'es'
+    return word + 's'
+
+
+def quantity_label(product, count, unit=BASE):
+    """A quantity as it should be printed: "2 cartons", "1 carton", "48 pcs"."""
+    count = int(count or 0)
+    word = unit_label(product, unit)
+    return f'{count} {word if count == 1 else plural(word)}'
+
+
 def price_to_base(product, price, unit=BASE):
     """A price for one sold unit, expressed per base unit.
 

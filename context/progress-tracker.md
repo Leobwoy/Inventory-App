@@ -1129,6 +1129,36 @@ falls back to Free without it, so the page under test redirected instead of rend
 existing tests that set only the status pass because they assert a feature is *blocked*, and
 the fallback blocks it for the wrong reason.
 
+**W4 — the invoice says what the customer bought.** `SaleItem.sold_as` and
+`price_per_sold_unit` were written in Stage U2 and the migration that added the columns
+states outright that "the invoice then reads 2 cartons rather than 48 bottles". No template
+ever called either, so a two-carton sale printed **₵43.75 × 48** to the customer:
+arithmetically correct, and not what anybody agreed to. Both invoice templates and the sales
+report read in the sold unit now.
+
+**The line total is deliberately still `price_at_sale × quantity`.** Recomputing it from the
+rounded per-carton figure would be the F-41 mistake in a new place - the page would stop
+agreeing with the database. What the customer reads and what was charged are the same
+number, and the unit is the only thing that changed.
+
+**Two more found while wiring it.** `bulk_invoices.html` had no number format at all on any
+of its four money figures, so a carton line printed **₵41.666667** and the grand total
+₵2,000.000000 - the U2 widening leaking onto a page nobody had opened since. And
+`sales_report.html` printed `x48` with the same unformatted price. Both fixed here rather
+than left for W6, because they are the same bug as the one being fixed.
+
+**A struck-through discount had to scale too.** `list_price` is stored per base unit like
+`price_at_sale`, so a carton discounted from ₵1,050 to ₵1,000 would have shown ₵1,000.00
+struck against ₵48.00. `SaleItem.list_price_per_sold_unit` mirrors `price_per_sold_unit`.
+
+**`uom.plural()` and `uom.quantity_label()`** put the unit words in the module that owns
+them: "2 cartons", "1 carton", "48 pcs". The browser copy on the product and purchase order
+forms is three lines of the same rule, kept separate because those pages compute their
+sentence before anything is saved.
+
+**The invoice had no test coverage at all** before this - the pages that a customer
+physically holds. Seven now.
+
 ## Open Questions
 
 - **Self-service password reset still does not exist (F-43), but the lockout risk is

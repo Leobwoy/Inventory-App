@@ -66,14 +66,18 @@
                     <td data-label="Qty">
                         <ul class="list-unstyled mb-0 small text-muted">
                         {% for item in sale.items %}
-                            <li>x{{ item.quantity }}</li>
+                            {# What was billed, not what left the shelf - two cartons
+                               rather than x48. Same reason as the invoice. #}
+                            <li>{{ item.sold_as_text }}</li>
                         {% endfor %}
                         </ul>
                     </td>
                     <td data-label="Unit Price">
                         <ul class="list-unstyled mb-0 small text-muted">
                         {% for item in sale.items %}
-                            <li>₵{{ item.price_at_sale }}</li>
+                            {# Unformatted, this printed 41.666667: price_at_sale is
+                               Numeric(14,6) because it is derived from a pack price. #}
+                            <li>₵{{ '%.2f'|format(item.price_per_sold_unit) }}</li>
                         {% endfor %}
                         </ul>
                     </td>
