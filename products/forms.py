@@ -40,8 +40,8 @@ class ProductForm(FlaskForm):
 
     # InputRequired, not DataRequired: DataRequired treats 0 as missing, which makes a
     # zero price or a zero stock threshold impossible to save.
-    cost_price = DecimalField('Cost Price', validators=[InputRequired(), NumberRange(min=0)])
-    unit_price = DecimalField('Unit Price', validators=[InputRequired(), NumberRange(min=0)])
+    cost_price = DecimalField('Cost price, per single', validators=[InputRequired(), NumberRange(min=0)])
+    unit_price = DecimalField('Price per single', validators=[InputRequired(), NumberRange(min=0)])
     quantity_in_stock = IntegerField('Quantity in Stock (Read Only)', render_kw={'readonly': True})
 
     category_id = SelectField('Category', coerce=int, validators=[Optional()])
@@ -52,11 +52,32 @@ class ProductForm(FlaskForm):
     size_value = DecimalField('Size Value', validators=[Optional(), NumberRange(min=0)])
     size_unit = StringField('Size Unit', validators=[Optional(), Length(max=20)])
 
-    base_uom = StringField('Base UoM', validators=[Optional(), Length(max=20)], default='pcs')
-    purchase_uom = StringField('Purchase UoM', validators=[Optional(), Length(max=20)],
-                               description='Defaults to the base unit if left blank.')
-    units_per_purchase_uom = IntegerField('Units per Purchase UoM',
+    # Labels in the words a shopkeeper uses, not the words a database uses. The
+    # field *names* are unchanged on purpose: tests/test_audit.py posts this exact
+    # set, and renaming them would be a schema-shaped change dressed as wording.
+    #
+    # "Base UoM / Purchase UoM / Units per Purchase UoM" is jargon that sat three
+    # rows above two price boxes which never said which unit they meant, and an
+    # owner typing a carton price into `unit_price` got a product listing at 24x
+    # with nothing to catch it.
+    base_uom = StringField('What is one called?', validators=[Optional(), Length(max=20)],
+                           default='pcs',
+                           description='The single item you sell - bottle, sachet, can.')
+    purchase_uom = StringField('What is a pack called?',
+                               validators=[Optional(), Length(max=20)],
+                               description='Carton, crate, box. Leave blank if you do not sell packs.')
+    units_per_purchase_uom = IntegerField('How many in a pack?',
                                           validators=[Optional(), NumberRange(min=1)], default=1)
+
+    # The number that cannot be derived. A carton of 24 at 1,050 is 43.75 a
+    # bottle against 48 singly, and that gap is the whole reason a shop buys a
+    # carton. Optional: blank means a pack is simply count x the single price.
+    pack_price = DecimalField('Price per pack', validators=[Optional(), NumberRange(min=0)])
+    sell_unit = SelectField('What do you sell it by?', coerce=str, default='base',
+                            choices=[('base', 'Singles only'),
+                                     ('purchase', 'Packs only'),
+                                     ('both', 'Both')],
+                            validators=[Optional()])
 
     min_stock_alert = IntegerField('Min Stock Alert', validators=[Optional(), NumberRange(min=0)], default=0)
     submit = SubmitField('Save')

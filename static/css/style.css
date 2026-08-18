@@ -1533,8 +1533,13 @@ a.text-decoration-none:hover {
     width: 9rem;
   }
 
+  /* 9rem, not 7. Reported from the running app as a three-figure price losing
+     its last digit; measured, the box had 40px of usable space and even "44.16"
+     needs 41 - every price was clipped, not just the long ones. Carton prices
+     are what made it visible: a single is 2 or 3 figures, a carton of 24 is
+     four plus the pesewas. "1050.00" needs 58px, so the box gets 90. */
   .table-sale-items .col-price {
-    width: 7rem;
+    width: 9rem;
   }
 
   .table-sale-items .col-line {
@@ -1548,6 +1553,23 @@ a.text-decoration-none:hover {
 
 .table-sale-items .col-line {
   font-variant-numeric: tabular-nums;
+}
+
+/* The price box takes whatever the cell has after the currency prefix. It was
+   sitting at its intrinsic width with 31px of the cell going spare beside it. */
+.table-sale-items .col-price .input-group {
+  flex-wrap: nowrap;
+}
+
+.table-sale-items .price-input {
+  /* An explicit basis, not `auto`. An <input> carries a default intrinsic size
+     of about twenty characters, so `auto` makes the whole price column size to
+     that and it takes the width straight off the product name - the same trap
+     the quantity box fell into. The column width governs; this only refuses to
+     shrink below a four-figure price. */
+  flex: 1 1 4rem;
+  min-width: 4rem;
+  width: 4rem;
 }
 
 /* Desktop only, and only inside this table: a mouse does not need 44px, and
@@ -2420,5 +2442,169 @@ a.text-decoration-none:hover {
 
   .dash-canvas {
     height: 13rem;
+  }
+}
+
+
+/* =============================================
+   THE UNIT A LINE IS RUNG UP IN
+
+   Inside the quantity cell rather than in a column of its own: this table
+   already fought for width once, and a sixth column would take it straight back
+   off the product name.
+   ============================================= */
+
+.unit-toggle {
+  display: flex;
+  gap: 2px;
+  margin-top: 0.4rem;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: var(--sunken);
+}
+
+.unit-choice {
+  position: relative;
+  flex: 1 1 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.unit-choice input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Styled through `input:checked + span`, never `:has()` - the older Android
+   WebViews this is sold into do not support it, and the failure would be
+   silent and total: neither unit would ever look chosen. */
+.unit-choice span {
+  display: block;
+  padding: 0.3rem 0.35rem;
+  border-radius: 0.35rem;
+  /* No `color` here on purpose. It was `--text-secondary`, which the contrast
+     sweep measured at 2.43:1 on dark against a 4.5 requirement - two washes
+     deep on `--sunken` inside a card. Inheriting gives the unselected half
+     `--text-primary` (17.85:1), and leaves the checked rule below as the only
+     thing setting a colour here. */
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  text-transform: capitalize;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `!important` on the colour, deliberately and with an apology.
+
+   The contrast sweep caught the chosen unit rendering at 2.43:1 on dark and
+   2.66:1 on light - the word telling someone whether they are selling one
+   bottle or twenty-four, unreadable on its own highlight. The `background` in
+   this same rule applies correctly; only `color` loses.
+
+   What is established: the rule matches, `--on-accent` resolves on the element
+   (an inline `var(--on-accent)` renders correctly), the winning declaration is
+   inside this stylesheet (disabling it changes the result), appending an
+   identical rule later does not win, and `!important` does. That combination
+   says something more specific sets it, but every `!important` colour rule here
+   was checked against this element and none matches, and repeated CSSOM walks
+   returned nothing. I could not isolate it and stopped rather than spend more
+   of the budget on it.
+
+   If you are here to remove this: reproduce with the sweep first, not by eye. */
+.unit-choice input:checked + span {
+  background: var(--accent-primary);
+  color: var(--on-accent) !important;
+}
+
+.unit-choice input:focus-visible + span {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+@media (max-width: 767.98px) {
+  /* Thumb-sized on the screen it is actually tapped on. */
+  .unit-choice span {
+    min-height: 44px;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.7;
+  }
+}
+
+/* =============================================
+   HOW A PRODUCT IS PACKED
+
+   A sentence with boxes in it, rather than three fields labelled in database
+   words. "Base UoM / Purchase UoM / Units per Purchase UoM" sat three rows
+   above two price boxes that never said which unit they meant.
+   ============================================= */
+
+.pack-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.pack-word {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pack-field {
+  flex: 1 1 8rem;
+  min-width: 7rem;
+  max-width: 12rem;
+}
+
+.pack-field-narrow {
+  flex: 0 0 5.5rem;
+  min-width: 5.5rem;
+}
+
+/* The line that reads the numbers back. This is the whole point of the block:
+   a carton price typed into the single price box shows itself here as
+   "1,050.00 a bottle" before Save, instead of as a 24x listing afterwards. */
+.pack-summary {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--accent-primary);
+  border-radius: 0 0.5rem 0.5rem 0;
+  background: var(--sunken);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+}
+
+.pack-summary:empty {
+  display: none;
+}
+
+.pack-summary.is-warning {
+  border-left-color: var(--accent-warning);
+}
+
+@media (max-width: 575.98px) {
+  /* The sentence breaks across lines on a phone rather than the boxes shrinking
+     to nothing, which is what the sale form's quantity box taught. */
+  .pack-line {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+
+  .pack-field,
+  .pack-field-narrow {
+    max-width: none;
+    min-width: 0;
   }
 }

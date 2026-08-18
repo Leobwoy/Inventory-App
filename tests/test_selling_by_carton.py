@@ -11,6 +11,7 @@ a bottle, and at two decimals 48 bottles bill 2,000.16 for what was agreed at
 sale is the F-41 defect again, on the side the customer actually pays.
 """
 import datetime
+import re
 import json
 from decimal import Decimal
 
@@ -290,3 +291,150 @@ def test_what_a_customer_owes_is_a_number_of_pesewas(carton_shop, register):
 
     assert owed == Decimal('2000.00')
     assert -owed.as_tuple().exponent <= 2, f'{owed} is not a number of pesewas'
+
+
+# --- the control on the page -------------------------------------------------
+
+def test_the_sale_page_offers_the_unit(carton_shop):
+    """The machinery landed in U2 with nothing to click. This is the control."""
+    client, _business_id, _product = carton_shop
+    page = client.get('/sales/add').get_data(as_text=True)
+
+    # The exact class, not a substring: `unit-toggle-x` contains `unit-toggle`,
+    # so a bare `in page` stayed green with the control renamed away.
+    assert 'class="unit-toggle"' in page, 'no way to choose a unit on the page'
+    assert 'name="items-0-sell_unit"' in page, 'the field is not posted'
+
+
+def test_the_toggle_is_a_real_field_not_a_script_invention(carton_shop):
+    """Rendered by the server for every row and hidden per row by script. A
+    control that only exists once JavaScript runs cannot post a value when it
+    does not, and this page already degrades to a working form without it."""
+    client, _business_id, _product = carton_shop
+    page = client.get('/sales/add').get_data(as_text=True)
+
+    radios = re.findall(r'<input type="radio" name="items-0-sell_unit"[^>]*>', page)
+    assert len(radios) == 2, f'{len(radios)} unit radios rendered, expected 2'
+    assert sum('checked' in r for r in radios) == 1, 'exactly one must start chosen'
+
+
+def test_the_page_carries_what_a_pack_costs(carton_shop):
+    """The toggle has to be able to reprice the line the moment it is tapped,
+    without a round trip, so the pack price ships with the page."""
+    client, _business_id, _product = carton_shop
+    page = client.get('/sales/add').get_data(as_text=True)
+
+    assert '"pack_price"' in page
+    assert '"per"' in page and '"units"' in page
+
+
+def test_a_plan_without_conversion_ships_no_carton_option(carton_shop):
+    """`units` is filtered on the server, so the control cannot offer something
+    the server would then refuse. Hiding a control is not enforcing anything -
+    but offering one that is always rejected is its own kind of lie."""
+    client, business_id, _product = carton_shop
+    free = Plan.query.filter_by(code='free').first()
+    Subscription.query.filter_by(business_id=business_id).update({'plan_id': free.id})
+    db.session.commit()
+
+    page = client.get('/sales/add').get_data(as_text=True)
+
+    assert '"units": ["base"]' in page.replace("'", '"'), \
+        'the page still offers a unit this plan cannot use'
+
+
+# --- the goods receipt loophole ----------------------------------------------
+
+def test_a_receipt_cannot_post_its_way_past_the_plan(register, make_product, make_po):
+    """Goods receipt checked the product but never the plan, unlike purchase
+    order creation twenty lines above it. The template hides the unit selector
+    on a plan without conversion, and hiding a control enforces nothing: a
+    hand-posted `unit_<id>=purchase` received a carton's worth of stock.
+
+    This is the bug class tests/test_uom.py already carries a docstring about -
+    for the *other* route. Same mistake, second door.
+    """
+    from products.models import Product
+
+    client, business_id = register()
+    product = make_product(business_id, sku='CLUB-R', name='Club Beer 330ml')
+    product.base_uom = 'bottles'
+    product.purchase_uom = 'carton'
+    product.units_per_purchase_uom = 24
+    db.session.commit()
+
+    po, line = make_po(business_id, product, quantity=240)
+
+    # The Shop plan, not free. `purchase_orders` is basic tier and
+    # `uom_conversion` is standard, so Shop is exactly the plan that can reach
+    # this page and may not convert - the free plan cannot open it at all, which
+    # is why the first version of this test measured nothing received and read
+    # that as the gate working.
+    shop_plan = Plan.query.filter_by(code='basic').first()
+    Subscription.query.filter_by(business_id=business_id).update({'plan_id': shop_plan.id})
+    db.session.commit()
+
+    client.post(f'/purchases/receive/{po.id}', data={
+        'received_date': TODAY.isoformat(),
+        f'qty_{line.id}': '2',
+        f'unit_{line.id}': uom.PURCHASE,      # never offered to this plan
+    }, follow_redirects=True)
+
+    db.session.expire_all()
+    received = Product.query.get(product.id).quantity_in_stock
+    assert received == 2, (
+        f'{received} units received for a posted 2 - the conversion was bought '
+        'by posting for it')
+
+
+# --- purchasing is pack-only -------------------------------------------------
+
+def test_an_order_is_placed_in_packs_without_being_asked(carton_shop):
+    """Reported from the running app: "no wholesaler will procure or restock in
+    single bottles. Everything comes in crates or carton or box."
+
+    So the unit is not a question. The page states it, the server derives it,
+    and there is no control to post your way past.
+    """
+    client, _business_id, _product = carton_shop
+    page = client.get('/purchases/add').get_data(as_text=True)
+
+    assert 'name="items-0-order_unit"' not in page, 'the unit is a choice again'
+    # The exact class attribute. A bare `'order-unit' in page` is satisfied by
+    # the script's own `querySelector('.order-unit')` further down the page, so
+    # it stayed green with the element itself stripped.
+    assert 'class="input-group-text order-unit"' in page,         'the line does not say which unit it is in'
+
+
+def test_a_pack_that_is_not_really_a_pack_is_ordered_in_singles(register, make_product):
+    """Pack-only does not mean pack-always.
+
+    The pack count is 12 here but the pack is called the same thing as the item,
+    which is `uom.has_conversion`'s definition of "no real conversion". Written
+    this way on purpose: a product with `units_per_purchase_uom = 1` cannot
+    demonstrate the guard, because multiplying by a factor of one is the
+    identity - the test would pass with the guard deleted and prove nothing.
+
+    Falsifying this needs **both** guards removed at once, and that is the point
+    rather than a weakness: `purchases/routes.py` refuses to set the unit and
+    `uom.to_base` refuses to act on it. Either alone holds. Recorded because a
+    single-mutation falsification comes back green here and reads like a sleeping
+    test.
+    """
+    from purchases.models import PurchaseOrderItem
+
+    client, business_id = register()
+    loose = make_product(business_id, sku='LOOSE-1', name='Loose Sweets')
+    loose.base_uom = 'pcs'
+    loose.purchase_uom = 'pcs'          # same word as the base: not a pack
+    loose.units_per_purchase_uom = 12   # but a factor that would bite
+    db.session.commit()
+
+    client.post('/purchases/add', data={
+        'supplier_id': '0', 'order_date': TODAY.isoformat(), 'expected_date': '',
+        'items-0-product_id': str(loose.id), 'items-0-quantity_ordered': '50',
+        'items-0-unit_cost': '1.50',
+    }, follow_redirects=True)
+
+    line = PurchaseOrderItem.query.order_by(PurchaseOrderItem.id.desc()).first()
+    assert line.quantity_ordered == 50, 'a pack in name only was multiplied'

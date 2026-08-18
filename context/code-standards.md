@@ -131,6 +131,25 @@
   `pack_price` are typed, `Numeric(10,2)`. `PurchaseOrderItem.unit_cost` is derived by
   dividing a pack cost by its count and is `Numeric(14,6)` — at 2dp, ₵1.00 a carton of 24
   records ₵96.00 against ₵100.00 paid over 100 cartons (F-41).
+- **Give every `<input>` an explicit width when it lives in a table column.** Its intrinsic
+  size is about twenty characters, so `width: auto` makes the column size to that and take
+  the width off whatever shares the row. This has now happened twice on the same table - the
+  quantity box and the price box - each time stealing from the product name.
+- **Derive a unit; never accept a posted one.** Purchasing asks nothing and reads nothing
+  from the request: a product with a real pack is ordered in packs. A gate can be argued
+  with; a derivation cannot.
+- **Some guarantees need two mutations to falsify, and that is not a weak test.** Where a
+  property is protected in a route *and* in the primitive it calls, breaking either alone
+  stays green. Say so in the docstring, or the next person reads it as asleep and deletes
+  one of the guards.
+- **Identical measurements across different edits mean you are measuring a cache.** Not that
+  the fix failed. A stylesheet reaches the browser three ways that each cache separately: the
+  service worker precache (cache-first on the unbusted URL), the HTTP cache, and the CSSOM of
+  an already-loaded sheet. Swap the `<link>` href to a random query and re-read in a *separate
+  call* before believing any negative result. This has now cost an hour once.
+- **Assert an exact class attribute, never a bare substring.** `'unit-toggle' in page` is
+  satisfied by `unit-toggle-x`, so a test guarding a control stayed green while the control
+  was renamed away. Use `class="unit-toggle"`.
 - **Six decimals are for storage; two are for people.** Widening a money column to hold a
   derived figure exactly is right, and letting that width escape is not. `price_at_sale`
   went to `Numeric(14,6)` and immediately leaked: a total read `0.300000`, and the

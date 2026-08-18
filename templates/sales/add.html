@@ -42,8 +42,8 @@
     <i class="bi bi-wifi-off me-2 fs-5"></i>
     <div>
         <strong>No connection.</strong>
-        This sale will be saved on this phone and sent when the network returns.
-        Stock and price are checked by the server then, so it may still be
+        This sale will be saved on this device and synced when the network returns.
+        Stock and price are checked by the actual data then, so it may still be
         refused &mdash; you will be told which.
     </div>
 </div>
@@ -119,6 +119,21 @@
                                         {{ subform.quantity(class_='form-control qty-input' + (' is-invalid' if subform.quantity.errors else ''), inputmode='numeric') }}
                                         <button type="button" class="qty-step" data-step="1"
                                                 aria-label="One more">+</button>
+                                    </div>
+                                    {# Shown only for a product that really is sold both ways.
+                                       Rendered for every row and hidden per row by script, so
+                                       adding a line needs no round trip - and the select stays
+                                       a real field, so a browser running nothing still posts
+                                       a unit the server will honour. #}
+                                    <div class="unit-toggle" hidden>
+                                        {% for value, label in subform.sell_unit.choices %}
+                                        <label class="unit-choice">
+                                            <input type="radio" name="{{ subform.sell_unit.name }}"
+                                                   value="{{ value }}"
+                                                   {% if subform.sell_unit.data == value or (not subform.sell_unit.data and value == 'base') %}checked{% endif %}>
+                                            <span data-unit="{{ value }}">{{ label }}</span>
+                                        </label>
+                                        {% endfor %}
                                     </div>
                                     {% for error in subform.quantity.errors %}
                                     <div class="invalid-feedback d-block">{{ error }}</div>
@@ -410,8 +425,16 @@
       return;
     }
     Array.prototype.forEach.call(select.options, function (option) {
-      if (productPrices[option.value] !== undefined) {
-        option.dataset.meta = '₵' + productPrices[option.value].toFixed(2);
+      var product = productPrices[option.value];
+      if (!product) {
+        return;
+      }
+      // Show the pack price too where there is one, because that is the number
+      // a wholesaler is choosing on.
+      if (product.units.indexOf('purchase') !== -1) {
+        option.dataset.meta = '₵' + product.pack_price.toFixed(2) + ' / ' + product.pack;
+      } else {
+        option.dataset.meta = '₵' + product.price.toFixed(2);
       }
     });
   }
@@ -429,13 +452,61 @@
     button.classList.toggle('is-chosen', Boolean(label));
   }
 
-  function updatePrice(row) {
+  function info(row) {
     var select = row.querySelector('.product-select');
+    return select ? productPrices[select.value] : undefined;
+  }
+
+  function chosenUnit(row) {
+    var picked = row.querySelector('[name$="sell_unit"]:checked');
+    return picked ? picked.value : 'base';
+  }
+
+  // What one of the unit this line is ringing up in lists for. A carton has its
+  // own price - that is the whole reason a shop buys one - so this is not the
+  // single price multiplied.
+  function updatePrice(row) {
     var price = row.querySelector('.price-input');
-    if (!select || !price) {
+    var product = info(row);
+    if (!price) {
       return;
     }
-    price.value = productPrices[select.value] !== undefined ? productPrices[select.value] : '';
+    if (!product) {
+      price.value = '';
+      return;
+    }
+    price.value = chosenUnit(row) === 'purchase' ? product.pack_price : product.price;
+  }
+
+  // The toggle only appears where there is a genuine choice: the plan allows
+  // it, the product has a real pack, and the business sells it both ways.
+  // `units` arrives already filtered by the server, so this cannot offer
+  // something the server would then refuse.
+  function updateUnitChoice(row) {
+    var toggle = row.querySelector('.unit-toggle');
+    var product = info(row);
+    if (!toggle) {
+      return;
+    }
+    var units = (product && product.units) || ['base'];
+    toggle.hidden = units.length < 2;
+
+    toggle.querySelectorAll('span[data-unit]').forEach(function (span) {
+      // Say "carton" and "bottle", not "Carton" and "Single" - the words the
+      // business used when it set the product up are the words it thinks in.
+      if (product) {
+        span.textContent = span.dataset.unit === 'purchase' ? product.pack : product.base;
+      }
+    });
+
+    // A unit that is no longer on offer must not stay selected.
+    var picked = row.querySelector('[name$="sell_unit"]:checked');
+    if (picked && units.indexOf(picked.value) === -1) {
+      var fallback = row.querySelector('[name$="sell_unit"][value="' + units[0] + '"]');
+      if (fallback) {
+        fallback.checked = true;
+      }
+    }
   }
 
   // Show a discount while it is being typed rather than only after the server
@@ -447,7 +518,9 @@
     if (!select || !priceField || !note) {
       return 0;
     }
-    var listPrice = productPrices[select.value];
+    var product = productPrices[select.value];
+    var listPrice = product === undefined ? undefined
+      : (chosenUnit(row) === 'purchase' ? product.pack_price : product.price);
     var charged = parseFloat(priceField.value);
     var qty = parseFloat((row.querySelector('[name$="quantity"]') || {}).value) || 0;
 
@@ -490,6 +563,14 @@
       var lineEl = row.querySelector('.line-total');
       if (lineEl) {
         lineEl.textContent = qty && price ? '₵' + line.toFixed(2) : '—';
+      }
+
+      // The summary counts what leaves the shelf, not what was typed: two
+      // cartons of 24 is 48 bottles gone, and a running "2 items" beside a
+      // 2,100 total would be answering a different question.
+      var product = info(row);
+      if (product && chosenUnit(row) === 'purchase') {
+        units += qty * (product.per - 1);
       }
 
       var off = updateLineDiscount(row);
@@ -594,6 +675,7 @@
     window.ProductPicker.enhance(row);
     attachMeta(row);
     paintPicker(row);
+    updateUnitChoice(row);
     updatePrice(row);
     refresh();
   });
@@ -622,10 +704,13 @@
   // 'change', so this one delegated listener covers both a product chosen in the
   // dialog and one chosen from the plain select when no script is running.
   table.addEventListener('change', function (event) {
+    var row = event.target.closest('tr');
     if (event.target.classList.contains('product-select')) {
-      var row = event.target.closest('tr');
+      updateUnitChoice(row);
       updatePrice(row);
       paintPicker(row);
+    } else if (row && event.target.name && event.target.name.indexOf('sell_unit') !== -1) {
+      updatePrice(row);
     }
     refresh();
   });
@@ -643,6 +728,7 @@
   rows().forEach(function (row) {
     attachMeta(row);
     paintPicker(row);
+    updateUnitChoice(row);
     updatePrice(row);
   });
   syncWalkIn();
@@ -668,6 +754,9 @@
           product_id: parseInt(select.value, 10),
           product_name: select.options[select.selectedIndex].textContent,
           quantity: parseInt(qty.value, 10) || 0,
+          // Without this a sale queued as two cartons syncs as two bottles and
+          // the shelf is forty-six out, days later, with nothing to show why.
+          sell_unit: chosenUnit(row),
           price: price.value,
         };
       }).filter(function (i) { return i.product_id && i.quantity > 0; });

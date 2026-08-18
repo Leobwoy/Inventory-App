@@ -234,6 +234,22 @@ def _scoped_catalogue(form):
     return brand, item_group, category
 
 
+def _sell_unit_for(form):
+    """What the product may be rung up in, given what was actually entered.
+
+    A pack of one is not a pack. Without a real conversion the only honest
+    answer is singles, whatever the dropdown said - otherwise the sale form
+    offers a carton the server then refuses, which reads as the app being
+    broken rather than the product being set up wrong.
+    """
+    per = form.units_per_purchase_uom.data or 1
+    pack = (form.purchase_uom.data or '').strip().lower()
+    base = (form.base_uom.data or 'pcs').strip().lower()
+    if per <= 1 or not pack or pack == base:
+        return 'base'
+    return form.sell_unit.data or 'base'
+
+
 @products_bp.route('/add', methods=['GET', 'POST'])
 @login_required
 @permission_required('products.create')
@@ -281,7 +297,13 @@ def add_product():
             size_unit=form.size_unit.data,
             base_uom=base_uom,
             purchase_uom=(form.purchase_uom.data or '').strip() or base_uom,
-            units_per_purchase_uom=form.units_per_purchase_uom.data or 1
+            units_per_purchase_uom=form.units_per_purchase_uom.data or 1,
+            pack_price=form.pack_price.data,
+            # A unit nobody can be sold in is not a choice. If this product has
+            # no real pack, "packs only" and "both" mean the same thing as
+            # singles, and storing either would be a promise the sale form has
+            # to break.
+            sell_unit=_sell_unit_for(form),
         )
         db.session.add(product)
         db.session.commit()
@@ -335,6 +357,8 @@ def edit_product(product_id):
         product.base_uom = (form.base_uom.data or '').strip() or 'pcs'
         product.purchase_uom = (form.purchase_uom.data or '').strip() or product.base_uom
         product.units_per_purchase_uom = form.units_per_purchase_uom.data or 1
+        product.pack_price = form.pack_price.data
+        product.sell_unit = _sell_unit_for(form)
         product.min_stock_alert = form.min_stock_alert.data or 0
 
         # Stock is owned by StockBatch/goods receipt, never by this form

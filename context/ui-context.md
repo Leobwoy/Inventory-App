@@ -136,3 +136,20 @@ width a shop actually owns.
 This is the app's **first and only Bootstrap modal**. Bootstrap's JS bundle was already
 loaded and precached on every page, so it cost nothing new. `.modal-content` is solid
 (`--bg-card-solid`), not frosted - a dialog is the one surface with a whole page behind it.
+
+## Asking about units and prices
+
+Never label a field with a database term. "Base UoM" means nothing to someone who sells
+drinks. `templates/products/add_edit.html` asks it as a sentence with boxes in it — *One is
+called `bottle` sold in packs of `24` called a `carton`* — and then **reads the numbers back
+in words** underneath.
+
+The read-back is the point, not decoration. It is what catches a pack price typed into the
+single price box, which used to produce a product listing at 24× with nothing to notice it.
+Any form where the same number can mean two different units owes the user that sentence.
+
+A field whose visible label is carried by surrounding prose still needs a real label, hidden
+with `.visually-hidden`. Prose is not an accessible name.
+
+Every field renders `is-invalid` and an `invalid-feedback` when refused. A form that marks
+one field of seventeen is a form that fails silently.

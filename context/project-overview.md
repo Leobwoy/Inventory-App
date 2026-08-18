@@ -33,8 +33,9 @@ excellent at one thing first.
    definition (e.g. carton of 24 bottles), a price per pack and a price per single, and
    which of the two they sell by.
 4. Owner adds suppliers.
-5. Owner raises a purchase order, entering quantities in cartons or singles. Where price
-   history exists, the best known price and supplier are shown while typing.
+5. Owner raises a purchase order **in cartons** - stock arrives in crates, not loose
+   bottles, so the unit is stated rather than asked. Where price history exists, the best
+   known price and supplier are shown while typing.
 6. Goods arrive. Owner records a receipt per line — quantity, batch number, optional
    expiry — which may be partial. Stock enters the system only here.
 7. Staff record sales. Price is resolved by the server. Stock is deducted

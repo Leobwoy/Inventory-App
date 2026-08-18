@@ -153,8 +153,28 @@ def pending_sales():
 @permission_required('sales.create')
 def add_sale():
     form = SaleForm()
-    product_choices = [(str(p.id), p.name) for p in Product.query.filter_by(business_id=current_user.business_id).all()]
-    product_prices = {str(p.id): float(p.unit_price) for p in Product.query.filter_by(business_id=current_user.business_id).all()}
+    # One query, not two. The same list feeds the choices and the price map.
+    catalogue = Product.query.filter_by(business_id=current_user.business_id).all()
+    product_choices = [(str(p.id), p.name) for p in catalogue]
+
+    # Everything the sale form needs to know about a product, in one variable.
+    # Deliberately not a second context variable: this template is rendered from
+    # five places in this route, and the purchase order page has already shipped
+    # a bug where one of those paths forgot a variable the template required.
+    may_convert = limits.has_feature('uom_conversion')
+    product_prices = {
+        str(p.id): {
+            'price': float(p.unit_price or 0),
+            'pack_price': float(uom.price_for(p, uom.PURCHASE)),
+            'per': uom.factor(p),
+            'base': p.base_uom or 'pcs',
+            'pack': p.purchase_uom or 'unit',
+            # What this product may actually be rung up in, already filtered by
+            # the plan - so the control cannot offer what the server refuses.
+            'units': uom.sell_units(p) if may_convert else [uom.BASE],
+        }
+        for p in catalogue
+    }
     for item_form in form.items:
         item_form.form.product_id.choices = product_choices  # type: ignore
     form.customer_id.choices = [('0', 'No Customer')] + [(str(c.id), c.name) for c in Customer.query.filter_by(business_id=current_user.business_id).order_by(Customer.name)]  # type: ignore

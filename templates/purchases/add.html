@@ -45,8 +45,9 @@
         {% if has_feature('uom_conversion') %}
         <p class="text-muted small">
             <i class="bi bi-box2 me-1"></i>
-            Order in cartons or crates and the quantity and cost convert to single units
-            automatically &mdash; stock is always counted in the unit you sell.
+            Orders are placed in whole cartons or crates, the way stock actually
+            arrives. Quantity and cost convert to single units automatically &mdash;
+            stock is always counted in the unit you sell.
         </p>
         {% endif %}
 
@@ -80,9 +81,11 @@
                         <label class="form-label" for="{{ item.form.quantity_ordered.id }}">{{ item.form.quantity_ordered.label.text }}</label>
                         <div class="input-group">
                             {{ item.form.quantity_ordered(class_='form-control qty-input' + (' is-invalid' if item.form.quantity_ordered.errors else ''), inputmode='numeric') }}
-                            {% if has_feature('uom_conversion') %}
-                            {{ item.form.order_unit(class_='form-select unit-select') }}
-                            {% endif %}
+                            {# A statement, not a question. Stock arrives in crates and
+                               cartons, so a product with a pack is ordered in packs and
+                               there is nothing to choose. The server derives it and
+                               ignores anything posted. #}
+                            <span class="input-group-text order-unit"></span>
                         </div>
                         {% for error in item.form.quantity_ordered.errors %}
                         <div class="invalid-feedback d-block">{{ error }}</div>
@@ -160,12 +163,29 @@
   }
 
   function refreshLine(line) {
+    // The unit this line is ordered in, in the product's own word. Filled from
+    // the same data the server derives from, so the two cannot disagree.
+    var unitLabel = line.querySelector('.order-unit');
+    if (unitLabel) {
+      var picked = PRODUCT_UOM[line.querySelector('.product-select').value];
+      unitLabel.textContent = (picked && picked.per > 1)
+        ? picked.purchase : (picked ? picked.base : '');
+    }
+
     var hint = line.querySelector('.line-hint');
     var priceHint = line.querySelector('.price-hint');
-    var select = line.querySelector('.unit-select');
 
     var productId = line.querySelector('.product-select').value;
     var info = PRODUCT_UOM[productId];
+    // After `info`, not before it. `var` hoists the declaration but not the
+    // value, so reading it a line early made this silently false and the whole
+    // conversion vanished: no "10 x 24" hint, and the price comparison measured
+    // a carton against a bottle's best price - 43.07 more instead of 0.75.
+    //
+    // The line's unit is derived, not chosen, so this mirrors the server's rule
+    // rather than reading a control: a product with a real pack is ordered in
+    // packs. The `.unit-select` it used to read no longer exists.
+    var inPacks = Boolean(info && info.per > 1);
     var qty = parseInt(line.querySelector('.qty-input').value || '0', 10) || 0;
     var cost = parseFloat(line.querySelector('.cost-input').value || '0') || 0;
 
@@ -181,7 +201,7 @@
       if (!known) {
         priceHint.textContent = '';
       } else {
-        var perBase = (info && info.per > 1 && select && select.value === 'purchase')
+        var perBase = inPacks
                       ? cost / info.per : cost;
         var best = parseFloat(known.price);
         var text = 'Best so far: ₵' + best.toFixed(2) + ' from ' + known.supplier;
@@ -198,7 +218,7 @@
     }
 
     if (!hint) { return; }
-    if (!info || info.per <= 1 || !select || select.value !== 'purchase' || !qty) {
+    if (!inPacks || !qty) {
       hint.textContent = '';
       return;
     }

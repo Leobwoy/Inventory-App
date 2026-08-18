@@ -873,6 +873,98 @@ sum in `services/credit.py` rounds. The old test asserting `str(total) == '0.30'
 asserting the *column width*, not the guarantee, and now asserts at the money boundary
 instead. A new test covers what a customer is told they owe, which nothing covered before.
 
+**U3 — the control on the page.** A Carton/Single toggle inside the quantity cell, not a
+sixth column: this table fought for width once already and a new column would take it
+straight back off the product name. It shows the business's own words — "pcs" and "carton",
+not "Single" and "Carton" — because those are the words they typed when they set the product
+up. It appears only where there is a real choice, and `units` is filtered server-side so the
+control cannot offer what the server would refuse.
+
+Everything the page needs travels in the **existing** `product_prices` variable rather than a
+new one. That template is rendered from five places in this route, and the purchase order
+page has already shipped a bug where one path forgot a variable the template required.
+
+Measured at 375 / 1024 / 1280 / 1440: quantity holds four digits everywhere, the product name
+still fits, the toggle never clips, nothing under 44px on a phone, no horizontal overflow.
+
+**The contrast sweep earned its keep again**, and cost an hour doing it. The chosen unit
+rendered at 2.43:1 on dark and 2.66:1 on light — the word saying whether you are selling one
+bottle or twenty-four, unreadable on its own highlight. `background` from that same rule
+applied; only `color` lost. Established: the rule matches, `--on-accent` resolves on the
+element, the winning declaration is inside `style.css` (disabling it changes the result),
+appending an identical rule later does not win, `!important` does, and no `!important` colour
+rule in the file matches that element. It is now `!important` with all of that written beside
+it, because the readability of that word is not worth more of the budget than it already
+took. **A large part of the hour was spent measuring a cached stylesheet** — every reading
+after every edit came back identical, which is the signature, and I read it as "the fix
+failed" four times before recognising it.
+
+**U4 — the product form in the owner's words.** The three fields that read "Base UoM",
+"Purchase UoM" and "Units per Purchase UoM" are now a sentence you fill in — *One is called
+`bottle` sold in packs of `24` called a `carton`* — and underneath it the form reads back what
+that means: *"You sell this by the carton of 24 bottles. A carton is ₵1,050.00 — that works
+out at ₵43.75 a bottle."*
+
+That sentence exists for one specific mistake. A carton price typed into the single price box
+produced a product listing at 24× its real price, and nothing on the old form said which unit
+either box was in. It now answers back *"Check the single price - ₵1,050.00 for one bottle
+looks like a carton price"* before Save rather than after the first sale.
+
+The pack price and the sell-by dropdown appear only once a real pack is described, and the
+dropdown speaks the words just typed — "bottles only / cartons only / Both".
+
+**Field names are unchanged deliberately.** `tests/test_audit.py` posts this exact set;
+renaming them would be a schema-shaped change dressed up as wording.
+
+**A nonsense setup cannot be saved.** "Both" on a product whose pack is one item, or whose
+pack is named the same as the item, saves as singles-only — otherwise the sale form offers a
+carton the server then refuses, which reads as the app being broken rather than the product
+being set up wrong. A blank pack price stays **null**, not zero: null means "a pack is count
+× the single price", zero would mean free.
+
+**Two gaps of my own, found by the tests I had just written.** The form rendered a reason for
+exactly *one* of seventeen fields, so a refused product came back looking identical to the
+one sent — all of them explain themselves now. And the sentence had replaced the labels
+entirely, leaving a screen reader three unlabelled boxes wedged between loose words; each
+keeps a real label, visually hidden.
+
+**U5 — purchasing is pack-only, and the receipt loophole is shut.**
+
+Reported from the running app: *"no wholesaler will procure or restock in single bottles.
+Everything comes in crates or carton or box."* Correct, and it made the page simpler rather
+than more complex — the unit dropdown was asking a question with one answer. There is no
+control now: the line states its unit in the product's own word, the server **derives** it,
+and a posted value is ignored. That is a stronger guarantee than gating a control, because
+there is nothing left to post past. A product with no real pack is still ordered in singles.
+
+The unit is consistent across the app now: declared once on the product, stated on
+purchasing, carried through receiving, and chosen per line only on the sale — the one place
+both genuinely happen.
+
+**The goods receipt gate.** It checked the product but never the plan, unlike order creation
+twenty lines above it. My first test of it used the free plan, which cannot open that page at
+all — so nothing was received and I read that as the gate working. The real case is **Shop**:
+`purchase_orders` is basic tier and `uom_conversion` is standard, so Shop can order and
+cannot convert. That is the plan the test uses.
+
+**Also reported: a three-figure price losing its last digit on the sale form.** Measured, the
+box had 40px of usable space when even "44.16" needs 41 — *every* price was clipped, and the
+four-figure carton prices only made it visible. Fixed and checked at all four widths.
+
+Twice in a row now an `<input>` with `width: auto` has ballooned its column: the intrinsic
+size is about twenty characters, so the price column took 265px and stole it from the product
+name, exactly as the quantity box did. Both carry an explicit basis.
+
+**A bug I wrote and caught:** the "is this in packs" flag was computed one line above the
+variable it reads. `var` hoists the declaration but not the value, so it was silently false —
+the conversion hint vanished and the supplier comparison read ₵43.07 more instead of ₵0.75,
+measuring a carton against a bottle's best price.
+
+**A falsification that needs two mutations, recorded so it is not mistaken for a sleeping
+test.** "A pack in name only is not multiplied" is protected in two places — the route
+refuses to set the unit, `uom.to_base` refuses to act on it — so breaking either alone comes
+back green. Both together go red.
+
 **A gate that is defensive rather than testable, recorded so nobody deletes it as dead.**
 The API path checks `uom_conversion` before honouring a posted unit, but `offline` and
 `uom_conversion` are both `standard` tier, so every plan that can sync also has conversion.

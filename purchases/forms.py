@@ -7,10 +7,10 @@ from wtforms.validators import DataRequired, NumberRange, Optional
 class PurchaseOrderItemForm(FlaskForm):
     product_id = SelectField('Product', coerce=int, validators=[DataRequired()])
     quantity_ordered = IntegerField('Quantity Ordered', validators=[DataRequired(), NumberRange(min=1)])
-    # Which unit the quantity and cost above are typed in. Storage is always base
-    # units; this only says how to read what was entered (services/uom.py).
-    order_unit = SelectField('Unit', choices=[('purchase', 'Cartons'), ('base', 'Pieces')],
-                             default='purchase', validators=[Optional()])
+    # There is no order_unit field any more. It asked a question with one
+    # answer: stock arrives in crates and cartons, so an order for a product
+    # with a pack is placed in packs. purchases/routes.py derives it, and a
+    # value posted by hand cannot change what a line means.
     unit_cost = DecimalField('Unit Cost', validators=[DataRequired(), NumberRange(min=0)])
 
 class PurchaseOrderForm(FlaskForm):
