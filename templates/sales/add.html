@@ -51,7 +51,13 @@
 
 {# data-steps starts at "off" so that with no JavaScript both panes are on the
    page and the form still works. The inline script below turns stepping on. #}
+{# A refused POST comes back with the units the user chose, and those must
+   survive. A fresh GET has chosen nothing yet, so each line opens on whatever
+   its product is actually sold in. `request` is in every Jinja context, so this
+   needs no variable from the route - and this template is rendered from five
+   places, one of which has already shipped a bug by forgetting one. #}
 <form method="post" id="sale-form" class="sale-form" data-steps="off"
+      data-repost="{{ 1 if request.method == 'POST' else 0 }}"
       data-start-step="{{ start_step }}">
     {{ form.hidden_tag() }}
 
@@ -499,6 +505,20 @@
       }
     });
 
+    // Open on the unit this product is actually sold in. Only when the product
+    // on the row has changed, so a choice already made - including one posted
+    // and re-rendered after the form was refused - is never overwritten.
+    var select = row.querySelector('.product-select');
+    var chosenFor = select ? select.value : '';
+    if (product && row.dataset.unitFor !== chosenFor) {
+      var wanted = row.querySelector('[name$="sell_unit"][value="' +
+                                     (product.default || units[0]) + '"]');
+      if (wanted) {
+        wanted.checked = true;
+      }
+    }
+    row.dataset.unitFor = chosenFor;
+
     // A unit that is no longer on offer must not stay selected.
     var picked = row.querySelector('[name$="sell_unit"]:checked');
     if (picked && units.indexOf(picked.value) === -1) {
@@ -728,6 +748,14 @@
   rows().forEach(function (row) {
     attachMeta(row);
     paintPicker(row);
+    // Seed it only on a re-render, so the units the user chose survive a
+    // refusal. On a fresh form nothing is seeded and every line opens on the
+    // unit its product is sold in - including the one already selected, which
+    // is why this cannot simply read the select.
+    if (form && form.dataset.repost === '1') {
+      var select = row.querySelector('.product-select');
+      row.dataset.unitFor = select ? select.value : '';
+    }
     updateUnitChoice(row);
     updatePrice(row);
   });

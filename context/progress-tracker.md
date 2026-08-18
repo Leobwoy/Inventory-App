@@ -1219,6 +1219,34 @@ there are headers, and that the label still sits beside its number.
 guarantee it protects is unaffected (the column is omitted entirely for staff who may not
 see cost), so it asserts the new name plus "no column with 'cost' in it by any other name".
 
+**W7 — the sale form opens on the carton.** The smallest item and the one felt most often:
+`sell_unit` defaulted to `base`, so every line of every sale started on Single and a
+wholesaler pressed Carton each time. `uom.default_sell_unit` had returned the pack first
+since U1 and nothing called it.
+
+**The old code only re-selected when the checked unit was not on offer**, which is why a
+packs-only product happened to work and a "both" product - the common case - never did.
+Single was still on offer, so nothing forced the change and the pre-checked radio survived.
+
+**A refused sale must not lose the units already chosen**, so the default applies only when
+the product on a line changes. Telling a fresh form from a re-render needed no new variable:
+`request.method` is in every Jinja context, and this template is rendered from **five**
+places in the route - one of which has already shipped a bug by forgetting to pass one.
+
+**The server stopped depending on the page.** Its fallback for an un-offered unit was
+`base`, so a packs-only product posted without a unit - no script, a trimmed form - sold
+twelve loose bottles at a bottle's price. It falls back to `default_sell_unit` now, which
+resolves through `sell_units` and therefore cannot hand out a unit the plan or the product
+refuses. The gate is unchanged; only the fallback moved.
+
+**A test premise wrong again, in a way worth recording**: a POST with no `sale_date` does
+*not* refuse, because `sale_date` defaults to today - which is a fix from earlier in this
+project, not an oversight. The refusal now comes from ordering more than there is in stock.
+
+**And one assertion too strict**: 230 over 12 is 19.1666..., which six decimals cannot hold
+exactly, so `price_at_sale x quantity` is 460.000008. Asserted at the boundary where a
+person reads or pays it - the same rule U2 established after the widening leaked.
+
 ## Open Questions
 
 - **Self-service password reset still does not exist (F-43), but the lockout risk is
