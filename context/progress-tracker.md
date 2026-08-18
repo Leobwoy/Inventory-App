@@ -494,7 +494,7 @@ reader user could walk straight out into dimmed, unreachable content. It now sav
 open, traps Tab among the enabled controls, restores focus on close, and the dim absorbs
 clicks.
 
-**The rest.** `tour_seen` was a read-then-write on a shared row, against invariant 8; it is
+**The rest.** `tour_seen` was a read-then-write on a shared row, against invariant 9; it is
 now a conditional `UPDATE ... WHERE tour_seen_at IS NULL` with the audit entry written only
 when exactly one row moved. The trial countdown uses `subscription.is_trialing`, so a lapsed
 trial the lifecycle job has not reconciled yet stops sitting on "0 days left". The ended
@@ -804,14 +804,11 @@ deliberately - the offline catalogue payload and cost reconciliation - both reco
 (Stage 2.8, the dashboard rebuild, shipped as Stage 3 C2. Barcode sale entry and branded
 invoices were folded into Stage 3; branded invoices already shipped as F-36.)
 
-- **Cramped fields on goods receipt.** Reported from the running app with a screenshot.
-  On `templates/purchases/receive.html` the "Receiving now" input is about one digit wide and
-  "Batch number" is squeezed beside it — the row carries seven columns (Product, Ordered,
-  Already in, Outstanding, Receiving now, Batch number, Expiry date) and the three that are
-  actually *typed into* get whatever width is left over after five read-only ones. The fix is
-  a layout change, not a width tweak: the inputs should lead. Due in Phase C6 when Purchasing
-  is rebuilt; noted here so it is not lost, since it is the page where a typo costs real
-  stock. Same shape of problem is likely on the sale form, which has the same pattern.
+- ~~**Cramped fields on goods receipt.**~~ **Done**, ahead of Phase C6, because Stage U5
+  had to touch the same page. The seven-column row — five of them read-only, with the three
+  that are actually typed into sharing whatever width was left — is one card per line now,
+  and the inputs lead. `templates/purchases/receive.html` renders `.recv-line` cards.
+  The same shape of problem on the sale form was fixed in Stage 3 C3.
 
 ### Decision — selling by the carton (2026-08-17)
 
@@ -1309,6 +1306,72 @@ and a Response object matches none of them - so it fell through to the same rend
 faithful mutation is the design the test rules out: gate the whole page the way
 `@requires_feature` would. **A mutation has to be an alternative implementation, not just a
 different line.**
+
+### CodeRabbit review, round 3 (2026-08-18)
+
+Sixteen inline findings and eleven nitpicks. Two were already fixed, one was stale, and
+three turned out to be worse than reported.
+
+**Worse than reported.** `tests/test_uom.py` set `status='active'` and a paid `plan_id`
+without `paid_through`, so `effective_plan` read the subscription as lapsed, fell back to
+Free — which has no purchase orders at all — and the test fetched a **302 redirect** and
+asserted `order_unit` was absent from it. True, and about nothing. The finding asked for one
+more assertion; the premise underneath it had to be fixed first. **That is the fourth time
+this exact `paid_through` premise has produced a silently vacuous test in this project.**
+
+`static/js/picker.js` filtered on `el.textContent`, which includes the meta line, so typing
+"44" matched every product costing 44-something. W5 made it materially worse three commits
+earlier: stock now reads "13 cartons + 6 bottles", so **"carton" matched every packed
+product in the catalogue**. It filters on a `data-name` attribute now.
+
+`design/verify/capture.py` printed a warning and carried on when it failed to force the
+dialog open, writing a screenshot of a *closed* dialog that the contrast sweep then measured
+as if it were the dialog. It raises now. A warning in a scrolling log is exactly how an hour
+went into measuring a cached stylesheet in Stage U3.
+
+**The one design disagreement, half-accepted.** The finding asked for refused selling units
+to be rejected rather than converted, in both the API and the web form.
+
+*Accepted for the API.* A device that queued "2 cartons" and synced after the product
+changed to packs-only had that sale silently recorded as 2 bottles — money already taken at
+the till, written down as a twenty-fourth of itself. That is precisely what rule 3 of
+`api/routes.py` forbids: *"a conflict is reported, never resolved quietly."* It raises
+`_Conflict` now, so the device keeps the sale for a human.
+
+*Declined for the web form.* The premise was stale by seven commits: W7 changed that
+fallback from base units to the product's **own default**, so there is no silent
+misconversion left to fix — a packs-only product posted without a unit now sells a carton,
+which is the correct answer. Refusing instead would break the no-script path outright: with
+JavaScript off the form always posts `base`, so every no-JS sale of a packs-only product
+would be refused.
+
+**Also fixed:** the invariant list in `architecture.md` numbered an item 14 between 3 and 4
+(renumbered, and the three references to invariants 8 and 11 elsewhere in the repo moved with
+it — a blind renumber would have traded one wrong number for three); an `&mdash;` entity
+inside a Jinja expression, which autoescapes and renders literally; two form fields that
+never showed why they were refused, which was the gap U4 was supposed to close; the sale
+form's step list as clickable `<li>`s, invisible to the keyboard, now real buttons with
+`type="button"` because they sit inside a form; unguarded `window.ProductPicker` calls that
+would take the whole inline script down with them if `picker.js` failed to arrive; a
+duplicated assertion; and two Ruff findings.
+
+**`ProductForm.has_pack` was an invariant violation, not a nitpick.** Invariant 4 says
+conversion guards live in `services/uom.py` rather than in callers, and this was a second
+copy of the pack rule living in a form. The two had already drifted: the form required a
+pack *name* and `uom.has_conversion` did not, so a product saved with a blank purchase unit
+counted as convertible in one and not the other. Both call `uom.describes_pack` now.
+
+**Declined, with reasons.** Extracting a shared sale-line helper across the web and API
+paths, replacing the credit summary loop with an aggregate query, and refactoring the
+purchase order add-line handler are all real improvements and all larger than this review —
+they change working, tested code on the two paths that move money, and belong in their own
+change with their own verification rather than riding in on a review pass. Recorded here so
+they are not lost.
+
+**Context files reconciled**: purchasing is cartons-only (U5), the theme section describes
+the light/dark/system support that shipped in C1 rather than the dark-only glass it replaced,
+the goods-receipt layout item is closed, and `CACHE_VERSION` is `tracktrack-v19` — bumped in
+this commit because `picker.js` is precached.
 
 ## Open Questions
 

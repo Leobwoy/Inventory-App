@@ -27,16 +27,33 @@ def factor(product):
     return max(1, int(product.units_per_purchase_uom or 1))
 
 
+def describes_pack(count, purchase_uom, base_uom):
+    """Do these three values describe a real pack?
+
+    The rule itself, separated from where the values come from, because it is
+    asked in two places: of a saved product by `has_conversion` below, and of a
+    half-filled form by `ProductForm.has_pack` before there is a product to ask
+    about. Two copies of it drifted once already - the form required a pack name
+    and this did not, so a product saved with a blank purchase unit counted as
+    convertible here and not there.
+
+    Three conditions, and all of them matter. More than one to a pack; a name
+    for the pack; and a name different from the single, because a "carton" of 24
+    bottles called a bottle is two names for one thing.
+    """
+    pack = (purchase_uom or '').strip().lower()
+    base = (base_uom or 'pcs').strip().lower()
+    return int(count or 0) > 1 and bool(pack) and pack != base
+
+
 def has_conversion(product):
     """True when buying and selling genuinely use different units.
 
     A product bought and sold in pieces needs none of this, and showing it a
     carton/piece selector would be noise.
     """
-    return (
-        factor(product) > 1
-        and (product.purchase_uom or '').strip().lower() != (product.base_uom or '').strip().lower()
-    )
+    return describes_pack(product.units_per_purchase_uom,
+                          product.purchase_uom, product.base_uom)
 
 
 def has_conversion_available(products):

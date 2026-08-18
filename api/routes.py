@@ -226,15 +226,28 @@ def _record_one(payload, business_id):
             if requested is not None and not requested.is_finite():
                 raise _Rejected('A line has an unreadable price.')
 
-            # Which unit the till rang up. Gated exactly as the web form gates
-            # it - the phone is the *least* trusted input in the system, and a
-            # queued sale can arrive days later from a device that has been
-            # offline through a downgrade.
-            sold_unit = uom.BASE
-            if limits.has_feature('uom_conversion'):
-                asked = str(line.get('sell_unit') or uom.BASE)
-                if asked in uom.sell_units(product):
-                    sold_unit = asked
+            # Which unit the till rang up. The phone is the least trusted input
+            # in the system and a queued sale can arrive days later, so this is
+            # re-decided here like everything else - but a unit that is no
+            # longer on offer is *reported*, never quietly converted.
+            #
+            # It used to fall through to base units, which meant a product
+            # changed from "both" to packs-only while a device was offline had
+            # its queued carton sales recorded as single bottles: real money
+            # already taken at the till, written down as a twenty-fourth of
+            # itself, with nothing said. Rule 3 at the top of this file exists
+            # for exactly this - the answer belongs to the person who was there.
+            asked = str(line.get('sell_unit') or uom.BASE)
+            if asked not in (uom.BASE, uom.PURCHASE):
+                raise _Rejected('A line was rung up in a unit this system does not use.')
+            allowed = (uom.sell_units(product)
+                       if limits.has_feature('uom_conversion') else [uom.BASE])
+            if asked not in allowed:
+                raise _Conflict(
+                    f'{product.name} was rung up by the '
+                    f'{uom.unit_label(product, asked)}, which it is no longer sold by. '
+                    'Check this sale before it is recorded.')
+            sold_unit = asked
             base_quantity = uom.to_base(product, quantity, sold_unit)
 
             # The price the device saw may be stale, and the rule may have

@@ -94,8 +94,16 @@ with a.app_context():
                         'class="modal fade picker-modal"',
                         'class="modal picker-modal show" style="display:block"')
                     if shot == html:
-                        print(f'  {name}/{theme}: WARNING dialog capture changed '
-                              'nothing - has the picker markup moved?')
+                        # Raised, not warned. A capture that changed nothing is
+                        # a screenshot of a *closed* dialog, and the sweep then
+                        # measures the page behind it and reports the dialog as
+                        # passing. A warning in a scrolling log is exactly how
+                        # an hour goes into measuring the wrong surface.
+                        raise SystemExit(
+                            f'{name}/{theme}: the dialog could not be forced open - '
+                            'the picker markup has moved, so this capture would '
+                            'measure the page behind it. Fix the selector in '
+                            'design/verify/capture.py.')
                     # The list is filled by picker.js from the <select>, and
                     # nothing runs here, so it would be an empty box. Write the
                     # rows in from the same source the script uses.

@@ -113,7 +113,8 @@ def test_every_field_can_show_why_it_was_refused(shop):
     page = form_page(client)
 
     for field in ('name', 'unit_price', 'pack_price', 'min_stock_alert',
-                  'base_uom', 'purchase_uom', 'units_per_purchase_uom'):
+                  'base_uom', 'purchase_uom', 'units_per_purchase_uom',
+                  'sell_unit', 'quantity_in_stock'):
         assert f"form.{field}.errors" not in page, 'template source leaked'
     # A real refusal must mark the field and say why.
     from products.models import Brand, ItemGroup

@@ -136,9 +136,9 @@ def add_purchase():
                                            product_uom=product_uom,
                                            price_history=price_history)
 
-                # Entered in cartons or pieces; stored in base units either way,
-                # so nothing downstream has to ask which unit a row is in.
-                # The template only shows the unit selector when the business
+                # Stored in base units whatever was typed, so nothing downstream
+                # has to ask which unit a row is in.
+                #
                 # Derived, never posted. A wholesaler does not restock in single
                 # bottles - stock arrives in crates, cartons and boxes - so where
                 # a product has a real pack, that is the unit an order is placed

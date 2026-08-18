@@ -162,7 +162,6 @@ def test_totals_are_summed_as_decimal_not_float(shop_with_sales):
     total = sum((i.price_at_sale * i.quantity for i in SaleItem.query.all()), Decimal('0'))
     assert isinstance(total, Decimal)
     assert total == Decimal('0.30')
-    assert total == Decimal('0.30')
 
     # Not `str(total) == '0.30'` any more. price_at_sale is Numeric(14, 6)
     # since packs could be sold - a pack price divided by its count has to

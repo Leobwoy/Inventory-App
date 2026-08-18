@@ -242,6 +242,16 @@ def test_a_sale_synced_from_a_phone_keeps_its_unit(carton_shop):
 def test_a_phone_cannot_post_its_way_to_a_unit_the_product_does_not_sell(carton_shop):
     """The reachable half of the API gate.
 
+    This asserted the opposite until the round 3 review, and the reversal is
+    worth stating. A refused unit used to fall through to base units, so a
+    device that queued "2 cartons" and synced after the product was changed to
+    singles-only had that sale **recorded as 2 bottles** - money already taken
+    at the till, written down as a twenty-fourth of itself, with nothing said.
+
+    It is reported now, which is rule 3 at the top of `api/routes.py`: a
+    conflict is reported, never resolved quietly. The device keeps the sale and
+    a person decides, because the person was there and the server was not.
+
     The plan half is defensive rather than testable: `offline` and
     `uom_conversion` are both standard tier, so every plan that can sync at
     all also has conversion. It stays in the code because the two are
@@ -253,13 +263,32 @@ def test_a_phone_cannot_post_its_way_to_a_unit_the_product_does_not_sell(carton_
     db.session.commit()
     before = product.quantity_in_stock
 
-    sync(client, product, 2, uom.PURCHASE, 'phone-2', '96.00')
+    response = sync(client, product, 2, uom.PURCHASE, 'phone-2', '96.00')
 
-    item = last_line()
-    assert item.quantity == 2, (
-        'a phone bought a carton the product is not sold by')
+    assert response.status_code == 200
+    result = json.loads(response.data)['results'][0]
+    assert result['status'] == 'conflict', 'the sale was recorded in another unit'
+    assert 'no longer sold by' in result['message']
+
+    assert last_line() is None, 'a refused sale still reached the books'
     db.session.expire_all()
-    assert Product.query.get(product.id).quantity_in_stock == before - 2
+    assert Product.query.get(product.id).quantity_in_stock == before, (
+        'stock moved for a sale nobody agreed to record')
+
+
+def test_a_unit_that_is_still_on_offer_syncs_normally(carton_shop):
+    """The other side of it: reporting a refused unit must not turn every
+    queued carton sale into a conflict."""
+    client, _business_id, product = carton_shop
+    before = product.quantity_in_stock
+
+    response = sync(client, product, 2, uom.PURCHASE, 'phone-3', '2100.00')
+
+    assert json.loads(response.data)['results'][0]['status'] == 'accepted'
+    item = last_line()
+    assert item.quantity == 48 and item.sold_quantity == 2
+    db.session.expire_all()
+    assert Product.query.get(product.id).quantity_in_stock == before - 48
 
 
 def test_what_a_customer_owes_is_a_number_of_pesewas(carton_shop, register):

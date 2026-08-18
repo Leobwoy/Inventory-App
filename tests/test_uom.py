@@ -249,11 +249,17 @@ def test_an_order_states_its_unit_rather_than_asking(crate_product, app):
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.plan_id = Plan.query.filter_by(code='basic').one().id
     subscription.status = 'active'
+    # `paid_through` as well as the status. Without it `effective_plan` reads the
+    # subscription as lapsed and falls back to Free, which has no purchase orders
+    # at all - so this half of the test was fetching a redirect and asserting
+    # `order_unit` was absent from it. True, and about nothing.
+    subscription.paid_through = datetime.date.today() + datetime.timedelta(days=30)
     db.session.commit()
 
     # Shop still cannot convert, and still says what unit it is entering in.
     body = client.get('/purchases/add').get_data(as_text=True)
-    assert 'order_unit' not in body
+    assert 'order_unit' not in body, 'the unit is a choice again'
+    assert 'order-unit' in body, 'the line does not say which unit it is in'
 
 
 def test_without_the_feature_everything_entered_is_in_base_units(crate_product):

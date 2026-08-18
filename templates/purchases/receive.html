@@ -62,7 +62,7 @@
             <div class="recv-line {{ 'is-complete' if outstanding <= 0 }}">
                 <div class="recv-head">
                     <div class="recv-what">
-                        <div class="recv-name">{{ item.product.name if item.product else '&mdash;' }}</div>
+                        <div class="recv-name">{{ item.product.name if item.product else '—' }}</div>
                         <div class="recv-sub">
                             {% if item.product and item.product.sku %}
                             <span class="font-monospace">{{ item.product.sku }}</span> &middot;

@@ -285,6 +285,11 @@
     var select = line.querySelector('.product-select');
     var button = line.querySelector('.picker-button');
     if (!select || !button) { return; }
+    // picker.js is a separate file and can fail to arrive. Without this the
+    // whole inline script dies here, taking the line totals and the unit hints
+    // with it - and this page is built to work with no script at all, so a
+    // half-dead one is worse than none. The native select still posts.
+    if (!window.ProductPicker) { return; }
     var label = window.ProductPicker.labelOf(select);
     button.querySelector('.picker-button-name').textContent = label || 'Choose a product';
     button.classList.toggle('is-chosen', Boolean(label));
@@ -359,7 +364,7 @@
     line.querySelectorAll('.invalid-feedback').forEach(function (el) { el.remove(); });
 
     container.appendChild(line);
-    window.ProductPicker.enhance(line);
+    if (window.ProductPicker) { window.ProductPicker.enhance(line); }
     attachMeta(line);
     paintPicker(line);
     refreshAll();

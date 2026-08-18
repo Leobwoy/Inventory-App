@@ -61,13 +61,25 @@
       data-start-step="{{ start_step }}">
     {{ form.hidden_tag() }}
 
+    {# Real buttons, not clickable list items. These move between panes, and a
+       <li> with a click handler is invisible to the keyboard and announces
+       itself as nothing. `type="button"` is load-bearing: they sit inside the
+       form, and a bare <button> submits it.
+
+       The class and data-goto stay on the button rather than the li, because
+       showStep selects `.sale-step` to set aria-current and the delegated
+       handler resolves `closest('[data-goto]')`. #}
     <ol class="sale-steps" id="sale-steps">
-        <li class="sale-step" data-goto="1">
-            <span class="sale-step-n">1</span><span class="sale-step-word">Items</span>
+        <li>
+            <button type="button" class="sale-step" data-goto="1">
+                <span class="sale-step-n">1</span><span class="sale-step-word">Items</span>
+            </button>
         </li>
         <li class="sale-step-line" aria-hidden="true"></li>
-        <li class="sale-step" data-goto="2">
-            <span class="sale-step-n">2</span><span class="sale-step-word">Payment</span>
+        <li>
+            <button type="button" class="sale-step" data-goto="2">
+                <span class="sale-step-n">2</span><span class="sale-step-word">Payment</span>
+            </button>
         </li>
     </ol>
 
@@ -452,6 +464,7 @@
     if (!select || !button) {
       return;
     }
+    if (!window.ProductPicker) { return; }
     var label = window.ProductPicker.labelOf(select);
     button.querySelector('.picker-button-name').textContent =
       label || 'Choose a product';
@@ -692,7 +705,7 @@
     });
 
     body.appendChild(row);
-    window.ProductPicker.enhance(row);
+    if (window.ProductPicker) { window.ProductPicker.enhance(row); }
     attachMeta(row);
     paintPicker(row);
     updateUnitChoice(row);

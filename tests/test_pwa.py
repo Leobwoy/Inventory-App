@@ -256,7 +256,7 @@ def test_the_hidden_attribute_actually_hides():
 #: naming the fix: bump the version, then update the hash below.
 PRECACHE_FINGERPRINT = {
     'tracktrack-v15': '5b700293298fb69b98d8fe120b0c30b229c2eceba62eac7ba28448db0a58fdc6',
-    'tracktrack-v18': 'da954b31bbfae0a92cb93710fd6217b33ebbec9d4301b5f0a25aabd186a7452c',
+    'tracktrack-v19': 'b4e0ebe3de77b44e40ebf7a87c1372bb50727c918aeece32520746ae191e0947',
 }
 
 

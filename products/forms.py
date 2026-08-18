@@ -96,15 +96,15 @@ class ProductForm(FlaskForm):
     def has_pack(self):
         """True when what was entered describes a real pack.
 
-        Same three conditions the route applies in `_sell_unit_for` and the
-        summary sentence applies in the browser: more than one to a pack, a name
-        for the pack, and a name different from the single. A "carton" of one, or
-        a carton called a bottle, is two names for the same thing.
+        The rule lives in `services/uom.py` rather than here, so this form and
+        `uom.has_conversion` cannot disagree about what a pack is - which they
+        briefly did. The browser applies the same three conditions in the
+        summary sentence on this page.
         """
-        per = self.units_per_purchase_uom.data or 1
-        pack = (self.purchase_uom.data or '').strip().lower()
-        base = (self.base_uom.data or 'pcs').strip().lower()
-        return per > 1 and bool(pack) and pack != base
+        from services import uom
+
+        return uom.describes_pack(self.units_per_purchase_uom.data,
+                                  self.purchase_uom.data, self.base_uom.data)
 
     def validate(self, extra_validators=None):
         """Demand a price for the unit this product is actually sold in.

@@ -117,9 +117,19 @@
         {% endfor %}
 
         <div class="field-grid">
+            {# The two fields U4 missed when it gave every other field a reason.
+               sell_unit only errors on a hand-posted choice, and the pane it
+               lives in is hidden until a pack is described - but a refusal the
+               server made and the page does not show is the exact failure that
+               work was about, so it renders like the rest. The pane is on
+               screen whenever this field can error: choosing a sell unit is
+               only possible once there is a pack. #}
             <div class="field" id="sell-unit-field" hidden>
                 <label class="form-label" for="{{ form.sell_unit.id }}">{{ form.sell_unit.label.text }}</label>
-                {{ form.sell_unit(class_='form-select', id=form.sell_unit.id) }}
+                {{ form.sell_unit(class_='form-select' + (' is-invalid' if form.sell_unit.errors else ''), id=form.sell_unit.id) }}
+                {% for error in form.sell_unit.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
             {# The carton is the unit. Only one of these two pairs is on screen at a
                time: a product with a real pack is priced by the pack and nothing
@@ -185,7 +195,10 @@
         <div class="field-grid">
             <div class="field">
                 <label class="form-label" for="{{ form.quantity_in_stock.id }}">{{ form.quantity_in_stock.label.text }}</label>
-                {{ form.quantity_in_stock(class_='form-control') }}
+                {{ form.quantity_in_stock(class_='form-control' + (' is-invalid' if form.quantity_in_stock.errors else '')) }}
+                {% for error in form.quantity_in_stock.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
             <div class="field">
                 <label class="form-label" for="{{ form.min_stock_alert.id }}"><i class="bi bi-exclamation-triangle me-1 text-warning"></i>{{ form.min_stock_alert.label.text }}</label>

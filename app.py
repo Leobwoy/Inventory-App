@@ -278,8 +278,6 @@ def create_app():
                 'walk_ins': sum(1 for row in outstanding if not row[0].customer_id),
             }
 
-        from services import onboarding
-
         return render_template(
             'index.html',
             low_stock=low_stock,

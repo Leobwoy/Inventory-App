@@ -145,39 +145,39 @@ Rules the codebase must never violate. Each was learned from a real defect.
    Hiding a selector is not enforcing anything - a hand-posted unit must not buy a
    conversion the plan does not include.
 
-14. **Conversion guards live in `services/uom.py`, not in its callers.** `to_base` and
+4. **Conversion guards live in `services/uom.py`, not in its callers.** `to_base` and
     `cost_to_base` check `has_conversion` themselves. They multiplied on the pack count
     alone until Stage U, and were safe only because both call sites happened to guard
     first; safety that lives in the callers lasts until the third caller.
 
-4. **Money is `Decimal` end to end.** `float()` only at an export boundary, never before
+5. **Money is `Decimal` end to end.** `float()` only at an export boundary, never before
    a sum.
 
-5. **Schema changes only through migrations.** Never `db.create_all()` — it builds tables
+6. **Schema changes only through migrations.** Never `db.create_all()` — it builds tables
    but runs no seed data, which is exactly how deploys silently produced an app with no
    roles (F-02).
 
-6. **Balances are derived, never stored.** Credit balances compute from sales minus
+7. **Balances are derived, never stored.** Credit balances compute from sales minus
    payments on every read. A stored balance is a cache, and an unreconciled cache drifts.
 
-7. **Audit writes never raise.** A failed log line must not roll back the operation it
+8. **Audit writes never raise.** A failed log line must not roll back the operation it
    describes. A missing log entry is bad; a lost sale is worse.
 
-8. **Read-then-write on shared rows takes a row lock.** `deduct_fefo`, `restore`,
+9. **Read-then-write on shared rows takes a row lock.** `deduct_fefo`, `restore`,
    `receive` and goods receipt all use `with_for_update()`. Without it, two tills selling
    the same product both pass the stock check and both write from a stale read.
 
-9. **Customer data is never deleted to enforce a plan limit.** Downgrading removes
+10. **Customer data is never deleted to enforce a plan limit.** Downgrading removes
    *access*, not records: products deactivate, staff suspend, nothing is destroyed.
 
-10. **Every POST form carries a CSRF token.** `CSRFProtect` is global and a missing token
+11. **Every POST form carries a CSRF token.** `CSRFProtect` is global and a missing token
     is a silent 400 (F-28). There is exactly **one** exemption,
     `api.cron_subscriptions`: server-to-server, authenticated by a shared secret compared
     with `hmac.compare_digest`, taking no input and idempotent. A scheduler has no
     session and cannot fetch a token first. A Paystack webhook would be the second,
     verified by signature. A third needs all four of those properties, not just the first.
 
-11. **Entitlement is decided on read, never by a scheduled job.**
+12. **Entitlement is decided on read, never by a scheduled job.**
     `services/limits.effective_plan()` works out what a business may do from the dates on
     the subscription row, on every request. `services/subscriptions.py` only makes the
     stored `status` agree with it. A run that is skipped, late or failed cannot grant a
@@ -185,12 +185,12 @@ Rules the codebase must never violate. Each was learned from a real defect.
     instance that sleeps and GitHub's scheduler drops runs when it is busy. If the two
     ever disagree, `effective_plan` is right.
 
-12. **A downgrade rewrites `plan_id`, not just `status`.** `effective_plan` reads
+13. **A downgrade rewrites `plan_id`, not just `status`.** `effective_plan` reads
     `status == 'free'` as "on the plan named here, with no expiry" - that is how a comped
     account works. Flipping the status while leaving a paid `plan_id` in place grants that
     plan permanently and it never expires again: the exact opposite of a downgrade.
 
-13. **An alert is only shown to someone allowed to see what it is about.** The alerts
+14. **An alert is only shown to someone allowed to see what it is about.** The alerts
     page spans modules by design, so it crosses permission gates its own `products.view`
     does not cover. `notifications.ALERT_PERMISSIONS` holds the exceptions, and both the
     page and the badge count go through `for_user()` - a badge counting what the page
@@ -255,7 +255,7 @@ left to enter.
 Grace exists because mobile money cannot renew on its own. A lapse means "they have not
 paid *yet today*", not "they left".
 
-It runs three ways, none of them authoritative (invariant 11):
+It runs three ways, none of them authoritative (invariant 12):
 
 - **Lazily**, `before_app_request`, throttled to once a day per signed-in user through the
   session. The marker is written *after* the work, so a connection that blinks is retried

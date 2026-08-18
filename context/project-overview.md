@@ -59,7 +59,9 @@ excellent at one thing first.
 - Deactivation retires a product without destroying its trading history
 
 ### Purchasing
-- Purchase orders with per-line quantity and cost, enterable in either unit
+- Purchase orders with per-line quantity and cost, **in packs** where a product has
+  one - stock arrives in crates and cartons, not loose bottles, so the unit is
+  derived and stated rather than asked. Loose goods are still ordered in singles
 - Partial goods receipt with batch numbers and expiry dates
 - Multi-supplier price comparison from order history — latest, best-ever, average,
   trend, and what switching supplier would save

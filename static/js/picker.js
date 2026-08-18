@@ -62,6 +62,9 @@
             var name = document.createElement('span');
             name.className = 'picker-option-name';
             name.textContent = option.textContent.trim();
+            // Kept on the row so filtering has something to match that is not
+            // the whole rendered line. See Picker.prototype.filter.
+            el.dataset.name = name.textContent.toLowerCase();
             el.appendChild(name);
 
             // Price and stock come off the option as data attributes when the
@@ -86,7 +89,12 @@
         this.matches = [];
         var self = this;
         this.options.forEach(function (el) {
-            var hit = !needle || el.textContent.toLowerCase().indexOf(needle) !== -1;
+            // The name only. `el.textContent` also carries the meta line - the
+            // price and the stock count - so typing "44" matched every product
+            // that happened to cost 44 something, and since stock started
+            // reading "13 cartons + 6 bottles" the word "cartons" matched every
+            // packed product in the catalogue.
+            var hit = !needle || (el.dataset.name || '').indexOf(needle) !== -1;
             el.hidden = !hit;
             if (hit) {
                 self.matches.push(el);
