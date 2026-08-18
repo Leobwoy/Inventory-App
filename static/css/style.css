@@ -23,6 +23,7 @@
   --bg-sidebar: rgba(15, 23, 42, 0.85);
   --bg-card: rgba(30, 41, 59, 0.7);
   --bg-card-hover: rgba(30, 41, 59, 0.9);
+  --bg-card-solid: #1e293b;   /* the same card with nothing behind it */
   
   --text-primary: #f8fafc;
   --text-secondary: #94a3b8;
@@ -36,9 +37,13 @@
   --accent-warning: #f59e0b;
   
   --border-color: rgba(255, 255, 255, 0.1);
+  --input-border-strong: rgba(255, 255, 255, 0.28);
   --glass-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
   --glass-backdrop: blur(10px);
   --rail-w: 140px;        /* the sidebar on a desktop screen */
+  --phone-tab-h: 58px;    /* the tappable row in the bottom bar */
+  --phone-tabs-h: 59px;   /* the bar itself, border included, so a sticky
+                             action bar can sit exactly on top of it */
 
   /* Surfaces that were literals until now, which is precisely why a light
      theme could not exist: every one of these is a white or black wash, and a
@@ -85,6 +90,7 @@
   --bg-sidebar: rgba(255, 255, 255, 0.88);
   --bg-card: rgba(255, 255, 255, 0.82);
   --bg-card-hover: rgba(255, 255, 255, 0.96);
+  --bg-card-solid: #ffffff;
 
   --text-primary: #0f172a;
   --text-secondary: #52627a;          /* 5.9:1 — #64748b fails at 4.2 */
@@ -98,6 +104,7 @@
   --accent-warning: #854d0e;          /* #a16207 is marginal at 4.4 */
 
   --border-color: rgba(15, 23, 42, 0.12);
+  --input-border-strong: rgba(15, 23, 42, 0.32);
   --glass-shadow: 0 4px 30px rgba(15, 23, 42, 0.10);
 
   /* The washes invert. A white wash on navy reads as "slightly raised"; the
@@ -424,6 +431,14 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0.5rem 1rem;
   transition: all 0.2s;
   white-space: nowrap;
+}
+
+/* Restores what `.btn` above quietly took away: this file's own .btn rule sets
+   padding at the same specificity as Bootstrap's .btn-lg and comes after it, so
+   btn-lg has never made a button any larger anywhere in the app. */
+.btn-lg {
+  padding: 0.6rem 1.25rem;
+  font-size: 1.05rem;
 }
 
 .btn-primary {
@@ -797,7 +812,7 @@ thead.table-light>tr>th {
   /* --- Each row becomes a stacked card --- */
   .table-cards tbody tr {
     display: block;
-    background: rgba(0, 0, 0, 0.15);
+    background: var(--sunken);
     border: 1px solid var(--border-color);
     border-radius: 0.75rem;
     padding: 0.75rem 1rem;
@@ -815,7 +830,7 @@ thead.table-light>tr>th {
     align-items: flex-start;
     padding: 0.4rem 0 !important;
     border: none !important;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04) !important;
+    border-bottom: 1px solid var(--border-color) !important;
     gap: 0.75rem;
     text-align: right;
     overflow-wrap: anywhere;
@@ -854,7 +869,7 @@ thead.table-light>tr>th {
   .table-cards tbody td.cell-actions {
     justify-content: flex-end;
     padding-top: 0.5rem !important;
-    border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+    border-top: 1px solid var(--border-color) !important;
     border-bottom: none !important;
     margin-top: 0.25rem;
   }
@@ -1175,7 +1190,7 @@ a.text-decoration-none:hover {
   .phone-tab {
     flex: 1 1 0;                /* however many survive the permission checks */
     min-width: 0;
-    min-height: 58px;
+    min-height: var(--phone-tab-h);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -1235,5 +1250,1361 @@ a.text-decoration-none:hover {
      underneath it - including the Record Sale button at the foot of a form. */
   .main-content {
     padding-bottom: calc(70px + env(safe-area-inset-bottom, 0)) !important;
+  }
+}
+
+
+/* =============================================
+   RECORD A SALE — Phase C3
+
+   The page the business runs on, and the one most often held in one hand in a
+   doorway. Three things drive the layout:
+
+   1. It is two questions, not one. What is being bought, then who bought it and
+      how they paid. Asking both at once is what made the old page a wall.
+   2. The running total has to be visible while the items are being typed, not
+      only after scrolling past them.
+   3. Every control that gets tapped is 44px, because the alternative is a
+      mis-tap on a page that moves stock and takes money.
+   ============================================= */
+
+/* --- the two panes ---------------------------------------------------------
+
+   data-steps is "off" until the inline script sets it, so a browser with no
+   JavaScript gets both panes, no step indicator, and the plain long form that
+   worked before any of this. */
+.sale-form[data-steps="1"] .sale-pane[data-sale-step="2"],
+.sale-form[data-steps="2"] .sale-pane[data-sale-step="1"] {
+  display: none;
+}
+
+.sale-form[data-steps="off"] .sale-steps,
+.sale-form[data-steps="off"] .sale-next,
+.sale-form[data-steps="off"] .sale-back,
+.sale-form[data-steps="1"] .sale-submit,
+.sale-form[data-steps="1"] .sale-back,
+.sale-form[data-steps="2"] .sale-next {
+  display: none;
+}
+
+.sale-steps {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 1.25rem;
+}
+
+.sale-step {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.sale-step-n {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: none;
+  border: 2px solid var(--border-color);
+  border-radius: 50%;
+  font-size: 0.72rem;
+}
+
+.sale-step.is-current {
+  color: var(--text-primary);
+}
+
+.sale-step.is-current .sale-step-n {
+  background: var(--accent-primary);
+  border-color: transparent;
+  color: var(--on-accent);
+}
+
+.sale-step-line {
+  flex: 1 1 auto;
+  max-width: 3rem;
+  height: 2px;
+  background: var(--border-color);
+}
+
+/* --- the shape of the page ------------------------------------------------- */
+
+.sale-layout {
+  display: grid;
+  /* minmax(0, …) rather than a bare fraction: a grid track defaults to
+     min-content, so one long product name in the table would push the column
+     wider than its share and shove the summary off the screen. */
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.sale-main {
+  min-width: 0;
+}
+
+.sale-summary {
+  position: sticky;
+  top: 1rem;
+}
+
+.sale-summary-head,
+.sale-pane-head {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin: 0 0 1rem;
+}
+
+.sale-pane-head {
+  margin-top: 0.5rem;
+  padding-bottom: 0.6rem;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.sale-pane-head:first-child {
+  margin-top: 0;
+}
+
+.sale-totals {
+  margin: 0;
+}
+
+.sale-total-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.sale-total-row dt {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.sale-total-row dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.sale-total-grand {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+}
+
+.sale-total-grand dt {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.sale-total-grand dd {
+  font-size: 1.5rem;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--accent-success);
+}
+
+.sale-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 1.25rem;
+}
+
+/* --- fields ----------------------------------------------------------------
+
+   auto-fit rather than a fixed column count. The old page pinned four fields to
+   col-md-3, so on a narrow screen each got a quarter of very little; here a
+   column that cannot hold 220px stops being a column. */
+.field-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.field-wide {
+  grid-column: 1 / -1;
+}
+
+/* --- chips, standing in for two dropdowns ----------------------------------
+
+   The styling lives on the span rather than on `.chip:has(input:checked)`.
+   `:has` is unsupported on the older Android WebViews this is used on, and the
+   failure would be silent and total: no chip would ever look chosen. */
+.chip-set {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.chip-set-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+}
+
+.chip {
+  position: relative;
+  display: flex;
+  margin: 0;
+}
+
+.chip input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.chip span {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0.5rem 1.1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 999px;
+  background: var(--input-bg);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-align: center;
+}
+
+.chip input:checked + span {
+  background: var(--accent-primary);
+  border-color: transparent;
+  color: var(--on-accent);
+}
+
+.chip input:focus-visible + span {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* --- the item rows ---------------------------------------------------------- */
+
+/* Declared widths were not the constraint - the controls' own intrinsic widths
+   were, and they simply outvoted them. The stepper demanded 152px, the remove
+   button 79px, and Bootstrap's 0.5rem cell padding took another 80px across five
+   columns, leaving the product name 112px on a 1280px screen. Every number below
+   is a measured minimum, not a preference.
+
+   On a phone none of this applies: the row stacks and each control gets the full
+   width, which is why the 44px targets below are restored in the phone block. */
+.table-sale-items > :not(caption) > * > * {
+  padding-left: 0.4rem;
+  padding-right: 0.4rem;
+}
+
+.table-sale-items > :not(caption) > * > *:first-child {
+  padding-left: 0;
+}
+
+.table-sale-items > :not(caption) > * > *:last-child {
+  padding-right: 0;
+}
+
+/* Inside a media query, because below 768px this table is not a table: each row
+   becomes a card and every cell takes the full width. Unscoped, `width: 9rem`
+   was still capping the quantity cell at 144px on a phone that had 300 going
+   spare, so a four-digit quantity had 22px to render in. */
+@media (min-width: 768px) {
+  .table-sale-items .col-qty {
+    width: 9rem;
+  }
+
+  /* 9rem, not 7. Reported from the running app as a three-figure price losing
+     its last digit; measured, the box had 40px of usable space and even "44.16"
+     needs 41 - every price was clipped, not just the long ones. Carton prices
+     are what made it visible: a single is 2 or 3 figures, a carton of 24 is
+     four plus the pesewas. "1050.00" needs 58px, so the box gets 90. */
+  .table-sale-items .col-price {
+    width: 9rem;
+  }
+
+  .table-sale-items .col-line {
+    width: 5rem;
+  }
+
+  .table-sale-items .col-remove {
+    width: 2.75rem;
+  }
+}
+
+.table-sale-items .col-line {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The price box takes whatever the cell has after the currency prefix. It was
+   sitting at its intrinsic width with 31px of the cell going spare beside it. */
+.table-sale-items .col-price .input-group {
+  flex-wrap: nowrap;
+}
+
+.table-sale-items .price-input {
+  /* An explicit basis, not `auto`. An <input> carries a default intrinsic size
+     of about twenty characters, so `auto` makes the whole price column size to
+     that and it takes the width straight off the product name - the same trap
+     the quantity box fell into. The column width governs; this only refuses to
+     shrink below a four-figure price. */
+  flex: 1 1 4rem;
+  min-width: 4rem;
+  width: 4rem;
+}
+
+/* Desktop only, and only inside this table: a mouse does not need 44px, and
+   those 12px are the difference between a product name and "BelA". */
+@media (min-width: 768px) {
+  .table-sale-items .qty-step {
+    width: 38px;
+    min-height: 38px;
+  }
+
+  .table-sale-items .qty-stepper .qty-input,
+  .table-sale-items .col-price .form-control,
+  .table-sale-items .col-price .input-group-text {
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
+  }
+
+  .table-sale-items .remove-item {
+    width: 38px;
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
+
+.remove-word {
+  display: none;
+}
+
+.qty-stepper {
+  display: flex;
+  align-items: stretch;
+  /* Without this the stepper is shrink-to-fit, so the input's `width: 100%`
+     resolves against a parent whose width depends on the input - and it settles
+     at its minimum even on a phone where the whole row was available. */
+  width: 100%;
+}
+
+.qty-step {
+  flex: none;
+  width: 44px;
+  min-height: 44px;
+  border: 1px solid var(--border-color);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+.qty-step:first-child {
+  border-radius: 0.5rem 0 0 0.5rem;
+}
+
+.qty-step:last-child {
+  border-radius: 0 0.5rem 0.5rem 0;
+}
+
+.qty-stepper .qty-input {
+  /* Was `min-width: 0`, which is explicit permission to collapse - and in a
+     1100px window it collapsed to a 20px box with 5px of room inside it, so not
+     even a single digit rendered. Four digits, because a wholesale line can be
+     1000 units and the number has to be readable while it is typed. */
+  min-width: 3.5rem;
+  /* Does not grow here. In the table it would win width off the product name -
+     at 1440 it took 207px and left the name 65 - so on a desktop the column
+     width governs and this only refuses to shrink below four digits. It grows
+     in the phone block below, where the row has the whole screen to give. */
+  flex: 0 1 auto;
+  /* An explicit width, not `auto`. An <input> carries a default intrinsic size
+     of about twenty characters, so `flex-basis: auto` resolved to ~190px and the
+     table sized the whole quantity column to that - 315px of a 682px row, with
+     65px left for the product name. */
+  width: 3.5rem;
+  border-radius: 0;
+  border-left: 0;
+  border-right: 0;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The buttons are the control now, and the native spinners are 12px of target
+   sitting inside a 44px one. */
+.qty-input::-webkit-outer-spin-button,
+.qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.qty-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.line-total {
+  color: var(--text-secondary);
+}
+
+/* =============================================
+   RECORD A SALE — narrow screens
+   ============================================= */
+
+/* 1400, not 992, and the number is arithmetic rather than taste. The row needs
+   about 610px: 207 for a product name, 157 for the stepper, 112 for the price,
+   80 for the line total, 54 to remove it. The items pane is 1.6 of 2.6 columns
+   after the 140px rail and the page padding, so 610px of table needs a viewport
+   of roughly 1330. At 992 - where this used to sit - the table got 473px and the
+   quantity input collapsed to 20px with room for no digits at all.
+
+   Below this the summary drops beneath the items and the table takes the whole
+   width, which at 1280 is 1012px rather than 583. The panel becomes a sticky bar
+   at the foot of the screen, which is where it is wanted on a laptop anyway. */
+@media (max-width: 1399.98px) {
+  .sale-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  /* The total follows you down the page instead of living under the items.
+     Sticky, not fixed: it settles into the end of the document rather than
+     covering the last row of a long sale. */
+  .sale-summary {
+    position: sticky;
+    top: auto;
+    bottom: 0;
+    z-index: 1030;              /* under the phone tab bar (1040) */
+  }
+
+  .sale-summary-card {
+    /* Frosting is transparency, and content scrolling underneath a translucent
+       action bar is unreadable at exactly the moment it matters. */
+    background: var(--bg-page);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+    border-radius: 0.75rem 0.75rem 0 0;
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+  }
+
+  .sale-summary-head {
+    display: none;
+  }
+
+  .sale-totals {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
+  .sale-total-row {
+    margin-bottom: 0;
+  }
+
+  .sale-total-grand {
+    margin-top: 0;
+    padding-top: 0;
+    border-top: 0;
+  }
+
+  .sale-actions {
+    flex-direction: row;
+    margin-top: 0.75rem;
+  }
+
+  .sale-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  /* Room for a thumb, not a mouse pointer. */
+  .sale-cancel {
+    flex: 0 0 auto;
+  }
+}
+
+@media (max-width: 767.98px) {
+  /* Clear of the tab bar, which is fixed to the bottom of the viewport. */
+  .sale-summary {
+    bottom: calc(var(--phone-tabs-h) + env(safe-area-inset-bottom, 0));
+  }
+
+  /* 44px is the smallest target a thumb hits reliably, and this is every button
+     in the app rather than one form's. It was scoped to `.sale-form` when the
+     problem was first measured there; the dashboard's "Record a sale" then came
+     out at 33px, because a page-header rule shrinks buttons on a phone and
+     overrides `.btn-lg` entirely. The rule is not per page. */
+  .btn {
+    min-height: 44px;
+  }
+
+  /* Only here does the quantity box grow. The row is a card at this width and
+     the cell is the whole screen, so a 56px box with 200px of empty space
+     beside it would look broken. Above this the table's columns govern, and a
+     growing input takes its width straight off the product name. */
+  .qty-stepper .qty-input {
+    flex: 1 1 auto;
+    width: auto;
+  }
+
+  /* Each item is a card here, so the word earns its place beside the icon -
+     a lone bin at the foot of a card does not say what it removes. */
+  .remove-word {
+    display: inline;
+  }
+
+  .table-sale-items .remove-item {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  /* One field per line, full width. The whole complaint about this page was
+     three inputs sharing the space five read-only columns had left over. */
+  .table-cards.table-sale-items tbody td {
+    padding: 0.5rem 0 !important;
+  }
+
+  .table-sale-items .col-line {
+    width: auto;
+    display: flex !important;
+    justify-content: space-between;
+    text-align: left;
+  }
+
+  .table-sale-items .col-line::before {
+    display: inline !important;
+    margin-bottom: 0 !important;
+  }
+
+  .table-sale-items .line-total {
+    color: var(--text-primary);
+    font-weight: 700;
+  }
+}
+
+
+/* =============================================
+   THE PRODUCT PICKER, and the first Bootstrap modal in this app
+
+   Bootstrap's modal CSS has shipped in this stylesheet since the app was built
+   and has never rendered a single pixel, so none of it has ever been seen
+   against this palette. Everything below is that reckoning, not decoration.
+   ============================================= */
+
+.modal-content {
+  background: var(--bg-card-solid);
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  color: var(--text-primary);
+  /* Solid, not frosted. tour.css made the same call for the same reason: text
+     over a blurred backdrop is the contrast problem this theme already has, and
+     a dialog is the one surface with a whole page showing through it. */
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.modal-header,
+.modal-footer {
+  border-color: var(--border-color);
+}
+
+.modal-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+/* Bootstrap's .btn-close is a black SVG data URI with a `filter: invert()`
+   variant it only applies under [data-bs-theme=dark]. That attribute is on
+   <html> now, so this follows the theme on its own - but the button is a 16px
+   target in a dialog used one-handed, so it gets a real size here. */
+.modal-header .btn-close {
+  /* Bootstrap's own negative margins on top of a min-height gave a 60px box;
+     these are the paddings that make it exactly 44. */
+  width: 44px;
+  height: 44px;
+  margin: -0.25rem -0.25rem -0.25rem auto;
+  padding: 0;
+  opacity: 0.7;
+}
+
+.modal-header .btn-close:hover {
+  opacity: 1;
+}
+
+.picker-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.picker-search-wrap {
+  position: relative;
+  flex: none;
+}
+
+.picker-search-wrap .bi-search {
+  position: absolute;
+  top: 50%;
+  left: 0.9rem;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.picker-search {
+  padding-left: 2.5rem;
+  min-height: 48px;
+}
+
+.picker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  /* The whole point of not reusing the old combobox widget: its list was
+     absolutely positioned at max-height 15rem and clipped inside a scrolling
+     modal body. This one is in flow and takes the room the dialog has. */
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+}
+
+.picker-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 52px;
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid var(--border-color);
+  cursor: pointer;
+}
+
+.picker-option:last-child {
+  border-bottom: 0;
+}
+
+.picker-option-name {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.picker-option-meta {
+  flex: none;
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.picker-option.is-active,
+.picker-option:hover {
+  background: var(--nav-hover);
+}
+
+.picker-option.is-active {
+  box-shadow: inset 3px 0 0 var(--accent-primary);
+}
+
+.picker-option.is-active .picker-option-meta,
+.picker-option:hover .picker-option-meta {
+  color: var(--text-primary);
+}
+
+.picker-empty {
+  flex: none;
+  margin: 0;
+  padding: 1rem 0 0;
+  text-align: center;
+}
+
+/* Bootstrap missing entirely. Not expected, but a button that opens nothing is
+   worse than a panel that is simply on the page. */
+.picker-modal.picker-fallback {
+  display: block;
+  position: static;
+  background: none;
+}
+
+/* --- a chosen line ---------------------------------------------------------
+
+   `line-enhanced` is added by picker.js, so the raw <select> is hidden only once
+   something is running that can replace it. Without JavaScript the select stays
+   exactly where it is and the page works as it always did. */
+[data-line] .picker-button,
+[data-line].line-enhanced select[data-picker-select] {
+  display: none;
+}
+
+[data-line].line-enhanced .picker-button {
+  display: flex;
+}
+
+.picker-button {
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 44px;
+  padding: 0.5rem 0.6rem;
+  /* Was `1px dashed var(--border-color)`, which computes to two thirds of a
+     pixel at 10% white and is simply not visible on a dark card. The chosen
+     product then read as plain text and nobody could tell it was a control. */
+  border: 1px solid var(--input-border-strong);
+  border-radius: 0.5rem;
+  background: var(--input-bg);
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+/* The mark that says "this opens something". An <i class="bi"> in the markup
+   rather than a CSS `content` escape: every other icon in this app is written
+   that way, and a unicode escape written through tooling has now three times
+   arrived here as a control character - invisible in the file, rendering as
+   nothing, and reading as perfectly correct. Do not write one. */
+.picker-caret {
+  flex: none;
+  margin-left: auto;
+  font-size: 0.7rem;
+  line-height: 1;
+  color: var(--text-secondary);
+}
+
+.picker-button:hover,
+.picker-button:focus-visible {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+/* Once something is chosen the row is showing a fact, not an empty field. */
+.picker-button.is-chosen {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+/* The leading magnifier goes once a product is chosen - the caret on the right
+   is doing that job by then, and this is 24px the name needs. The caret itself
+   is never hidden: an affordance that disappears once used is not one. */
+.picker-button.is-chosen .picker-button-hint,
+.picker-button.is-chosen > .bi-search {
+  display: none;
+}
+
+.picker-button-name {
+  flex: 1;
+  overflow-wrap: anywhere;
+  /* No column width can promise to fit every product name a shop might type, so
+     the row grows instead of the name being silently cut off. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+
+.picker-button-hint {
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+
+
+/* =============================================
+   PURCHASE ORDER LINES
+
+   Cards, not table rows. The unit selector beside the quantity is a whole
+   dropdown, and a table that also has to hold a product name, a cost and a total
+   gives it about 130px - which is where the screenshot's "Purcha" came from.
+   ============================================= */
+
+.po-line {
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: var(--sunken);
+}
+
+.po-line-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.po-line-top .picker-button {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.po-line-top .remove-line {
+  flex: none;
+  min-height: 44px;
+}
+
+/* The fields below the product need less room than a sale's do - a quantity and
+   a cost, not a name - so they wrap sooner rather than sitting half empty. */
+.po-line-fields {
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  margin-bottom: 0;
+}
+
+.po-line-total {
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 2.4rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The unit selector is the widest thing on the line and was capped at 8rem
+   inline, which truncated "Purchase unit" to "Purcha". It gets what it needs. */
+.po-line .unit-select {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 8.5rem;
+}
+
+.po-total {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  max-width: 20rem;
+  margin: 1.5rem 0 0 auto;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border-color);
+  font-size: 1.15rem;
+}
+
+.po-total strong {
+  font-size: 1.4rem;
+  color: var(--accent-success);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 575.98px) {
+  /* A lone bin icon at the top of a card does not say what it removes. */
+  .po-line-top {
+    flex-wrap: wrap;
+  }
+
+  .po-line-top .remove-line {
+    width: 100%;
+  }
+}
+
+
+/* =============================================
+   GOODS RECEIPT
+
+   The page where a typo costs real stock. It had seven columns, five of them
+   read-only, and the three that are actually typed into got whatever width was
+   left: "Receiving now" was about one digit wide. Same card shape as a purchase
+   order line, so the two pages read as one job.
+   ============================================= */
+
+.recv-line {
+  border: 1px solid var(--border-color);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: var(--sunken);
+}
+
+.recv-line.is-complete {
+  opacity: 0.55;
+}
+
+.recv-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.recv-name {
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.recv-sub {
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  margin-top: 0.15rem;
+}
+
+.recv-status {
+  flex: none;
+  text-align: right;
+}
+
+.recv-fields {
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  margin-bottom: 0;
+}
+
+.recv-fields .unit-select {
+  flex: 0 0 auto;
+  width: auto;
+  min-width: 6.5rem;
+}
+
+/* A line with nothing left to receive has no fields, so its card is only a
+   heading and should not sit as tall as one that does. */
+.recv-line.is-complete .recv-head {
+  margin-bottom: 0;
+}
+
+
+/* =============================================
+   FILTER BAR
+
+   For pages that render everything at once and filter in the browser. Shares
+   the picker's search styling on purpose: one search box, one look, wherever
+   the filtering happens to run.
+   ============================================= */
+
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.filter-search {
+  position: relative;
+  flex: 1 1 18rem;
+  max-width: 28rem;
+}
+
+.filter-search .bi-search {
+  position: absolute;
+  top: 50%;
+  left: 0.9rem;
+  transform: translateY(-50%);
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.filter-search .form-control {
+  padding-left: 2.5rem;
+  min-height: 48px;
+}
+
+.filter-count {
+  flex: none;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+
+
+/* =============================================
+   DASHBOARD
+
+   Four numbers, then the chart and what needs doing. Every stat is a link -
+   a number you cannot act on is a number you stop reading.
+   ============================================= */
+
+.stat-strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.stat-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-height: 44px;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.9rem;
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-backdrop);
+  -webkit-backdrop-filter: var(--glass-backdrop);
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.stat-cell:hover {
+  border-color: var(--accent-primary);
+  color: var(--text-primary);
+}
+
+.stat-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.stat-value {
+  font-size: 1.75rem;
+  font-weight: 800;
+  line-height: 1.15;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-value.accent {
+  color: var(--accent-success);
+}
+
+.stat-value.bad {
+  color: var(--accent-danger);
+}
+
+.stat-delta {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.stat-delta.is-up {
+  color: var(--accent-success);
+}
+
+/* Down is not red. A quieter week is information, not an error, and colouring
+   it like a failure teaches people to dread opening the page. */
+.stat-delta.is-down {
+  color: var(--text-secondary);
+}
+
+.dash-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.dash-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.dash-head h5 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.dash-more {
+  flex: none;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+/* Chart.js sizes to its container, and with maintainAspectRatio off the
+   container is the only thing saying how tall it should be. */
+.dash-canvas {
+  position: relative;
+  height: 17rem;
+}
+
+.alert-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.alert-row {
+  display: flex;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.alert-row:first-child {
+  padding-top: 0;
+}
+
+.alert-row:last-child {
+  padding-bottom: 0;
+  border-bottom: 0;
+}
+
+/* The severity is a bar down the side rather than a coloured heading: the
+   words stay at full contrast, and the colour still tells you where to look. */
+.alert-tag {
+  flex: none;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--text-secondary);
+}
+
+.alert-tag.sev-critical {
+  background: var(--accent-danger);
+}
+
+.alert-tag.sev-warning {
+  background: var(--accent-warning);
+}
+
+.alert-tag.sev-info {
+  background: var(--accent-primary);
+}
+
+.alert-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-height: 44px;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.alert-title {
+  font-weight: 600;
+  font-size: 0.9375rem;
+}
+
+.alert-detail {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.alert-body:hover .alert-title {
+  color: var(--accent-primary);
+}
+
+.dash-clear {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: var(--text-secondary);
+}
+
+.dash-clear .bi {
+  display: block;
+  margin-bottom: 0.75rem;
+  font-size: 2rem;
+  color: var(--accent-success);
+}
+
+@media (max-width: 991.98px) {
+  .dash-cols {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 767.98px) {
+  /* On a phone the numbers come first and the chart last: what was sold this
+     week and what needs doing are the two things worth a glance in a doorway,
+     and a seven-point line graph is not one of them. */
+  .stat-strip {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  /* The week's takings get the full width; the rest pair up beneath it. */
+  .stat-strip .stat-cell:first-child {
+    grid-column: 1 / -1;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .dash-cols {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .dash-alerts {
+    order: -1;
+  }
+
+  .dash-canvas {
+    height: 13rem;
+  }
+}
+
+
+/* =============================================
+   THE UNIT A LINE IS RUNG UP IN
+
+   Inside the quantity cell rather than in a column of its own: this table
+   already fought for width once, and a sixth column would take it straight back
+   off the product name.
+   ============================================= */
+
+.unit-toggle {
+  display: flex;
+  gap: 2px;
+  margin-top: 0.4rem;
+  padding: 2px;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: var(--sunken);
+}
+
+.unit-choice {
+  position: relative;
+  flex: 1 1 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.unit-choice input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* Styled through `input:checked + span`, never `:has()` - the older Android
+   WebViews this is sold into do not support it, and the failure would be
+   silent and total: neither unit would ever look chosen. */
+.unit-choice span {
+  display: block;
+  padding: 0.3rem 0.35rem;
+  border-radius: 0.35rem;
+  /* No `color` here on purpose. It was `--text-secondary`, which the contrast
+     sweep measured at 2.43:1 on dark against a 4.5 requirement - two washes
+     deep on `--sunken` inside a card. Inheriting gives the unselected half
+     `--text-primary` (17.85:1), and leaves the checked rule below as the only
+     thing setting a colour here. */
+  font-size: 0.75rem;
+  font-weight: 600;
+  line-height: 1.3;
+  text-align: center;
+  text-transform: capitalize;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* `!important` on the colour, deliberately and with an apology.
+
+   The contrast sweep caught the chosen unit rendering at 2.43:1 on dark and
+   2.66:1 on light - the word telling someone whether they are selling one
+   bottle or twenty-four, unreadable on its own highlight. The `background` in
+   this same rule applies correctly; only `color` loses.
+
+   What is established: the rule matches, `--on-accent` resolves on the element
+   (an inline `var(--on-accent)` renders correctly), the winning declaration is
+   inside this stylesheet (disabling it changes the result), appending an
+   identical rule later does not win, and `!important` does. That combination
+   says something more specific sets it, but every `!important` colour rule here
+   was checked against this element and none matches, and repeated CSSOM walks
+   returned nothing. I could not isolate it and stopped rather than spend more
+   of the budget on it.
+
+   If you are here to remove this: reproduce with the sweep first, not by eye. */
+.unit-choice input:checked + span {
+  background: var(--accent-primary);
+  color: var(--on-accent) !important;
+}
+
+.unit-choice input:focus-visible + span {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+@media (max-width: 767.98px) {
+  /* Thumb-sized on the screen it is actually tapped on. */
+  .unit-choice span {
+    min-height: 44px;
+    padding: 0.6rem 0.5rem;
+    font-size: 0.875rem;
+    line-height: 1.7;
+  }
+}
+
+/* =============================================
+   HOW A PRODUCT IS PACKED
+
+   A sentence with boxes in it, rather than three fields labelled in database
+   words. "Base UoM / Purchase UoM / Units per Purchase UoM" sat three rows
+   above two price boxes that never said which unit they meant.
+   ============================================= */
+
+.pack-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.25rem;
+}
+
+.pack-word {
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.pack-field {
+  flex: 1 1 8rem;
+  min-width: 7rem;
+  max-width: 12rem;
+}
+
+.pack-field-narrow {
+  flex: 0 0 5.5rem;
+  min-width: 5.5rem;
+}
+
+/* The line that reads the numbers back. This is the whole point of the block:
+   a carton price typed into the single price box shows itself here as
+   "1,050.00 a bottle" before Save, instead of as a 24x listing afterwards. */
+.pack-summary {
+  margin: 0 0 1.5rem;
+  padding: 0.75rem 1rem;
+  border-left: 3px solid var(--accent-primary);
+  border-radius: 0 0.5rem 0.5rem 0;
+  background: var(--sunken);
+  color: var(--text-primary);
+  font-size: 0.9375rem;
+}
+
+.pack-summary:empty {
+  display: none;
+}
+
+.pack-summary.is-warning {
+  border-left-color: var(--accent-warning);
+}
+
+@media (max-width: 575.98px) {
+  /* The sentence breaks across lines on a phone rather than the boxes shrinking
+     to nothing, which is what the sale form's quantity box taught. */
+  .pack-line {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.4rem;
+  }
+
+  .pack-field,
+  .pack-field-narrow {
+    max-width: none;
+    min-width: 0;
   }
 }

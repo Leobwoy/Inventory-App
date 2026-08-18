@@ -33,7 +33,7 @@ from credit.models import Payment, sale_total
 from extensions import db
 from products.models import Product
 from sales.models import Customer, Sale, SaleItem
-from services import audit, pricing, stock
+from services import audit, limits, pricing, stock, uom
 
 # One sync carries a shop's backlog, not its history. A device that has been
 # offline for a week still syncs, in batches.
@@ -226,6 +226,17 @@ def _record_one(payload, business_id):
             if requested is not None and not requested.is_finite():
                 raise _Rejected('A line has an unreadable price.')
 
+            # Which unit the till rang up. Gated exactly as the web form gates
+            # it - the phone is the *least* trusted input in the system, and a
+            # queued sale can arrive days later from a device that has been
+            # offline through a downgrade.
+            sold_unit = uom.BASE
+            if limits.has_feature('uom_conversion'):
+                asked = str(line.get('sell_unit') or uom.BASE)
+                if asked in uom.sell_units(product):
+                    sold_unit = asked
+            base_quantity = uom.to_base(product, quantity, sold_unit)
+
             # The price the device saw may be stale, and the rule may have
             # changed while it was offline. Re-resolve against the truth now.
             charged, deviation = pricing.resolve(
@@ -233,18 +244,22 @@ def _record_one(payload, business_id):
                 business=current_user.business,
                 requested_price=requested,
                 may_discount=current_user.can('sales.discount'),
+                unit=sold_unit,
             )
 
-            item = SaleItem(product_id=product.id, quantity=quantity,
-                            price_at_sale=charged,
-                            list_price=Decimal(product.unit_price or 0))
+            item = SaleItem(
+                product_id=product.id, quantity=base_quantity,
+                sell_unit=sold_unit, sold_quantity=quantity,
+                price_at_sale=uom.price_to_base(product, charged, sold_unit),
+                list_price=uom.price_to_base(
+                    product, uom.price_for(product, sold_unit), sold_unit))
             sale.items.append(item)
             if deviation:
                 deviations.append((product, deviation))
 
             # Same FEFO path as the web form, row locks and all - which is what
             # makes two devices selling the last crate resolve correctly.
-            stock.deduct_fefo(product, quantity, business_id)
+            stock.deduct_fefo(product, base_quantity, business_id)
 
         db.session.flush()
 

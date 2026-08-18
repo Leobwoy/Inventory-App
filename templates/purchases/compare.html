@@ -17,9 +17,26 @@
   Every figure comes from your own order history.
 </p>
 
-<div class="row g-4">
+{# Filtered in the browser, not on the server, and deliberately unlike the five
+   list pages that use `_partials/list_toolbar.html`. Those are paginated
+   database queries where the server has to do the filtering. This page has no
+   pagination - `sourcing.products_with_alternatives()` returns every row and the
+   template renders all of them - so everything being searched is already here.
+   Filtering it in the browser is instant and needs no round trip. #}
+<div class="filter-bar">
+  <div class="filter-search">
+    <i class="bi bi-search" aria-hidden="true"></i>
+    <input type="text" class="form-control" id="compare-filter" autocomplete="off"
+           placeholder="Search products" aria-label="Search products"
+           aria-controls="compare-grid">
+  </div>
+  <div class="filter-count text-muted" id="compare-count"></div>
+</div>
+
+<div class="row g-4" id="compare-grid">
   {% for row in rows %}
-  <div class="col-lg-6">
+  <div class="col-lg-6 compare-card"
+       data-search="{{ row.product.name|lower }} {{ (row.product.sku or '')|lower }}">
     <div class="glass-card h-100">
       <div class="d-flex justify-content-between align-items-start mb-3">
         <div>
@@ -74,6 +91,10 @@
   </div>
   {% endfor %}
 </div>
+
+<p class="text-muted text-center py-4" id="compare-empty" hidden>
+  <i class="bi bi-search me-1"></i>No product matches that.
+</p>
 {% else %}
 <div class="glass-card text-center py-5">
   <i class="bi bi-graph-up-arrow fs-1 text-muted d-block mb-3"></i>
@@ -84,5 +105,41 @@
   </p>
   <a href="{{ url_for('purchases.add_purchase') }}" class="btn btn-primary mt-2">Record an order</a>
 </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if rows %}
+<script>
+(function () {
+  'use strict';
+
+  var box = document.getElementById('compare-filter');
+  var cards = Array.prototype.slice.call(document.querySelectorAll('.compare-card'));
+  var count = document.getElementById('compare-count');
+  var empty = document.getElementById('compare-empty');
+
+  function apply() {
+    // Matched against a data attribute holding the name and SKU already
+    // lowercased by the server, so nothing here walks the DOM text of a card
+    // that also contains supplier names and prices - searching for "5" would
+    // otherwise match every product with a price containing one.
+    var needle = box.value.trim().toLowerCase();
+    var shown = 0;
+    cards.forEach(function (card) {
+      var hit = !needle || card.dataset.search.indexOf(needle) !== -1;
+      card.hidden = !hit;
+      if (hit) { shown += 1; }
+    });
+    empty.hidden = shown > 0;
+    count.textContent = needle
+      ? shown + ' of ' + cards.length + ' products'
+      : cards.length + ' products';
+  }
+
+  box.addEventListener('input', apply);
+  apply();
+}());
+</script>
 {% endif %}
 {% endblock %}

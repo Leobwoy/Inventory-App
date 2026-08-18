@@ -323,3 +323,37 @@ def test_savings_survives_options_with_no_usable_date():
         {'supplier': FakeSupplier(2), 'latest': 5, 'last_ordered': None},
     ]
     assert sourcing.savings_against_latest(options) is None
+
+
+def test_the_overview_can_be_searched(shop):
+    """Reported from the running app: with many products you scroll to find one.
+    This page has no pagination - every row is rendered at once - so the filter
+    runs in the browser rather than through `services/listing.py` like the five
+    paginated list pages do. What the server must provide is the haystack."""
+    client, business_id, product, suppliers = shop
+    order(business_id, suppliers['Voltic Ghana'], product, '2.00', days_ago=30)
+    order(business_id, suppliers['Accra Bulk'], product, '1.60', days_ago=1)
+
+    body = client.get('/purchases/compare').get_data(as_text=True)
+
+    assert 'id="compare-filter"' in body, 'no search box on the page'
+    assert 'id="compare-empty"' in body, 'nothing says when a search finds nothing'
+
+
+def test_every_card_carries_what_the_search_looks_at(shop):
+    """Matched against a data attribute, not the card's text. A card also holds
+    supplier names and prices, so searching for "2" against its text would match
+    every product whose price contains a 2."""
+    client, business_id, product, suppliers = shop
+    order(business_id, suppliers['Voltic Ghana'], product, '2.00', days_ago=30)
+    order(business_id, suppliers['Accra Bulk'], product, '1.60', days_ago=1)
+
+    body = client.get('/purchases/compare').get_data(as_text=True)
+
+    assert 'data-search="belaqua 750ml ba-750"' in body, (
+        'the search key is missing, or no longer holds the name and the SKU '
+        'lowercased')
+    # The supplier's name is not in the key: you search for a product here.
+    key = body[body.index('data-search="'):]
+    key = key[len('data-search="'):key.index('"', len('data-search="'))]
+    assert 'voltic' not in key

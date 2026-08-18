@@ -10,6 +10,8 @@ honoured only when policy allows, and any deviation from list is audited.
 """
 from decimal import Decimal
 
+from services import uom
+
 from services import audit
 
 
@@ -17,7 +19,7 @@ class PriceRejected(Exception):
     """A requested price is outside what policy permits."""
 
 
-def resolve(product, business, requested_price, may_discount):
+def resolve(product, business, requested_price, may_discount, unit=uom.BASE):
     """Return the price to charge for `product`.
 
     - No request, or a request at list price -> list price.
@@ -28,12 +30,21 @@ def resolve(product, business, requested_price, may_discount):
 
     Raises PriceRejected with a message meant for the person on the till.
     """
-    list_price = Decimal(product.unit_price or 0)
+    # The list price of the unit being sold, not always the single price. A
+    # carton has its own, which is the whole point of buying one, so a discount
+    # ceiling has to be measured against the carton a wholesaler negotiated over
+    # rather than against 24 times a bottle.
+    list_price = uom.price_for(product, unit)
 
     if requested_price is None:
         return list_price, None
 
     requested = Decimal(requested_price)
+    # The standard in code-standards.md, which this function did not follow
+    # while api/routes.py did. NumberRange(min=0) has no max, so Decimal('Infinity')
+    # reaches here and comes back out as the charged price.
+    if not requested.is_finite():
+        raise PriceRejected('That is not a price.')
     if requested < 0:
         raise PriceRejected('Price cannot be negative.')
 
@@ -68,7 +79,12 @@ def resolve(product, business, requested_price, may_discount):
             f'so the lowest allowed price is {floor_by_policy}.'
         )
 
+    # Cost is stored per base unit, and `requested` is per unit *sold*. Comparing
+    # them directly would measure a carton price against a bottle's cost, so a
+    # carton costing 921.60 would pass the floor at 500.
     cost = Decimal(product.cost_price or 0)
+    if unit == uom.PURCHASE and uom.has_conversion(product):
+        cost = uom.cost_per_purchase_unit(product, cost)
     # cost 0 means nobody has recorded it yet (staff without cost visibility can
     # create products), so there is no meaningful floor to enforce.
     if cost > 0 and requested < cost:

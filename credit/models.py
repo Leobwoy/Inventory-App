@@ -5,7 +5,7 @@ from those two rather than stored, so it cannot drift out of step the way
 Product.quantity_in_stock did before it became a maintained cache (F-12).
 """
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 
 from extensions import db
 
@@ -67,8 +67,15 @@ class Payment(db.Model):
 
 
 def sale_total(sale):
-    """What the sale was worth. Summed in Decimal, never float."""
-    return sum((item.price_at_sale * item.quantity for item in sale.items), Decimal('0'))
+    """What the sale was worth, to the pesewa. Summed in Decimal, never float.
+
+    Quantised because `price_at_sale` is Numeric(14, 6): a pack price divided by
+    its count has to stay exact in storage, but what a customer owes is a real
+    amount of money and must round once, here, rather than travel six decimals
+    wide into a message or a comparison.
+    """
+    total = sum((item.price_at_sale * item.quantity for item in sale.items), Decimal('0'))
+    return total.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
 
 
 def sale_paid(sale):

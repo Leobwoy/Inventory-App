@@ -29,11 +29,13 @@ excellent at one thing first.
 1. Owner registers a business — name, address, contact, their own name and password.
 2. A `Generic` brand and `Uncategorized` item group are seeded automatically, so the
    first product is savable with zero setup.
-3. Owner builds the catalogue: categories, brands, item groups, then products with
-   cost price, sale price and unit-of-measure (e.g. buys in cartons of 24, sells singles).
+3. Owner builds the catalogue: categories, brands, item groups, then products with a pack
+   definition (e.g. carton of 24 bottles), a price per pack and a price per single, and
+   which of the two they sell by.
 4. Owner adds suppliers.
-5. Owner raises a purchase order, entering quantities in cartons or singles. Where price
-   history exists, the best known price and supplier are shown while typing.
+5. Owner raises a purchase order **in cartons** - stock arrives in crates, not loose
+   bottles, so the unit is stated rather than asked. Where price history exists, the best
+   known price and supplier are shown while typing.
 6. Goods arrive. Owner records a receipt per line — quantity, batch number, optional
    expiry — which may be partial. Stock enters the system only here.
 7. Staff record sales. Price is resolved by the server. Stock is deducted
@@ -49,7 +51,10 @@ excellent at one thing first.
 - Categories, brands and item groups — brands compete *within* an item group, which is
   what makes brand-versus-brand comparison possible
 - Product variants with size, barcode, cost and sale price
-- Unit-of-measure conversion: buy in cartons, stock and sell in singles
+- Unit-of-measure: buy by the carton, **sell by the carton or the single**. Stock is always
+  counted in singles. A pack carries its own price, because a carton of 24 at ₵1,050 is
+  ₵43.75 a bottle against ₵48 singly and that gap is why a shop buys the carton - it cannot
+  be calculated from the single price
 - Excel bulk upload with per-row validation
 - Deactivation retires a product without destroying its trading history
 
@@ -60,7 +65,7 @@ excellent at one thing first.
   trend, and what switching supplier would save
 
 ### Sales
-- Multi-line sales with server-resolved pricing
+- Multi-line sales with server-resolved pricing, sold by the carton or the single
 - FEFO stock deduction (first-expire-first-out)
 - Discounts gated by permission and capped by a per-business ceiling
 - Printable invoices
@@ -80,6 +85,14 @@ excellent at one thing first.
 - Mobile money subscription payment: the customer submits a transfer reference, a platform
   admin confirms it. Manual on purpose — see Scope.
 
+### Interface
+- Light and dark themes, chosen per person or followed from the device. The market works in
+  full Ghanaian daylight, where a dark screen is genuinely hard to read
+- Installable PWA with a phone layout of its own: bottom-tab navigation in thumb reach,
+  solid surfaces rather than frosted glass, and every control at least 44px
+- Products are chosen in a searchable dialog rather than a dropdown squeezed into a table
+  cell - measured, a cell gave the product name 98px against the 169 it needed
+
 ### Alerts
 - One list answering "what needs me today", spanning stock, expiry, credit and the plan
 - Derived on read, never stored. There is no read/unread: a stored alert can be dismissed
@@ -95,7 +108,8 @@ and can set a plan by hand, with a CLI fallback for when the browser is not an o
 
 ### Reporting
 - Sales, purchases and stock reports with PDF, Excel and CSV export
-- Dashboard with revenue trend, low-stock alerts and product counts
+- Dashboard: the week's takings against last week's, money owed, restocking and product
+  counts, beside the sales trend and Needs attention
 
 ## Scope
 

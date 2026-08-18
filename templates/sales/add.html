@@ -1,13 +1,37 @@
 {% extends 'base.html' %}
 {% block title %}Record Sale | TrackTrack{% endblock %}
 
-{% block head %}
-<link rel="stylesheet" href="{{ url_for('static', filename='css/combobox.css') }}">
-{% endblock %}
+{% block head %}{% endblock %}
+
+{#
+   Two panes, one form.
+
+   The sale is still a single POST to a single route - the steps are shown and
+   hidden in the browser, nothing is held in the session between them. That is
+   deliberate: a wizard with server-side state would need a second endpoint, a
+   half-finished sale living somewhere, and an answer for what happens when the
+   phone loses signal between the steps. This has none of those, and it degrades
+   to exactly today's long form when JavaScript does not run.
+
+   Which pane opens is decided *here*, not in the browser, because a field that
+   failed validation behind a hidden pane is a page that reloads looking
+   unchanged and says nothing about why.
+#}
+{% set ns = namespace(item_errors=false) %}
+{% for subform in form.items %}
+  {% if subform.product_id.errors or subform.quantity.errors or subform.price_at_sale.errors %}
+    {% set ns.item_errors = true %}
+  {% endif %}
+{% endfor %}
+{% set payment_errors = form.sale_date.errors or form.customer_id.errors
+                        or form.customer_name.errors or form.customer_phone.errors
+                        or form.settlement.errors or form.amount_paid.errors
+                        or form.payment_method.errors or form.payment_reference.errors %}
+{% set start_step = '2' if payment_errors and not ns.item_errors else '1' %}
 
 {% block content %}
 <div class="page-header">
-    <h2>Record Sale</h2>
+    <h2>Record a sale</h2>
     <div class="page-header-actions">
         <a href="{{ url_for('sales.list_sales') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back to Sales</a>
     </div>
@@ -18,176 +42,295 @@
     <i class="bi bi-wifi-off me-2 fs-5"></i>
     <div>
         <strong>No connection.</strong>
-        This sale will be saved on this phone and sent when the network returns.
-        Stock and price are checked by the server then, so it may still be
+        This sale will be saved on this device and synced when the network returns.
+        Stock and price are checked by the actual data then, so it may still be
         refused &mdash; you will be told which.
     </div>
 </div>
 {% endif %}
 
-<div class="glass-card">
-    <form method="post" id="sale-form">
-        {{ form.hidden_tag() }}
-        
-        <div class="row g-4 mb-4">
-            <div class="col-md-3">
-                <label class="form-label">{{ form.sale_date.label.text }}</label>
-                {{ form.sale_date(class_='form-control' + (' is-invalid' if form.sale_date.errors else '')) }}
-                {% for error in form.sale_date.errors %}
-                <div class="invalid-feedback">{{ error }}</div>
-                {% endfor %}
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">{{ form.customer_id.label.text }}</label>
-                {{ form.customer_id(class_='form-select' + (' is-invalid' if form.customer_id.errors else ''), id='customer_id') }}
-                {% for error in form.customer_id.errors %}
-                <div class="invalid-feedback">{{ error }}</div>
-                {% endfor %}
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Walk-in name <span class="text-muted small">(optional)</span></label>
-                {{ form.customer_name(class_='form-control' + (' is-invalid' if form.customer_name.errors else ''), placeholder='Optional') }}
-                {% for error in form.customer_name.errors %}
-                <div class="invalid-feedback">{{ error }}</div>
-                {% endfor %}
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">Walk-in phone <span class="text-muted small">(optional)</span></label>
-                {{ form.customer_phone(class_='form-control' + (' is-invalid' if form.customer_phone.errors else ''), placeholder='Optional') }}
-                {% for error in form.customer_phone.errors %}
-                <div class="invalid-feedback">{{ error }}</div>
-                {% endfor %}
-            </div>
-        </div>
+{# data-steps starts at "off" so that with no JavaScript both panes are on the
+   page and the form still works. The inline script below turns stepping on. #}
+<form method="post" id="sale-form" class="sale-form" data-steps="off"
+      data-start-step="{{ start_step }}">
+    {{ form.hidden_tag() }}
 
-        <h5 class="mb-3 border-bottom border-secondary pb-2">Sale Items</h5>
+    <ol class="sale-steps" id="sale-steps">
+        <li class="sale-step" data-goto="1">
+            <span class="sale-step-n">1</span><span class="sale-step-word">Items</span>
+        </li>
+        <li class="sale-step-line" aria-hidden="true"></li>
+        <li class="sale-step" data-goto="2">
+            <span class="sale-step-n">2</span><span class="sale-step-word">Payment</span>
+        </li>
+    </ol>
 
-        {% if can_discount and max_discount and max_discount > 0 %}
-        <p class="text-muted small">
-            <i class="bi bi-tag me-1"></i>
-            You may discount up to <strong>{{ max_discount }}%</strong> below the listed price.
-            Any price change is recorded against your account.
-        </p>
-        {% endif %}
-        
-        <div class="table-responsive mb-4">
-            <table class="table table-bordered table-hover align-middle table-cards table-sale-items"
-                   id="items-table" data-max-discount="{{ max_discount or 0 }}">
-                <thead>
-                    <tr>
-                        <th>Product</th>
-                        <th>Quantity</th>
-                        <th>Unit Price (₵)</th>
-                        <th class="text-center">Action</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for subform in form.items %}
-                    <tr>
-                        <td data-label="Product">
-                            {{ subform.product_id(class_='form-control product-select' + (' is-invalid' if subform.product_id.errors else ''), data_combobox='true', data_combobox_placeholder='Search products') }}
-                            {% for error in subform.product_id.errors %}
-                            <div class="invalid-feedback">{{ error }}</div>
+    <div class="sale-layout">
+        <div class="sale-main">
+
+            {# --- step 1: what they are buying ------------------------------ #}
+            <section class="glass-card sale-pane" data-sale-step="1"
+                     aria-label="Items on this sale">
+                {% if can_discount and max_discount and max_discount > 0 %}
+                <p class="text-muted small mb-3">
+                    <i class="bi bi-tag me-1"></i>
+                    You may discount up to <strong>{{ max_discount }}%</strong> below the listed price.
+                    Any price change is recorded against your account.
+                </p>
+                {% endif %}
+
+                <div class="table-responsive">
+                    <table class="table table-hover align-middle table-cards table-sale-items"
+                           id="items-table" data-max-discount="{{ max_discount or 0 }}">
+                        <thead>
+                            <tr>
+                                <th class="col-product">Product</th>
+                                <th class="col-qty">Quantity</th>
+                                <th class="col-price">Unit price (&#8373;)</th>
+                                <th class="col-line text-end">Line total</th>
+                                <th class="col-remove"><span class="visually-hidden">Remove</span></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for subform in form.items %}
+                            <tr data-line>
+                                <td data-label="Product" class="col-product">
+                                    {# The button is shown and the select hidden only once
+                                       picker.js has run. With no script the select is the
+                                       control, exactly as it has always been. #}
+                                    <button type="button" class="picker-button"
+                                            data-picker-for=".product-select"
+                                            data-picker-title="Add a product to this sale">
+                                        <i class="bi bi-search" aria-hidden="true"></i>
+                                        <span class="picker-button-name">Choose a product</span>
+                                        <i class="bi bi-chevron-down picker-caret" aria-hidden="true"></i>
+                                    </button>
+                                    {{ subform.product_id(class_='form-select product-select' + (' is-invalid' if subform.product_id.errors else ''), data_picker_select='true') }}
+                                    {% for error in subform.product_id.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                    {% endfor %}
+                                </td>
+                                <td data-label="Quantity" class="col-qty">
+                                    {# Steppers, not just a number field. One thumb, in a
+                                       doorway, is the case this page is built for. #}
+                                    <div class="qty-stepper">
+                                        <button type="button" class="qty-step" data-step="-1"
+                                                aria-label="One fewer">&minus;</button>
+                                        {{ subform.quantity(class_='form-control qty-input' + (' is-invalid' if subform.quantity.errors else ''), inputmode='numeric') }}
+                                        <button type="button" class="qty-step" data-step="1"
+                                                aria-label="One more">+</button>
+                                    </div>
+                                    {# Shown only for a product that really is sold both ways.
+                                       Rendered for every row and hidden per row by script, so
+                                       adding a line needs no round trip - and the select stays
+                                       a real field, so a browser running nothing still posts
+                                       a unit the server will honour. #}
+                                    <div class="unit-toggle" hidden>
+                                        {% for value, label in subform.sell_unit.choices %}
+                                        <label class="unit-choice">
+                                            <input type="radio" name="{{ subform.sell_unit.name }}"
+                                                   value="{{ value }}"
+                                                   {% if subform.sell_unit.data == value or (not subform.sell_unit.data and value == 'base') %}checked{% endif %}>
+                                            <span data-unit="{{ value }}">{{ label }}</span>
+                                        </label>
+                                        {% endfor %}
+                                    </div>
+                                    {% for error in subform.quantity.errors %}
+                                    <div class="invalid-feedback d-block">{{ error }}</div>
+                                    {% endfor %}
+                                </td>
+                                <td data-label="Unit price" class="col-price">
+                                    <div class="input-group">
+                                        <span class="input-group-text">&#8373;</span>
+                                        {# Editable only for staff who may discount. Either way the
+                                           server re-resolves the price - readonly is not a control. #}
+                                        {% if can_discount %}
+                                        {{ subform.price_at_sale(class_='form-control price-input', inputmode='decimal') }}
+                                        {% else %}
+                                        {{ subform.price_at_sale(class_='form-control price-input', readonly=True) }}
+                                        {% endif %}
+                                    </div>
+                                    {# Filled in by JavaScript as the price is typed. The server
+                                       re-checks the same rule; this only makes it visible before
+                                       you commit, instead of after it is rejected. #}
+                                    <div class="line-discount small mt-1" hidden></div>
+                                </td>
+                                <td data-label="Line total" class="col-line text-end">
+                                    <span class="line-total">&mdash;</span>
+                                </td>
+                                <td data-label="" class="col-remove cell-actions text-end">
+                                    <button type="button" class="btn btn-outline-danger btn-sm remove-item" title="Remove item"><i class="bi bi-trash"></i><span class="remove-word"> Remove</span></button>
+                                </td>
+                            </tr>
                             {% endfor %}
-                        </td>
-                        <td data-label="Quantity">
-                            {{ subform.quantity(class_='form-control' + (' is-invalid' if subform.quantity.errors else '')) }}
-                            {% for error in subform.quantity.errors %}
-                            <div class="invalid-feedback">{{ error }}</div>
-                            {% endfor %}
-                        </td>
-                        <td data-label="Unit Price">
-                            <div class="input-group">
-                                <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
-                                {# Editable only for staff who may discount. Either way the
-                                   server re-resolves the price - readonly is not a control. #}
-                                {% if can_discount %}
-                                {{ subform.price_at_sale(class_='form-control price-input') }}
-                                {% else %}
-                                {{ subform.price_at_sale(class_='form-control price-input', readonly=True) }}
-                                {% endif %}
-                            </div>
-                            {# Filled in by JavaScript as the price is typed. The server
-                               re-checks the same rule; this only makes it visible before
-                               you commit, instead of after it is rejected. #}
-                            <div class="line-discount small mt-1" hidden></div>
-                        </td>
-                        <td data-label="" class="cell-actions text-center">
-                            <button type="button" class="btn btn-outline-danger btn-sm remove-item" title="Remove Item"><i class="bi bi-trash"></i></button>
-                        </td>
-                    </tr>
+                        </tbody>
+                    </table>
+                </div>
+                <button type="button" class="btn btn-outline-primary" id="add-item"><i class="bi bi-plus-lg me-1"></i> Add another product</button>
+            </section>
+
+            {# --- step 2: who bought it, and how they paid ------------------- #}
+            <section class="glass-card sale-pane" data-sale-step="2"
+                     aria-label="Customer and payment">
+                <h5 class="sale-pane-head">Who bought it</h5>
+                <div class="field-grid">
+                    <div class="field">
+                        <label class="form-label" for="{{ form.customer_id.id }}">{{ form.customer_id.label.text }}</label>
+                        {{ form.customer_id(class_='form-select' + (' is-invalid' if form.customer_id.errors else ''), id='customer_id') }}
+                        {% for error in form.customer_id.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="field">
+                        <label class="form-label" for="{{ form.sale_date.id }}">{{ form.sale_date.label.text }}</label>
+                        {{ form.sale_date(class_='form-control' + (' is-invalid' if form.sale_date.errors else '')) }}
+                        {% for error in form.sale_date.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    {# Shown only for a walk-in once JavaScript runs. A registered
+                       customer carries their own name and phone, so asking again
+                       is two fields of nothing on the smallest screen. #}
+                    <div class="field walkin-only">
+                        <label class="form-label" for="{{ form.customer_name.id }}">Walk-in name <span class="text-muted small">(optional)</span></label>
+                        {{ form.customer_name(class_='form-control' + (' is-invalid' if form.customer_name.errors else ''), placeholder='Who is buying') }}
+                        {% for error in form.customer_name.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="field walkin-only">
+                        <label class="form-label" for="{{ form.customer_phone.id }}">Walk-in phone <span class="text-muted small">(optional)</span></label>
+                        {{ form.customer_phone(class_='form-control' + (' is-invalid' if form.customer_phone.errors else ''), placeholder='For chasing a debt', inputmode='tel') }}
+                        {% for error in form.customer_phone.errors %}
+                        <div class="invalid-feedback">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                {% if has_feature('credit_ledger') %}
+                <h5 class="sale-pane-head">How it was paid</h5>
+
+                {# Radios rather than a dropdown: three choices, each one tap,
+                   and the chosen one stays visible instead of collapsing back
+                   into a closed select. Same field name, same posted values,
+                   so the SelectField on the server is unchanged. #}
+                <div class="chip-set" role="radiogroup" aria-label="{{ form.settlement.label.text }}">
+                    {% for value, label in form.settlement.choices %}
+                    <label class="chip">
+                        <input type="radio" name="settlement" value="{{ value }}"
+                               {% if form.settlement.data == value %}checked{% endif %}>
+                        <span>{{ label }}</span>
+                    </label>
                     {% endfor %}
-                </tbody>
-            </table>
-            <button type="button" class="btn btn-outline-primary btn-sm" id="add-item"><i class="bi bi-plus-lg"></i> Add Item</button>
-        </div>
-
-        <div class="panel-sunken p-3 rounded mb-4">
-            <div id="discount-summary" class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom border-secondary" hidden>
-                <div class="text-warning">
-                    <i class="bi bi-tag-fill me-1"></i> Discount applied
-                    <span class="text-muted small ms-1" id="discount-detail"></span>
                 </div>
-                <div class="fs-5 fw-bold text-warning">&minus;₵<span id="discount-total">0.00</span></div>
-            </div>
-            <div class="d-flex justify-content-between align-items-center">
-                <div class="text-muted">Total Amount</div>
-                <h3 class="mb-0 text-success">₵<span id="sale-total">0.00</span></h3>
-            </div>
+                {% for error in form.settlement.errors %}
+                <div class="text-danger small mb-2">{{ error }}</div>
+                {% endfor %}
+
+                <div class="field-grid settlement-detail">
+                    <div class="field">
+                        <label class="form-label" for="amount-paid">{{ form.amount_paid.label.text }}</label>
+                        <div class="input-group">
+                            <span class="input-group-text">&#8373;</span>
+                            {{ form.amount_paid(class_='form-control', id='amount-paid', inputmode='decimal') }}
+                        </div>
+                        {% for error in form.amount_paid.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+                    <div class="field">
+                        <label class="form-label" for="{{ form.payment_reference.id }}">{{ form.payment_reference.label.text }}</label>
+                        {{ form.payment_reference(class_='form-control', placeholder='MoMo ID, optional') }}
+                    </div>
+                    <div class="field field-wide">
+                        <span class="form-label d-block">{{ form.payment_method.label.text }}</span>
+                        <div class="chip-set chip-set-grid" role="radiogroup" aria-label="{{ form.payment_method.label.text }}">
+                            {% for value, label in form.payment_method.choices %}
+                            <label class="chip">
+                                <input type="radio" name="payment_method" value="{{ value }}"
+                                       {% if form.payment_method.data == value %}checked{% endif %}>
+                                <span>{{ label }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </section>
         </div>
 
-        {% if has_feature('credit_ledger') %}
-        <h5 class="mb-3 border-bottom border-secondary pb-2">Payment</h5>
-        <div class="row g-4 mb-4">
-            <div class="col-md-3">
-                <label class="form-label">{{ form.settlement.label.text }}</label>
-                {{ form.settlement(class_='form-select', id='settlement') }}
-            </div>
-            <div class="col-md-3 settlement-detail">
-                <label class="form-label">{{ form.amount_paid.label.text }}</label>
-                <div class="input-group">
-                    <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
-                    {{ form.amount_paid(class_='form-control', id='amount-paid') }}
+        {# --- the running total, beside the form on a desktop and stuck to the
+               bottom of the screen on a phone ------------------------------- #}
+        <aside class="sale-summary">
+            <div class="glass-card sale-summary-card">
+                <h5 class="sale-summary-head">This sale</h5>
+                <dl class="sale-totals">
+                    <div class="sale-total-row">
+                        <dt>Items</dt>
+                        <dd id="summary-count">0 items</dd>
+                    </div>
+                    <div class="sale-total-row" id="discount-summary" hidden>
+                        <dt class="text-warning">
+                            <i class="bi bi-tag-fill me-1"></i>Discount
+                            <span class="text-muted small" id="discount-detail"></span>
+                        </dt>
+                        <dd class="text-warning">&minus;&#8373;<span id="discount-total">0.00</span></dd>
+                    </div>
+                    <div class="sale-total-row sale-total-grand">
+                        <dt>Total</dt>
+                        <dd>&#8373;<span id="sale-total">0.00</span></dd>
+                    </div>
+                </dl>
+
+                <div class="sale-actions">
+                    <button type="button" class="btn btn-primary btn-lg sale-next" data-goto="2">
+                        Review sale <i class="bi bi-arrow-right ms-1"></i>
+                    </button>
+                    <button type="submit" class="btn btn-primary btn-lg sale-submit">
+                        <i class="bi bi-check2-circle me-1"></i> Record sale
+                    </button>
+                    <button type="button" class="btn btn-outline-secondary sale-back" data-goto="1">
+                        <i class="bi bi-arrow-left me-1"></i> Back to items
+                    </button>
+                    <a href="{{ url_for('sales.list_sales') }}" class="btn btn-outline-secondary sale-cancel">Cancel</a>
                 </div>
             </div>
-            <div class="col-md-3 settlement-detail">
-                <label class="form-label">{{ form.payment_method.label.text }}</label>
-                {{ form.payment_method(class_='form-select') }}
-            </div>
-            <div class="col-md-3 settlement-detail">
-                <label class="form-label">{{ form.payment_reference.label.text }}</label>
-                {{ form.payment_reference(class_='form-control', placeholder='MoMo ID, optional') }}
-            </div>
-        </div>
-        {% endif %}
+        </aside>
+    </div>
+</form>
 
-        <div class="d-flex gap-2">
-            <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check2-circle me-1"></i> Record Sale</button>
-            <a href="{{ url_for('sales.list_sales') }}" class="btn btn-outline-secondary">Cancel</a>
-        </div>
-    </form>
-</div>
+{% include '_partials/product_picker.html' %}
+
+{# Runs the moment the form is parsed, before anything below it paints, so the
+   second pane is never briefly visible. Anything needing the whole document
+   stays in the block at the foot of the page. #}
+<script>
+  (function () {
+    var form = document.getElementById('sale-form');
+    if (form) { form.dataset.steps = form.dataset.startStep || '1'; }
+  }());
+</script>
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/combobox.js') }}"></script>
+<script src="{{ url_for('static', filename='js/picker.js') }}"></script>
 <script type="application/json" id="product-prices-data">
   {{ product_prices|tojson }}
 </script>
 <script>
 /*
- * Deliberately runs at parse time rather than on DOMContentLoaded: the row
- * template must be captured before combobox.js enhances the first row, and its
- * enhancement is itself a DOMContentLoaded handler registered before this one.
+ * Runs at parse time rather than on DOMContentLoaded, so the row template is
+ * taken from the server's own markup before anything has touched it.
  */
 (function () {
   'use strict';
 
   var productPrices = JSON.parse(document.getElementById('product-prices-data').textContent);
+  var form = document.getElementById('sale-form');
   var table = document.getElementById('items-table');
   var body = table.querySelector('tbody');
   var totalEl = document.getElementById('sale-total');
-  var settlement = document.getElementById('settlement');
+  var countEl = document.getElementById('summary-count');
   var amountPaid = document.getElementById('amount-paid');
   var discountSummary = document.getElementById('discount-summary');
   var discountTotal = document.getElementById('discount-total');
@@ -202,13 +345,168 @@
     return Array.prototype.slice.call(body.querySelectorAll('tr'));
   }
 
-  function updatePrice(row) {
-    var select = row.querySelector('.product-select');
-    var price = row.querySelector('.price-input');
-    if (!select || !price) {
+  // The settlement and method fields are radio groups now, so `.value` on the
+  // first element is whatever happens to be first - not what was chosen.
+  function chosen(name, fallback) {
+    var picked = form.querySelector('[name="' + name + '"]:checked');
+    return picked ? picked.value : fallback;
+  }
+
+  // --- the two panes --------------------------------------------------------
+
+  function showStep(step) {
+    form.dataset.steps = step;
+    form.querySelectorAll('.sale-step').forEach(function (el) {
+      var on = el.dataset.goto === step;
+      el.classList.toggle('is-current', on);
+      el.setAttribute('aria-current', on ? 'step' : 'false');
+    });
+    // Back to the top, or the second pane opens scrolled to wherever the first
+    // one was left - usually somewhere past its own heading.
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
+  // The first field the browser would refuse, and which pane it is on.
+  function firstInvalidPane() {
+    var bad = form.querySelector(':invalid');
+    if (!bad) {
+      return null;
+    }
+    var pane = bad.closest('.sale-pane');
+    return { field: bad, step: pane ? pane.dataset.saleStep : null };
+  }
+
+  form.addEventListener('click', function (event) {
+    var target = event.target.closest('[data-goto]');
+    if (!target) {
       return;
     }
-    price.value = productPrices[select.value] !== undefined ? productPrices[select.value] : '';
+    // Only ever forwards. Refusing to leave an unfinished pane says so early,
+    // which is worth doing - but the same rule applied to Back would trap
+    // someone on the payment pane the moment they cleared the date, unable to
+    // return to the items. The invalid handler below catches it either way.
+    var forwards = Number(target.dataset.goto) > Number(form.dataset.steps);
+    var bad = forwards ? firstInvalidPane() : null;
+    if (bad && bad.step === form.dataset.steps) {
+      bad.field.reportValidity();
+      return;
+    }
+    showStep(target.dataset.goto);
+  });
+
+  // A required field on the pane that is not showing cannot be focused, and a
+  // browser that cannot focus an invalid control refuses to submit and says
+  // nothing at all: no bubble, no message, no POST. The form simply sits there.
+  //
+  // Listening for 'invalid' rather than 'submit', because in exactly that case
+  // the submit event never fires - a submit handler is the one place guaranteed
+  // not to run. 'invalid' fires at each failing control during the validation
+  // pass, early enough that showing its pane lets the browser report it where
+  // it can be seen. Capture phase, because 'invalid' does not bubble.
+  form.addEventListener('invalid', function (event) {
+    if (form.dataset.steps === 'off') {
+      return;                         // no panes, nothing can be hidden
+    }
+    var pane = event.target.closest('.sale-pane');
+    if (pane && pane.dataset.saleStep !== form.dataset.steps) {
+      showStep(pane.dataset.saleStep);
+    }
+  }, true);
+
+  showStep(form.dataset.startStep || '1');
+
+  // --- prices, discounts and the running total ------------------------------
+
+  // What the picker shows beside each product. The picker itself knows nothing
+  // about prices; every page decides what is worth saying about its own list.
+  function attachMeta(row) {
+    var select = row.querySelector('.product-select');
+    if (!select) {
+      return;
+    }
+    Array.prototype.forEach.call(select.options, function (option) {
+      var product = productPrices[option.value];
+      if (!product) {
+        return;
+      }
+      // Show the pack price too where there is one, because that is the number
+      // a wholesaler is choosing on.
+      if (product.units.indexOf('purchase') !== -1) {
+        option.dataset.meta = '₵' + product.pack_price.toFixed(2) + ' / ' + product.pack;
+      } else {
+        option.dataset.meta = '₵' + product.price.toFixed(2);
+      }
+    });
+  }
+
+  // The row shows the chosen product as a fact, not as an empty field.
+  function paintPicker(row) {
+    var select = row.querySelector('.product-select');
+    var button = row.querySelector('.picker-button');
+    if (!select || !button) {
+      return;
+    }
+    var label = window.ProductPicker.labelOf(select);
+    button.querySelector('.picker-button-name').textContent =
+      label || 'Choose a product';
+    button.classList.toggle('is-chosen', Boolean(label));
+  }
+
+  function info(row) {
+    var select = row.querySelector('.product-select');
+    return select ? productPrices[select.value] : undefined;
+  }
+
+  function chosenUnit(row) {
+    var picked = row.querySelector('[name$="sell_unit"]:checked');
+    return picked ? picked.value : 'base';
+  }
+
+  // What one of the unit this line is ringing up in lists for. A carton has its
+  // own price - that is the whole reason a shop buys one - so this is not the
+  // single price multiplied.
+  function updatePrice(row) {
+    var price = row.querySelector('.price-input');
+    var product = info(row);
+    if (!price) {
+      return;
+    }
+    if (!product) {
+      price.value = '';
+      return;
+    }
+    price.value = chosenUnit(row) === 'purchase' ? product.pack_price : product.price;
+  }
+
+  // The toggle only appears where there is a genuine choice: the plan allows
+  // it, the product has a real pack, and the business sells it both ways.
+  // `units` arrives already filtered by the server, so this cannot offer
+  // something the server would then refuse.
+  function updateUnitChoice(row) {
+    var toggle = row.querySelector('.unit-toggle');
+    var product = info(row);
+    if (!toggle) {
+      return;
+    }
+    var units = (product && product.units) || ['base'];
+    toggle.hidden = units.length < 2;
+
+    toggle.querySelectorAll('span[data-unit]').forEach(function (span) {
+      // Say "carton" and "bottle", not "Carton" and "Single" - the words the
+      // business used when it set the product up are the words it thinks in.
+      if (product) {
+        span.textContent = span.dataset.unit === 'purchase' ? product.pack : product.base;
+      }
+    });
+
+    // A unit that is no longer on offer must not stay selected.
+    var picked = row.querySelector('[name$="sell_unit"]:checked');
+    if (picked && units.indexOf(picked.value) === -1) {
+      var fallback = row.querySelector('[name$="sell_unit"][value="' + units[0] + '"]');
+      if (fallback) {
+        fallback.checked = true;
+      }
+    }
   }
 
   // Show a discount while it is being typed rather than only after the server
@@ -220,7 +518,9 @@
     if (!select || !priceField || !note) {
       return 0;
     }
-    var listPrice = productPrices[select.value];
+    var product = productPrices[select.value];
+    var listPrice = product === undefined ? undefined
+      : (chosenUnit(row) === 'purchase' ? product.pack_price : product.price);
     var charged = parseFloat(priceField.value);
     var qty = parseFloat((row.querySelector('[name$="quantity"]') || {}).value) || 0;
 
@@ -250,12 +550,29 @@
     var total = 0;
     var discount = 0;
     var discountedLines = 0;
+    var units = 0;
     rows().forEach(function (row) {
       var qtyField = row.querySelector('[name$="quantity"]');
       var priceField = row.querySelector('[name$="price_at_sale"]');
       var qty = qtyField ? parseFloat(qtyField.value) || 0 : 0;
       var price = priceField ? parseFloat(priceField.value) || 0 : 0;
-      total += qty * price;
+      var line = qty * price;
+      total += line;
+      units += qty;
+
+      var lineEl = row.querySelector('.line-total');
+      if (lineEl) {
+        lineEl.textContent = qty && price ? '₵' + line.toFixed(2) : '—';
+      }
+
+      // The summary counts what leaves the shelf, not what was typed: two
+      // cartons of 24 is 48 bottles gone, and a running "2 items" beside a
+      // 2,100 total would be answering a different question.
+      var product = info(row);
+      if (product && chosenUnit(row) === 'purchase') {
+        units += qty * (product.per - 1);
+      }
+
       var off = updateLineDiscount(row);
       if (off > 0) {
         discount += off;
@@ -263,6 +580,9 @@
       }
     });
     totalEl.textContent = total.toFixed(2);
+    if (countEl) {
+      countEl.textContent = units === 1 ? '1 item' : units + ' items';
+    }
 
     if (discountSummary) {
       discountSummary.hidden = discount <= 0;
@@ -276,12 +596,12 @@
   // amount is only editable for a part payment - the other two are implied by
   // the total, so asking for them would just be a chance to mistype.
   function syncSettlement() {
-    if (!settlement || !amountPaid) {
+    if (!amountPaid) {
       return;
     }
-    var choice = settlement.value;
+    var choice = chosen('settlement', 'paid');
     document.querySelectorAll('.settlement-detail').forEach(function (el) {
-      el.style.display = choice === 'credit' ? 'none' : '';
+      el.hidden = choice === 'credit';
     });
     amountPaid.readOnly = choice !== 'partial';
     if (choice === 'paid') {
@@ -289,6 +609,19 @@
     } else if (choice === 'credit') {
       amountPaid.value = '0';
     }
+  }
+
+  // A registered customer already has a name and a phone number on file, so
+  // asking for both again is two empty fields on the smallest screen there is.
+  function syncWalkIn() {
+    var customer = document.getElementById('customer_id');
+    if (!customer) {
+      return;
+    }
+    var walkIn = customer.value === '0';
+    document.querySelectorAll('.walkin-only').forEach(function (el) {
+      el.hidden = !walkIn;
+    });
   }
 
   function refresh() {
@@ -339,12 +672,25 @@
     });
 
     body.appendChild(row);
-    Combobox.enhance(row);
+    window.ProductPicker.enhance(row);
+    attachMeta(row);
+    paintPicker(row);
+    updateUnitChoice(row);
     updatePrice(row);
     refresh();
   });
 
   table.addEventListener('click', function (event) {
+    var step = event.target.closest('.qty-step');
+    if (step) {
+      var input = step.parentElement.querySelector('.qty-input');
+      var next = (parseInt(input.value, 10) || 0) + parseInt(step.dataset.step, 10);
+      // A line of zero is a line that should have been removed instead.
+      input.value = next < 1 ? 1 : next;
+      refresh();
+      return;
+    }
+
     var button = event.target.closest('.remove-item');
     // Never remove the last row: a sale with no items cannot be recorded.
     if (button && rows().length > 1) {
@@ -354,22 +700,38 @@
     }
   });
 
-  // The combobox writes to the native <select> and dispatches a bubbling
-  // 'change', so one delegated listener covers both input styles.
+  // The picker writes to the native <select> and dispatches a bubbling
+  // 'change', so this one delegated listener covers both a product chosen in the
+  // dialog and one chosen from the plain select when no script is running.
   table.addEventListener('change', function (event) {
+    var row = event.target.closest('tr');
     if (event.target.classList.contains('product-select')) {
-      updatePrice(event.target.closest('tr'));
+      updateUnitChoice(row);
+      updatePrice(row);
+      paintPicker(row);
+    } else if (row && event.target.name && event.target.name.indexOf('sell_unit') !== -1) {
+      updatePrice(row);
     }
     refresh();
   });
 
   table.addEventListener('input', refresh);
 
-  if (settlement) {
-    settlement.addEventListener('change', syncSettlement);
-  }
+  form.addEventListener('change', function (event) {
+    if (event.target.name === 'settlement') {
+      syncSettlement();
+    } else if (event.target.id === 'customer_id') {
+      syncWalkIn();
+    }
+  });
 
-  rows().forEach(updatePrice);
+  rows().forEach(function (row) {
+    attachMeta(row);
+    paintPicker(row);
+    updateUnitChoice(row);
+    updatePrice(row);
+  });
+  syncWalkIn();
   refresh();
 
   // --- selling with no signal ---------------------------------------------
@@ -377,7 +739,6 @@
   // Submitting normally would fail and lose everything typed. Instead the sale
   // is queued on the device and sent when the connection returns. The server
   // re-decides stock and price then; nothing here is authoritative.
-  var form = document.getElementById('sale-form');
   if (form && window.TrackTrackOffline) {
     form.addEventListener('submit', function (event) {
       if (navigator.onLine) {
@@ -393,6 +754,9 @@
           product_id: parseInt(select.value, 10),
           product_name: select.options[select.selectedIndex].textContent,
           quantity: parseInt(qty.value, 10) || 0,
+          // Without this a sale queued as two cartons syncs as two bottles and
+          // the shelf is forty-six out, days later, with nothing to show why.
+          sell_unit: chosenUnit(row),
           price: price.value,
         };
       }).filter(function (i) { return i.product_id && i.quantity > 0; });
@@ -405,7 +769,7 @@
       var customerSelect = document.getElementById('customer_id');
       var customerId = customerSelect && customerSelect.value !== '0'
         ? parseInt(customerSelect.value, 10) : null;
-      var settlementChoice = settlement ? settlement.value : 'paid';
+      var settlementChoice = chosen('settlement', 'paid');
 
       window.TrackTrackOffline.queue({
         sale_date: form.querySelector('[name="sale_date"]').value,
@@ -416,7 +780,7 @@
         amount_paid: settlementChoice === 'credit' ? '0'
           : (settlementChoice === 'paid' ? totalEl.textContent
              : (amountPaid ? amountPaid.value : '0')),
-        payment_method: (form.querySelector('[name="payment_method"]') || {}).value || 'cash',
+        payment_method: chosen('payment_method', 'cash'),
         payment_reference: (form.querySelector('[name="payment_reference"]') || {}).value || '',
         display_total: totalEl.textContent,
       }).then(function () {

@@ -81,6 +81,15 @@ class Product(db.Model):
     base_uom = db.Column(db.String(20), nullable=False)
     purchase_uom = db.Column(db.String(20), nullable=False)
     units_per_purchase_uom = db.Column(db.Integer, nullable=False, default=1)
+    # What a whole pack sells for. Nullable, and null is not "free" - it means
+    # a pack is simply count x unit_price. A real value is a wholesale price,
+    # which cannot be derived: the gap between a bottle at 48 and the same
+    # bottle inside a 1,050 carton of 24 is why a shop buys the carton.
+    pack_price = db.Column(db.Numeric(10, 2))
+    # 'base' | 'purchase' | 'both'. Every product that existed before this
+    # column sold in pieces, because that was the only thing the app could do.
+    sell_unit = db.Column(db.String(10), nullable=False, default='base',
+                          server_default=db.text("'base'"))
     # NOT NULL because plan limits count active products: a NULL would be
     # neither counted nor blocked, which is the gap someone gaming the free tier
     # would find. Deactivating retires a product from new sales and orders while

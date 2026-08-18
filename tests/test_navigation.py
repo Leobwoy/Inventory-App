@@ -29,25 +29,36 @@ GROUPS = ['nav-group-catalogue', 'nav-group-sales',
           'nav-group-purchasing', 'nav-group-admin']
 
 
-def media_block(css, opener, which=0):
-    """One @media block, ended at its matching brace.
+def media_block(css, opener, containing):
+    """The one @media block for `opener` that contains `containing`.
 
-    Slicing to the end of the stylesheet meant a rule several blocks later could
-    satisfy an assertion about this one. `which` picks among repeats of the same
-    selector; -1 takes the last.
+    Two things this has to get right, both learned the hard way. It ends at the
+    matching brace, because slicing to the end of the file let a rule several
+    blocks later satisfy an assertion about this one. And it finds its block by
+    what is *in* it rather than by position: picking "the last such block" broke
+    the moment a new `max-width: 991.98px` block was appended for another page,
+    and the failure looked like the sidebar had lost its width.
     """
-    starts = [m.start() for m in re.finditer(re.escape(opener), css)]
-    assert starts, f'no {opener} block in the stylesheet'
-    i = starts[which]
-    depth, j = 0, css.index('{', i)
-    for k in range(j, len(css)):
-        if css[k] == '{':
-            depth += 1
-        elif css[k] == '}':
-            depth -= 1
-            if depth == 0:
-                return css[i:k + 1]
-    raise AssertionError(f'{opener} is never closed')
+    found = []
+    for m in re.finditer(re.escape(opener), css):
+        depth, j = 0, css.index('{', m.start())
+        for k in range(j, len(css)):
+            if css[k] == '{':
+                depth += 1
+            elif css[k] == '}':
+                depth -= 1
+                if depth == 0:
+                    found.append(css[m.start():k + 1])
+                    break
+        else:
+            raise AssertionError(f'{opener} is never closed')
+
+    assert found, f'no {opener} block in the stylesheet'
+    matched = [b for b in found if containing in b]
+    assert len(matched) == 1, (
+        f'{len(matched)} of the {len(found)} {opener} blocks contain '
+        f'{containing!r}; expected exactly one')
+    return matched[0]
 
 
 def sidebar(body):
@@ -243,7 +254,11 @@ def test_the_rail_is_desktop_only(register):
     client, _business_id = register()
     css = client.get('/static/css/style.css').get_data(as_text=True)
 
-    mobile = media_block(css, '@media (max-width: 991.98px)', which=-1)
+    # Selected by `.nav-group-toggle`, not by the width this test asserts: two
+    # separate 991.98px blocks style `.sidebar`, and picking by the assertion
+    # would make the test find whichever block already satisfied it.
+    mobile = media_block(css, '@media (max-width: 991.98px)',
+                         containing='.nav-group-toggle')
     # Anchored: a bare `'width: 260px' in mobile` is also satisfied by the
     # `min-width` on the next line, so the width itself could go and this would
     # not notice.

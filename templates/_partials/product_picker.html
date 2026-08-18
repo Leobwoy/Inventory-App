@@ -1,0 +1,39 @@
+{#
+   The product picker.
+
+   One per page, shared by every line on it. `static/js/picker.js` fills the list
+   from whichever <select> opened the dialog, so a page that adds lines after
+   load needs no extra wiring.
+
+   Include it once, near the end of the page body, and load `js/picker.js` in the
+   page's scripts block.
+#}
+<div class="modal fade picker-modal" id="product-picker" tabindex="-1"
+     aria-labelledby="product-picker-title" aria-hidden="true">
+  {# Full screen below 576px. Centred-and-scrollable alone gave a 796px dialog
+     in an 812px viewport positioned at top: -42, which put the close button off
+     the top of the screen entirely. #}
+  <div class="modal-dialog modal-fullscreen-sm-down modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title picker-title" id="product-picker-title">Choose a product</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="picker-search-wrap">
+          <i class="bi bi-search" aria-hidden="true"></i>
+          {# Not type="search": the little clear cross is a 12px target beside a
+             44px one, and it clears without telling the list. #}
+          <input type="text" class="form-control picker-search" autocomplete="off"
+                 placeholder="Search products" aria-label="Search products"
+                 aria-controls="product-picker-list">
+        </div>
+        <ul class="picker-list" id="product-picker-list" role="listbox"
+            aria-label="Products"></ul>
+        <p class="picker-empty text-muted" hidden>
+          <i class="bi bi-search me-1"></i>Nothing matches that.
+        </p>
+      </div>
+    </div>
+  </div>
+</div>

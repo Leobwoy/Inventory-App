@@ -120,20 +120,31 @@ def test_ordering_in_crates_stores_base_units(crate_product):
     assert line.unit_cost == Decimal('2.00')         # not 48.00
 
 
-def test_ordering_in_base_units_is_stored_unchanged(crate_product):
+def test_a_posted_unit_cannot_change_what_an_order_line_means(crate_product):
+    """This asserted the opposite until orders became pack-only.
+
+    It used to post `order_unit=base` and expect 240 bottles stored unchanged,
+    which was correct while the unit was the buyer's choice. It is not any more:
+    a wholesaler does not restock in single bottles, so for a product that comes
+    in crates the number typed is crates. 240 crates of 24 is 5,760 bottles.
+
+    The value is still posted here deliberately - the point is that it is now
+    ignored. Deriving the unit is a stronger guarantee than gating a control,
+    because there is nothing left to post your way past.
+    """
     client, _business_id, product = crate_product
 
     client.post('/purchases/add', data={
         'supplier_id': '0', 'order_date': TODAY.isoformat(), 'expected_date': '',
         'items-0-product_id': str(product.id),
         'items-0-quantity_ordered': '240',
-        'items-0-order_unit': 'base',
-        'items-0-unit_cost': '2.00',
+        'items-0-order_unit': 'base',          # ignored
+        'items-0-unit_cost': '48.00',
     }, follow_redirects=True)
 
     line = PurchaseOrderItem.query.one()
-    assert line.quantity_ordered == 240
-    assert line.unit_cost == Decimal('2.00')
+    assert line.quantity_ordered == 5760, 'the posted unit changed the line'
+    assert line.unit_cost == Decimal('2.00')   # 48.00 a crate is 2.00 a bottle
 
 
 def test_a_product_without_a_conversion_ignores_the_unit_choice(register, make_product):
@@ -216,18 +227,31 @@ def test_partial_crate_receipt_is_allowed(crate_product):
 
 # ------------------------------------------------------------------ the feature
 
-def test_the_selector_is_a_paid_feature(crate_product, app):
-    """Conversion is a Depot-tier capability; Shop enters everything in units."""
+def test_an_order_states_its_unit_rather_than_asking(crate_product, app):
+    """There is no selector any more, and that is the point.
+
+    A wholesaler does not restock in single bottles - stock arrives in crates
+    and cartons - so an order for a product with a pack is placed in packs and
+    there is nothing to choose. The unit is derived in purchases/routes.py and a
+    posted value cannot change what a line means, which is a stronger guarantee
+    than gating a control was.
+
+    This test previously asserted `order_unit` appeared on a trial plan and not
+    on Shop. That was a fair test of a feature-gated dropdown; the dropdown is
+    gone, so it now asserts the unit is *shown* instead.
+    """
     client, business_id, _product = crate_product
 
     body = client.get('/purchases/add').get_data(as_text=True)
-    assert 'order_unit' in body                       # trial includes it
+    assert 'order_unit' not in body, 'the unit is a choice again'
+    assert 'order-unit' in body, 'the line does not say which unit it is in'
 
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.plan_id = Plan.query.filter_by(code='basic').one().id
     subscription.status = 'active'
     db.session.commit()
 
+    # Shop still cannot convert, and still says what unit it is entering in.
     body = client.get('/purchases/add').get_data(as_text=True)
     assert 'order_unit' not in body
 

@@ -3,142 +3,352 @@
 
 {% block content %}
 <div class="page-header">
-    <h2>Create Purchase Order</h2>
+    <h2>Create purchase order</h2>
     <div class="page-header-actions">
         <a href="{{ url_for('purchases.list_purchases') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i> Back to POs</a>
     </div>
 </div>
 
-<div class="glass-card" style="max-width: 800px;">
-    <form method="post">
+<div class="glass-card">
+    <form method="post" id="po-form">
         {{ form.hidden_tag() }}
-        
-        <div class="row g-4 mb-4">
-            <div class="col-md-6">
-                <label class="form-label">{{ form.supplier_id.label.text }}</label>
+
+        <div class="field-grid">
+            <div class="field">
+                <label class="form-label" for="{{ form.supplier_id.id }}">{{ form.supplier_id.label.text }}</label>
                 <div class="input-group">
-                    {{ form.supplier_id(class_='form-select') }}
-                    <a href="/products/suppliers" class="btn btn-outline-secondary" title="Manage Suppliers"><i class="bi bi-buildings"></i></a>
+                    {{ form.supplier_id(class_='form-select' + (' is-invalid' if form.supplier_id.errors else '')) }}
+                    <a href="{{ url_for('products.list_suppliers') }}" class="btn btn-outline-secondary" title="Manage suppliers"><i class="bi bi-buildings"></i></a>
                 </div>
+                {% for error in form.supplier_id.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
-            <div class="col-md-3">
-                <label class="form-label">{{ form.order_date.label.text }}</label>
-                {{ form.order_date(class_='form-control') }}
+            <div class="field">
+                <label class="form-label" for="{{ form.order_date.id }}">{{ form.order_date.label.text }}</label>
+                {{ form.order_date(class_='form-control' + (' is-invalid' if form.order_date.errors else '')) }}
+                {% for error in form.order_date.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
-            <div class="col-md-3">
-                <label class="form-label">{{ form.expected_date.label.text }}</label>
-                {{ form.expected_date(class_='form-control') }}
+            <div class="field">
+                <label class="form-label" for="{{ form.expected_date.id }}">{{ form.expected_date.label.text }}</label>
+                {{ form.expected_date(class_='form-control' + (' is-invalid' if form.expected_date.errors else '')) }}
+                {% for error in form.expected_date.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
         </div>
 
-        <h5 class="mb-3">Order Items</h5>
+        <h5 class="sale-pane-head">What you are ordering</h5>
 
         {% if has_feature('uom_conversion') %}
         <p class="text-muted small">
             <i class="bi bi-box2 me-1"></i>
-            Order in cartons or crates and the quantity and cost convert to single units
-            automatically &mdash; stock is always counted in the unit you sell.
+            Orders are placed in whole cartons or crates, the way stock actually
+            arrives. Quantity and cost convert to single units automatically &mdash;
+            stock is always counted in the unit you sell.
         </p>
         {% endif %}
 
-        {% for item in form.items %}
-            <div class="row g-4 mb-4 po-line">
+        <div id="po-lines">
+            {% for item in form.items %}
+            {# Each line is a card rather than a table row. The unit selector beside
+               the quantity is a whole dropdown, and squeezing it plus a product name,
+               a cost and a total into one row is what left "Purcha" showing. #}
+            <div class="po-line" data-line>
                 {{ item.form.hidden_tag() }}
-                <div class="col-md-5">
-                    <label class="form-label">{{ item.form.product_id.label.text }}</label>
-                    {{ item.form.product_id(class_='form-select product-select') }}
+
+                <div class="po-line-top">
+                    <button type="button" class="picker-button"
+                            data-picker-for=".product-select"
+                            data-picker-title="Add a product to this order">
+                        <i class="bi bi-search" aria-hidden="true"></i>
+                        <span class="picker-button-name">Choose a product</span>
+                        <i class="bi bi-chevron-down picker-caret" aria-hidden="true"></i>
+                    </button>
+                    {{ item.form.product_id(class_='form-select product-select' + (' is-invalid' if item.form.product_id.errors else ''), data_picker_select='true') }}
+                    <button type="button" class="btn btn-outline-danger remove-line" title="Remove this product">
+                        <i class="bi bi-trash"></i><span class="remove-word"> Remove</span>
+                    </button>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label">{{ item.form.quantity_ordered.label.text }}</label>
-                    <div class="input-group">
-                        {{ item.form.quantity_ordered(class_='form-control qty-input') }}
-                        {% if has_feature('uom_conversion') %}
-                        {{ item.form.order_unit(class_='form-select unit-select', style='max-width: 8rem;') }}
+                {% for error in item.form.product_id.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+
+                <div class="field-grid po-line-fields">
+                    <div class="field">
+                        <label class="form-label" for="{{ item.form.quantity_ordered.id }}">{{ item.form.quantity_ordered.label.text }}</label>
+                        <div class="input-group">
+                            {{ item.form.quantity_ordered(class_='form-control qty-input' + (' is-invalid' if item.form.quantity_ordered.errors else ''), inputmode='numeric') }}
+                            {# A statement, not a question. Stock arrives in crates and
+                               cartons, so a product with a pack is ordered in packs and
+                               there is nothing to choose. The server derives it and
+                               ignores anything posted. #}
+                            <span class="input-group-text order-unit"></span>
+                        </div>
+                        {% for error in item.form.quantity_ordered.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="field">
+                        <label class="form-label" for="{{ item.form.unit_cost.id }}">{{ item.form.unit_cost.label.text }}</label>
+                        <div class="input-group">
+                            <span class="input-group-text">&#8373;</span>
+                            {{ item.form.unit_cost(class_='form-control cost-input' + (' is-invalid' if item.form.unit_cost.errors else ''), inputmode='decimal') }}
+                        </div>
+                        {% for error in item.form.unit_cost.errors %}
+                        <div class="invalid-feedback d-block">{{ error }}</div>
+                        {% endfor %}
+                        <small class="text-muted line-hint d-block"></small>
+                        {% if has_feature('price_comparison') %}
+                        <small class="text-muted price-hint d-block"></small>
                         {% endif %}
                     </div>
-                </div>
-                <div class="col-md-4">
-                    <label class="form-label">{{ item.form.unit_cost.label.text }}</label>
-                    <div class="input-group">
-                        <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
-                        {{ item.form.unit_cost(class_='form-control cost-input') }}
+
+                    <div class="field">
+                        <span class="form-label d-block">Line total</span>
+                        <div class="po-line-total">&mdash;</div>
                     </div>
-                    <small class="text-muted line-hint d-block"></small>
-                    {% if has_feature('price_comparison') %}
-                    <small class="text-muted price-hint d-block"></small>
-                    {% endif %}
                 </div>
             </div>
-        {% endfor %}
+            {% endfor %}
+        </div>
 
-        <div class="d-flex gap-2 border-top border-secondary pt-4 mt-2">
-            <button type="submit" class="btn btn-primary px-4"><i class="bi bi-check2-circle me-1"></i> Create Purchase Order</button>
+        <button type="button" class="btn btn-outline-primary" id="add-line">
+            <i class="bi bi-plus-lg me-1"></i> Add another product
+        </button>
+
+        <div class="po-total">
+            <span>Order total</span>
+            <strong>&#8373;<span id="po-total">0.00</span></strong>
+        </div>
+
+        <div class="d-flex gap-2 border-top pt-4 mt-2">
+            <button type="submit" class="btn btn-primary btn-lg px-4"><i class="bi bi-check2-circle me-1"></i> Create purchase order</button>
             <a href="{{ url_for('purchases.list_purchases') }}" class="btn btn-outline-secondary">Cancel</a>
         </div>
     </form>
 </div>
+
+{% include '_partials/product_picker.html' %}
 {% endblock %}
 
 {% block scripts %}
+<script src="{{ url_for('static', filename='js/picker.js') }}"></script>
 <script type="application/json" id="product-uom-data">{{ product_uom|tojson }}</script>
 <script type="application/json" id="price-history-data">{{ price_history|tojson }}</script>
 <script>
-// Mirrors the server's conversion back to the buyer so they can see what a
-// carton price works out to per unit before committing. The server converts
-// independently - this is a preview, not the calculation.
-var PRODUCT_UOM = JSON.parse(document.getElementById('product-uom-data').textContent);
-var PRICE_HISTORY = JSON.parse(document.getElementById('price-history-data').textContent);
+/*
+ * Runs at parse time so the line template is taken from the server's own markup,
+ * before anything has touched it.
+ */
+(function () {
+  'use strict';
 
-function refreshLine(line) {
+  // Mirrors the server's conversion back to the buyer so they can see what a
+  // carton price works out to per unit before committing. The server converts
+  // independently - this is a preview, not the calculation.
+  var PRODUCT_UOM = JSON.parse(document.getElementById('product-uom-data').textContent);
+  var PRICE_HISTORY = JSON.parse(document.getElementById('price-history-data').textContent);
+
+  var form = document.getElementById('po-form');
+  var container = document.getElementById('po-lines');
+  var totalEl = document.getElementById('po-total');
+  var lineTemplate = container.querySelector('.po-line').outerHTML;
+
+  function lines() {
+    return Array.prototype.slice.call(container.querySelectorAll('.po-line'));
+  }
+
+  function refreshLine(line) {
+    // The unit this line is ordered in, in the product's own word. Filled from
+    // the same data the server derives from, so the two cannot disagree.
+    var unitLabel = line.querySelector('.order-unit');
+    if (unitLabel) {
+      var picked = PRODUCT_UOM[line.querySelector('.product-select').value];
+      unitLabel.textContent = (picked && picked.per > 1)
+        ? picked.purchase : (picked ? picked.base : '');
+    }
+
     var hint = line.querySelector('.line-hint');
     var priceHint = line.querySelector('.price-hint');
-    var select = line.querySelector('.unit-select');
 
     var productId = line.querySelector('.product-select').value;
     var info = PRODUCT_UOM[productId];
+    // After `info`, not before it. `var` hoists the declaration but not the
+    // value, so reading it a line early made this silently false and the whole
+    // conversion vanished: no "10 x 24" hint, and the price comparison measured
+    // a carton against a bottle's best price - 43.07 more instead of 0.75.
+    //
+    // The line's unit is derived, not chosen, so this mirrors the server's rule
+    // rather than reading a control: a product with a real pack is ordered in
+    // packs. The `.unit-select` it used to read no longer exists.
+    var inPacks = Boolean(info && info.per > 1);
     var qty = parseInt(line.querySelector('.qty-input').value || '0', 10) || 0;
     var cost = parseFloat(line.querySelector('.cost-input').value || '0') || 0;
+
+    var lineTotal = line.querySelector('.po-line-total');
+    if (lineTotal) {
+      lineTotal.textContent = qty && cost ? '₵' + (qty * cost).toFixed(2) : '—';
+    }
 
     // What this product has cost before, shown while they type rather than
     // after the order is placed.
     if (priceHint) {
-        var known = PRICE_HISTORY[productId];
-        if (!known) {
-            priceHint.textContent = '';
-        } else {
-            var perBase = (info && info.per > 1 && select && select.value === 'purchase')
-                          ? cost / info.per : cost;
-            var best = parseFloat(known.price);
-            var text = 'Best so far: ₵' + best.toFixed(2) + ' from ' + known.supplier;
-            priceHint.textContent = text;
-            priceHint.classList.remove('text-danger', 'text-success');
-            if (cost > 0) {
-                priceHint.classList.add(perBase > best ? 'text-danger' : 'text-success');
-                if (perBase > best) {
-                    priceHint.textContent = text + ' — this is ₵' +
-                        (perBase - best).toFixed(2) + ' more';
-                }
-            }
+      var known = PRICE_HISTORY[productId];
+      if (!known) {
+        priceHint.textContent = '';
+      } else {
+        var perBase = inPacks
+                      ? cost / info.per : cost;
+        var best = parseFloat(known.price);
+        var text = 'Best so far: ₵' + best.toFixed(2) + ' from ' + known.supplier;
+        priceHint.textContent = text;
+        priceHint.classList.remove('text-danger', 'text-success');
+        if (cost > 0) {
+          priceHint.classList.add(perBase > best ? 'text-danger' : 'text-success');
+          if (perBase > best) {
+            priceHint.textContent = text + ' — this is ₵' +
+                (perBase - best).toFixed(2) + ' more';
+          }
         }
+      }
     }
 
-    if (!hint) return;
-    if (!info || info.per <= 1 || !select || select.value !== 'purchase' || !qty) {
-        hint.textContent = '';
-        return;
+    if (!hint) { return; }
+    if (!inPacks || !qty) {
+      hint.textContent = '';
+      return;
     }
     var baseQty = qty * info.per;
     var baseCost = cost / info.per;
     hint.textContent = qty + ' × ' + info.per + ' = ' + baseQty + ' ' + info.base +
                        ' at ₵' + baseCost.toFixed(2) + ' each';
-}
+  }
 
-document.querySelectorAll('.po-line').forEach(function (line) {
-    line.querySelectorAll('input, select').forEach(function (field) {
-        field.addEventListener('input', function () { refreshLine(line); });
-        field.addEventListener('change', function () { refreshLine(line); });
+  // What the picker shows beside each product on this page: what it last cost,
+  // which is the number a buyer is actually choosing on.
+  function attachMeta(line) {
+    var select = line.querySelector('.product-select');
+    Array.prototype.forEach.call(select.options, function (option) {
+      var known = PRICE_HISTORY[option.value];
+      if (known) {
+        option.dataset.meta = '₵' + parseFloat(known.price).toFixed(2);
+      }
     });
-    refreshLine(line);
-});
+  }
+
+  function paintPicker(line) {
+    var select = line.querySelector('.product-select');
+    var button = line.querySelector('.picker-button');
+    if (!select || !button) { return; }
+    var label = window.ProductPicker.labelOf(select);
+    button.querySelector('.picker-button-name').textContent = label || 'Choose a product';
+    button.classList.toggle('is-chosen', Boolean(label));
+  }
+
+  function refreshAll() {
+    var total = 0;
+    lines().forEach(function (line) {
+      refreshLine(line);
+      var qty = parseInt(line.querySelector('.qty-input').value || '0', 10) || 0;
+      var cost = parseFloat(line.querySelector('.cost-input').value || '0') || 0;
+      total += qty * cost;
+    });
+    totalEl.textContent = total.toFixed(2);
+    // A line cannot be removed when it is the only one: an order with nothing
+    // on it is not an order.
+    var only = lines().length === 1;
+    lines().forEach(function (line) {
+      line.querySelector('.remove-line').disabled = only;
+    });
+  }
+
+  // Remove a middle line and the indexes develop a hole, so lines().length can
+  // name a new line items-2-* while an existing one is already items-2-*. The
+  // POST then carries duplicate WTForms names and binds the wrong product,
+  // quantity or cost. Renumber after every removal and before every clone.
+  function reindex() {
+    lines().forEach(function (line, position) {
+      line.querySelectorAll('input, select').forEach(function (field) {
+        if (field.name) {
+          field.name = field.name.replace(/items-\d+-/, 'items-' + position + '-');
+        }
+        if (field.id) {
+          field.id = field.id.replace(/items-\d+-/, 'items-' + position + '-');
+        }
+      });
+      line.querySelectorAll('label[for]').forEach(function (label) {
+        label.htmlFor = label.htmlFor.replace(/items-\d+-/, 'items-' + position + '-');
+      });
+    });
+  }
+
+  document.getElementById('add-line').addEventListener('click', function () {
+    reindex();
+    var index = lines().length;
+    var holder = document.createElement('div');
+    holder.innerHTML = lineTemplate;
+    var line = holder.querySelector('.po-line');
+
+    line.querySelectorAll('input, select').forEach(function (field) {
+      if (field.name) {
+        field.name = field.name.replace(/items-\d+-/, 'items-' + index + '-');
+      }
+      if (field.id) {
+        field.id = field.id.replace(/items-\d+-/, 'items-' + index + '-');
+      }
+      field.classList.remove('is-invalid');
+      // The CSRF token is the one field that must keep its value; everything
+      // else starts empty or at its first option.
+      if (field.type === 'hidden') {
+        return;
+      }
+      if (field.tagName === 'SELECT') {
+        field.selectedIndex = 0;
+      } else {
+        field.value = '';
+      }
+    });
+    line.querySelectorAll('label[for]').forEach(function (label) {
+      label.htmlFor = label.htmlFor.replace(/items-\d+-/, 'items-' + index + '-');
+    });
+    line.querySelectorAll('.invalid-feedback').forEach(function (el) { el.remove(); });
+
+    container.appendChild(line);
+    window.ProductPicker.enhance(line);
+    attachMeta(line);
+    paintPicker(line);
+    refreshAll();
+  });
+
+  // Delegated, so a line added after load behaves like one that was always
+  // there. The previous version bound listeners to each line directly at load,
+  // which is the bug that would have made every added line inert.
+  container.addEventListener('click', function (event) {
+    var button = event.target.closest('.remove-line');
+    if (button && lines().length > 1) {
+      button.closest('.po-line').remove();
+      reindex();
+      refreshAll();
+    }
+  });
+
+  container.addEventListener('input', refreshAll);
+  container.addEventListener('change', function (event) {
+    if (event.target.classList.contains('product-select')) {
+      paintPicker(event.target.closest('.po-line'));
+    }
+    refreshAll();
+  });
+
+  lines().forEach(function (line) {
+    attachMeta(line);
+    paintPicker(line);
+  });
+  refreshAll();
+}());
 </script>
 {% endblock %}

@@ -15,100 +15,165 @@
         
         <div class="row g-4 mb-3">
             <div class="col-md-4">
-                <label class="form-label">{{ form.name.label.text }}</label>
-                {{ form.name(class_='form-control', placeholder='Product Name') }}
+                <label class="form-label" for="{{ form.name.id }}">{{ form.name.label.text }}</label>
+                {{ form.name(class_='form-control' + (' is-invalid' if form.name.errors else ''), placeholder='Product Name') }}
+                {% for error in form.name.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
             <div class="col-md-4">
-                <label class="form-label">{{ form.sku.label.text }}</label>
-                {{ form.sku(class_='form-control font-monospace', placeholder='e.g., ITEM-001') }}
+                <label class="form-label" for="{{ form.sku.id }}">{{ form.sku.label.text }}</label>
+                {{ form.sku(class_='form-control font-monospace' + (' is-invalid' if form.sku.errors else ''), placeholder='e.g., ITEM-001') }}
+                {% for error in form.sku.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
             <div class="col-md-4">
-                <label class="form-label">{{ form.barcode.label.text }}</label>
-                {{ form.barcode(class_='form-control font-monospace', placeholder='Barcode') }}
+                <label class="form-label" for="{{ form.barcode.id }}">{{ form.barcode.label.text }}</label>
+                {{ form.barcode(class_='form-control font-monospace' + (' is-invalid' if form.barcode.errors else ''), placeholder='Barcode') }}
+                {% for error in form.barcode.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
         </div>
 
         <div class="row g-4 mb-3">
             <div class="col-md-4">
-                <label class="form-label">{{ form.brand_id.label.text }}</label>
-                {{ form.brand_id(class_='form-select') }}
+                <label class="form-label" for="{{ form.brand_id.id }}">{{ form.brand_id.label.text }}</label>
+                {{ form.brand_id(class_='form-select' + (' is-invalid' if form.brand_id.errors else '')) }}
+                {% for error in form.brand_id.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
             <div class="col-md-4">
-                <label class="form-label">{{ form.item_group_id.label.text }}</label>
-                {{ form.item_group_id(class_='form-select') }}
+                <label class="form-label" for="{{ form.item_group_id.id }}">{{ form.item_group_id.label.text }}</label>
+                {{ form.item_group_id(class_='form-select' + (' is-invalid' if form.item_group_id.errors else '')) }}
+                {% for error in form.item_group_id.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
             <div class="col-md-4">
-                <label class="form-label">{{ form.category_id.label.text }}</label>
-                {{ form.category_id(class_='form-select') }}
+                <label class="form-label" for="{{ form.category_id.id }}">{{ form.category_id.label.text }}</label>
+                {{ form.category_id(class_='form-select' + (' is-invalid' if form.category_id.errors else '')) }}
+                {% for error in form.category_id.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
         </div>
 
         <div class="row g-4 mb-3">
             <div class="col-md-4">
-                <label class="form-label">{{ form.variant_label.label.text }}</label>
-                {{ form.variant_label(class_='form-control', placeholder='e.g. 750ml, Large') }}
+                <label class="form-label" for="{{ form.variant_label.id }}">{{ form.variant_label.label.text }}</label>
+                {{ form.variant_label(class_='form-control' + (' is-invalid' if form.variant_label.errors else ''), placeholder='e.g. 750ml, Large') }}
+                {% for error in form.variant_label.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
             <div class="col-md-4">
-                <label class="form-label">{{ form.size_value.label.text }}</label>
-                {{ form.size_value(class_='form-control') }}
+                <label class="form-label" for="{{ form.size_value.id }}">{{ form.size_value.label.text }}</label>
+                {{ form.size_value(class_='form-control' + (' is-invalid' if form.size_value.errors else '')) }}
+                {% for error in form.size_value.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
             <div class="col-md-4">
-                <label class="form-label">{{ form.size_unit.label.text }}</label>
-                {{ form.size_unit(class_='form-control', placeholder='e.g. ml, kg') }}
+                <label class="form-label" for="{{ form.size_unit.id }}">{{ form.size_unit.label.text }}</label>
+                {{ form.size_unit(class_='form-control' + (' is-invalid' if form.size_unit.errors else ''), placeholder='e.g. ml, kg') }}
+                {% for error in form.size_unit.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
         </div>
 
-        <div class="row g-4 mb-3">
-            <div class="col-md-4">
-                <label class="form-label">{{ form.base_uom.label.text }}</label>
-                {{ form.base_uom(class_='form-control', placeholder='e.g. pcs') }}
+        <h5 class="sale-pane-head">How it is packed and priced</h5>
+
+        {# The three fields here used to read "Base UoM / Purchase UoM / Units per
+           Purchase UoM" and sat three rows above two price boxes that never said
+           which unit they meant. An owner typing a carton price into the single
+           price got a product listing at 24x and nothing caught it. The sentence
+           below reads back what was entered, so that mistake is visible before
+           it is saved rather than weeks afterwards. #}
+        <div class="pack-line">
+            <span class="pack-word">One is called</span>
+            <div class="pack-field">
+                <label class="visually-hidden" for="base-uom">{{ form.base_uom.label.text }}</label>
+                {{ form.base_uom(class_='form-control' + (' is-invalid' if form.base_uom.errors else ''), placeholder='bottle', id='base-uom') }}
             </div>
-            <div class="col-md-4">
-                <label class="form-label">{{ form.purchase_uom.label.text }}</label>
-                {{ form.purchase_uom(class_='form-control', placeholder='e.g. box') }}
+            <span class="pack-word">sold in packs of</span>
+            <div class="pack-field pack-field-narrow">
+                <label class="visually-hidden" for="pack-count">{{ form.units_per_purchase_uom.label.text }}</label>
+                {{ form.units_per_purchase_uom(class_='form-control' + (' is-invalid' if form.units_per_purchase_uom.errors else ''), id='pack-count', inputmode='numeric') }}
             </div>
-            <div class="col-md-4">
-                <label class="form-label">{{ form.units_per_purchase_uom.label.text }}</label>
-                {{ form.units_per_purchase_uom(class_='form-control') }}
+            <span class="pack-word">called a</span>
+            <div class="pack-field">
+                <label class="visually-hidden" for="pack-uom">{{ form.purchase_uom.label.text }}</label>
+                {{ form.purchase_uom(class_='form-control' + (' is-invalid' if form.purchase_uom.errors else ''), placeholder='carton', id='pack-uom') }}
             </div>
         </div>
+        {% for field in [form.base_uom, form.units_per_purchase_uom, form.purchase_uom] %}
+        {% for error in field.errors %}
+        <div class="invalid-feedback d-block">{{ error }}</div>
+        {% endfor %}
+        {% endfor %}
 
-        <div class="mb-4">
-            <label class="form-label">{{ form.description.label.text }}</label>
-            {{ form.description(class_='form-control', rows="3") }}
-        </div>
-
-        <div class="row g-4 mb-4">
+        <div class="field-grid">
+            <div class="field" id="sell-unit-field" hidden>
+                <label class="form-label" for="{{ form.sell_unit.id }}">{{ form.sell_unit.label.text }}</label>
+                {{ form.sell_unit(class_='form-select', id=form.sell_unit.id) }}
+            </div>
+            <div class="field">
+                <label class="form-label" for="{{ form.unit_price.id }}">{{ form.unit_price.label.text }}</label>
+                <div class="input-group">
+                    <span class="input-group-text">&#8373;</span>
+                    {{ form.unit_price(class_='form-control' + (' is-invalid' if form.unit_price.errors else ''), inputmode='decimal') }}
+                </div>
+                {% for error in form.unit_price.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
+            <div class="field" id="pack-price-field" hidden>
+                <label class="form-label" for="{{ form.pack_price.id }}">{{ form.pack_price.label.text }}</label>
+                <div class="input-group">
+                    <span class="input-group-text">&#8373;</span>
+                    {{ form.pack_price(class_='form-control' + (' is-invalid' if form.pack_price.errors else ''), inputmode='decimal', placeholder='Leave blank to use the single price') }}
+                </div>
+                {% for error in form.pack_price.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
+            </div>
             {# Cost price is deliberately withheld from staff without the permission -
                owners routinely do not want floor staff seeing purchase cost against
-               sale price. The route enforces this too; hiding here is only cosmetic. #}
+               sale price. The route deletes the bound field, so every reference to it
+               must stay inside this gate or the page raises at render. #}
             {% if current_user.can('products.cost_price.view') %}
-            <div class="col-md-3">
-                <label class="form-label">{{ form.cost_price.label.text }}</label>
+            <div class="field">
+                <label class="form-label" for="{{ form.cost_price.id }}">{{ form.cost_price.label.text }}</label>
                 <div class="input-group">
-                    <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
-                    {{ form.cost_price(class_='form-control' + (' is-invalid' if form.cost_price.errors else '')) }}
-                    {% for error in form.cost_price.errors %}
-                    <div class="invalid-feedback">{{ error }}</div>
-                    {% endfor %}
+                    <span class="input-group-text">&#8373;</span>
+                    {{ form.cost_price(class_='form-control' + (' is-invalid' if form.cost_price.errors else ''), inputmode='decimal') }}
                 </div>
+                {% for error in form.cost_price.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
             {% endif %}
-            <div class="col-md-3">
-                <label class="form-label">{{ form.unit_price.label.text }}</label>
-                <div class="input-group">
-                    <span class="input-group-text border-secondary bg-transparent text-muted">₵</span>
-                    {{ form.unit_price(class_='form-control') }}
-                </div>
-            </div>
-            <div class="col-md-3">
-                <label class="form-label">{{ form.quantity_in_stock.label.text }}</label>
+        </div>
+
+        <p class="pack-summary" id="pack-summary"></p>
+
+        <div class="field-grid">
+            <div class="field">
+                <label class="form-label" for="{{ form.quantity_in_stock.id }}">{{ form.quantity_in_stock.label.text }}</label>
                 {{ form.quantity_in_stock(class_='form-control') }}
             </div>
-            <div class="col-md-3">
-                <label class="form-label text-warning"><i class="bi bi-exclamation-triangle me-1"></i> {{ form.min_stock_alert.label.text }}</label>
-                {{ form.min_stock_alert(class_='form-control') }}
+            <div class="field">
+                <label class="form-label" for="{{ form.min_stock_alert.id }}"><i class="bi bi-exclamation-triangle me-1 text-warning"></i>{{ form.min_stock_alert.label.text }}</label>
+                {{ form.min_stock_alert(class_='form-control' + (' is-invalid' if form.min_stock_alert.errors else ''), inputmode='numeric') }}
+                {% for error in form.min_stock_alert.errors %}
+                <div class="invalid-feedback d-block">{{ error }}</div>
+                {% endfor %}
             </div>
+        </div>
         </div>
 
         <div class="d-flex gap-2 border-top border-secondary pt-4 mt-2">
@@ -117,4 +182,94 @@
         </div>
     </form>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+/*
+ * The sentence under the prices, and the two fields that only matter once a
+ * pack exists.
+ *
+ * The point of the sentence is one specific mistake: typing a carton price into
+ * the single price box. That produced a product listing at twenty-four times
+ * its real price, and nothing on the old form said which unit either box was
+ * in. Reading the numbers back in words puts "1,050.00 a bottle" on the screen
+ * before Save is pressed rather than after the first sale.
+ */
+(function () {
+  'use strict';
+
+  var base = document.getElementById('base-uom');
+  var pack = document.getElementById('pack-uom');
+  var count = document.getElementById('pack-count');
+  var unitPrice = document.querySelector('[name="unit_price"]');
+  var packPrice = document.querySelector('[name="pack_price"]');
+  var sellUnit = document.querySelector('[name="sell_unit"]');
+  var summary = document.getElementById('pack-summary');
+  var packField = document.getElementById('pack-price-field');
+  var sellField = document.getElementById('sell-unit-field');
+  if (!base || !summary) {
+    return;
+  }
+
+  function money(n) {
+    return '₵' + n.toLocaleString(undefined, { minimumFractionDigits: 2,
+                                               maximumFractionDigits: 2 });
+  }
+
+  function refresh() {
+    var one = (base.value || 'item').trim();
+    var many = (pack.value || '').trim();
+    var per = parseInt(count.value, 10) || 1;
+    var single = parseFloat(unitPrice.value) || 0;
+    var whole = parseFloat(packPrice ? packPrice.value : '') || 0;
+
+    // A pack of one is not a pack, and a pack with no name is not one either.
+    var hasPack = per > 1 && many && many.toLowerCase() !== one.toLowerCase();
+    if (packField) { packField.hidden = !hasPack; }
+    if (sellField) { sellField.hidden = !hasPack; }
+
+    // The dropdown says what may be sold, in the words just typed.
+    if (sellUnit && hasPack) {
+      sellUnit.options[0].textContent = one + 's only';
+      sellUnit.options[1].textContent = many + 's only';
+      sellUnit.options[2].textContent = 'Both';
+    }
+
+    if (!hasPack) {
+      summary.textContent = single
+        ? 'You sell this by the ' + one + ' at ' + money(single) + '.'
+        : '';
+      return;
+    }
+
+    var each = whole ? whole / per : single;
+    var parts = ['You sell this by the ' + many + ' of ' + per + ' ' + one + 's.'];
+    if (whole) {
+      parts.push('A ' + many + ' is ' + money(whole) + ' — that works out at '
+                 + money(each) + ' a ' + one + '.');
+    } else if (single) {
+      parts.push('No ' + many + ' price set, so a ' + many + ' is ' + per + ' × '
+                 + money(single) + ' = ' + money(single * per) + '.');
+    }
+    summary.textContent = parts.join(' ');
+
+    // The mistake this whole sentence exists to catch.
+    var suspect = whole && single && single > each * 4;
+    summary.classList.toggle('is-warning', Boolean(suspect));
+    if (suspect) {
+      summary.textContent += ' Check the single price - ' + money(single)
+        + ' for one ' + one + ' looks like a ' + many + ' price.';
+    }
+  }
+
+  [base, pack, count, unitPrice, packPrice, sellUnit].forEach(function (el) {
+    if (el) {
+      el.addEventListener('input', refresh);
+      el.addEventListener('change', refresh);
+    }
+  });
+  refresh();
+}());
+</script>
 {% endblock %}

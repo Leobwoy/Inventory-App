@@ -114,14 +114,30 @@ def test_sales_list_does_not_query_per_row(shop_with_sales):
 
 def test_dashboard_aggregates_in_sql(shop_with_sales):
     """The trend used to load every sale and lazy-load every line to produce
-    seven numbers (F-14)."""
+    seven numbers (F-14).
+
+    The budget went from 12 to 22 when the dashboard gained the Needs
+    attention panel. That is a deliberate decision, not a test bent to fit:
+    measured, the panel costs 10 queries and money owed costs 1.
+
+    Why this does not follow the badge's precedent. `/products/alerts/count`
+    exists because the sidebar renders on fifty-odd routes, and computing
+    this for all of them would put the cost on pages that never show the
+    number. The dashboard is the page that *does* show it - on a phone it is
+    the first thing on the screen - so fetching it after load would leave the
+    most important panel blank exactly when someone opens the app to find out
+    what needs doing.
+
+    Real duplication remains: the route counts low stock for the Restock
+    figure and `notifications` counts it again. Worth collapsing one day.
+    """
     client, _business_id, _products, record_sales = shop_with_sales
     record_sales(10)
 
     with QueryCounter() as counter:
         client.get('/')
 
-    assert counter.count <= 12, f'{counter.count} queries to draw the dashboard'
+    assert counter.count <= 22, f'{counter.count} queries to draw the dashboard'
 
 
 # ------------------------------------------------------------------- money
@@ -146,7 +162,17 @@ def test_totals_are_summed_as_decimal_not_float(shop_with_sales):
     total = sum((i.price_at_sale * i.quantity for i in SaleItem.query.all()), Decimal('0'))
     assert isinstance(total, Decimal)
     assert total == Decimal('0.30')
-    assert str(total) == '0.30'
+    assert total == Decimal('0.30')
+
+    # Not `str(total) == '0.30'` any more. price_at_sale is Numeric(14, 6)
+    # since packs could be sold - a pack price divided by its count has to
+    # stay exact in storage - so a raw row sum reads 0.300000. That is the
+    # column doing its job, not a defect. What must be exactly two decimals
+    # is money at the point a person reads or pays it, so assert it there.
+    from credit.models import sale_total
+    from sales.models import Sale
+
+    assert str(sale_total(Sale.query.first())) == '0.30'
 
 
 def test_stored_prices_are_decimal(shop_with_sales):

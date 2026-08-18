@@ -34,7 +34,7 @@
 // for exactly this reason, and it looked like a CSS bug rather than a stale
 // file. `tests/test_pwa.py` fails if the precached files change and this does
 // not, because remembering was clearly not enough.
-const CACHE_VERSION = 'tracktrack-v13';
+const CACHE_VERSION = 'tracktrack-v18';
 const OFFLINE_URL = '/offline';
 
 // The shell: enough to render a styled page with icons and no network.
@@ -42,8 +42,7 @@ const PRECACHE = [
     OFFLINE_URL,
     '/static/css/style.css',
     '/static/css/tour.css',
-    '/static/css/combobox.css',
-    '/static/js/combobox.js',
+    '/static/js/picker.js',
     '/static/js/tour.js',
     '/static/js/offline-sales.js',
     '/static/css/offline.css',

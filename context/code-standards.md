@@ -41,6 +41,18 @@
   is the most likely cause of real-world abandonment.
 - Never trust a posted foreign key. Resolve it scoped to the business
   (see `_scoped_catalogue()` in `products/routes.py`).
+- **A posted unit is gated three times, in this order:** does the plan include
+  `uom_conversion`, does the product have a real conversion, and is the unit one that
+  `services/uom.sell_units()` offers. `purchases/routes.py` is the model. Hiding a selector
+  enforces nothing — this project has already shipped one route that read a hand-posted unit
+  the plan did not include.
+- A required field needs a default, or the browser blocks the submit and nothing on the
+  page says why. `DataRequired` renders `required`, and the browser then refuses to post
+  until the field is filled - no flash, no error, no request. `sale_date` sat like this
+  from the start: every sale needed today's date picked by hand, from a phone. Where the
+  answer is almost always the same, supply it: `default=date.today`, the **callable**, not
+  `date.today()`, which is evaluated once at import and leaves a long-running server
+  offering the day it booted.
 
 ## Templates
 
@@ -59,6 +71,49 @@
   new employee was told to set a password on a page with no form. A signed-in page that
   wants the centred layout passes `standalone=True` and keeps `auth_content`.
 
+- **Never hide a pane that contains a required field.** A control the browser cannot focus
+  cannot be reported on, so an invalid one behind `display: none` makes the form refuse to
+  submit in complete silence - no bubble, no POST, nothing in the console. Any page that
+  shows part of a form at a time must find the first invalid field, bring its pane back and
+  call `reportValidity()` there. `templates/sales/add.html` does this on both the step
+  change and the submit.
+- **Do not rely on `.btn-lg`, `.btn-sm` or any Bootstrap sizing class for height.** This
+  project's own `.btn { padding: 0.5rem 1rem }` matches at the same specificity as
+  Bootstrap's size classes and is written after them, so it wins. `.btn-lg` did nothing
+  anywhere in the app until Phase C3 gave it a rule of its own. Measure a control's real
+  height in the browser before trusting a class name for it.
+
+- **Scope a text assertion to the block it is about.** A slice taken to the end of a rendered
+  page catches `base.html` too: a dashboard test asserting the chart listens for
+  `tracktrack:theme` stayed green with that listener deleted, because the sidebar toggle in
+  the shell listens for the same event. Slice between the block's own anchors.
+- **`assert a in page or b in page` is usually a test that cannot fail.** Where the two are
+  branches of the same `{% if %}`, whichever one renders satisfies it. Arrange the fixture so
+  the branch under test is the one that renders, and assert the other is absent.
+- **A CSS assertion must strip comments first.** A rule explaining that it *used* to say
+  `min-width: 0` reads as still saying it, and a comment explaining why `:has()` is avoided
+  is itself a match for `:has(`. Both have failed a test that was otherwise correct.
+- **Never measure geometry while a CSS transition or animation is running.** The browser
+  pane does not composite while it is hidden, so a transition can sit unfinished
+  indefinitely and `getBoundingClientRect` returns a frame no real device would ever hold.
+  This produced three separate false readings: a `.glass-card` background read mid-fade
+  (which looked like fourteen contrast failures that did not exist), a `scroll-behavior:
+  smooth` scroll that had not started, and a Bootstrap modal measured at `translate(0,
+  -50px)` that looked like a dialog hanging off the top of the screen. Remove the
+  transition, or the `.fade` class, before reading anything.
+- **Measure a layout at four widths, not two.** 375, 1024, 1280, 1440. The product picker
+  was verified at 1280 and 1440 and shipped; every width from 992 to 1200 was broken, with a
+  quantity input 20px wide holding no digits at all. Two points do not describe a curve.
+- **Never write a regex through a shell heredoc without checking the bytes.** `` in a
+  pattern passed through one became a literal backspace (0x08) in the source. `grep`, the
+  terminal and every editor render it as nothing, so the line read exactly right, matched
+  nothing, and the tool it was in reported success. Build such patterns from `chr()` or
+  verify with `repr()` of the source line - not by looking at it. This has now happened
+  three times: a backspace in a regex, and a form feed twice in a CSS `content: "\f282"` -
+  the second time inside the comment written to warn about the first. **Do not write a
+  unicode escape at all.** An icon goes in the markup as `<i class="bi bi-…">`, which is how
+  every other icon in this app is written anyway.
+
 ## Migrations
 
 - One migration per logical change, with a docstring saying **why**, not just what.
@@ -72,6 +127,39 @@
 
 ## Data
 
+- **Money the user types is 2dp; money the code derives is 6dp.** `unit_price` and
+  `pack_price` are typed, `Numeric(10,2)`. `PurchaseOrderItem.unit_cost` is derived by
+  dividing a pack cost by its count and is `Numeric(14,6)` — at 2dp, ₵1.00 a carton of 24
+  records ₵96.00 against ₵100.00 paid over 100 cartons (F-41).
+- **Give every `<input>` an explicit width when it lives in a table column.** Its intrinsic
+  size is about twenty characters, so `width: auto` makes the column size to that and take
+  the width off whatever shares the row. This has now happened twice on the same table - the
+  quantity box and the price box - each time stealing from the product name.
+- **Derive a unit; never accept a posted one.** Purchasing asks nothing and reads nothing
+  from the request: a product with a real pack is ordered in packs. A gate can be argued
+  with; a derivation cannot.
+- **Some guarantees need two mutations to falsify, and that is not a weak test.** Where a
+  property is protected in a route *and* in the primitive it calls, breaking either alone
+  stays green. Say so in the docstring, or the next person reads it as asleep and deletes
+  one of the guards.
+- **Identical measurements across different edits mean you are measuring a cache.** Not that
+  the fix failed. A stylesheet reaches the browser three ways that each cache separately: the
+  service worker precache (cache-first on the unbusted URL), the HTTP cache, and the CSSOM of
+  an already-loaded sheet. Swap the `<link>` href to a random query and re-read in a *separate
+  call* before believing any negative result. This has now cost an hour once.
+- **Assert an exact class attribute, never a bare substring.** `'unit-toggle' in page` is
+  satisfied by `unit-toggle-x`, so a test guarding a control stayed green while the control
+  was renamed away. Use `class="unit-toggle"`.
+- **Six decimals are for storage; two are for people.** Widening a money column to hold a
+  derived figure exactly is right, and letting that width escape is not. `price_at_sale`
+  went to `Numeric(14,6)` and immediately leaked: a total read `0.300000`, and the
+  overpayment guard compared a tendered `800.00` against an outstanding `800.000000` and
+  refused a correct payment. Money rounds **once**, at the boundary where it is read or
+  compared — `credit.sale_total()` and the SQL sum in `services/credit.py` both quantise.
+  A test asserting `str(total)` is asserting the column width, not the money.
+- **A price that cannot be derived must be stored.** A pack price is not `count × unit_price`
+  — the difference *is* the wholesale discount. Deriving it silently would delete the reason
+  a shop buys a case.
 - Quantities are stored in **base units**, always. The purchase unit exists only at the
   input and display boundaries (`services/uom.py`).
 - Money is `Numeric(10, 2)` and `Decimal` in Python. A **derived** per-unit figure may take

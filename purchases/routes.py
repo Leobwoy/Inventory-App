@@ -80,8 +80,6 @@ def add_purchase():
     product_choices = [(p.id, p.name) for p in products]
     for item in form.items:
         item.form.product_id.choices = product_choices
-        if uom.has_conversion_available(products):
-            item.form.order_unit.choices = [('purchase', 'Purchase unit'), ('base', 'Stock unit')]
 
     # What each product has cost before, so the buyer sees the going rate while
     # they type rather than after the order is placed.
@@ -130,21 +128,29 @@ def add_purchase():
                     db.session.rollback()
                     flash('One of the selected products is no longer available. '
                           'Nothing was ordered.', 'danger')
+                    # product_uom too: the template feeds it to |tojson, and
+                    # leaving it out raised inside this try, where the generic
+                    # handler swallowed it and replaced this specific message
+                    # with "Something went wrong".
                     return render_template('purchases/add.html', form=form,
+                                           product_uom=product_uom,
                                            price_history=price_history)
 
                 # Entered in cartons or pieces; stored in base units either way,
                 # so nothing downstream has to ask which unit a row is in.
                 # The template only shows the unit selector when the business
-                # has uom_conversion. Without it WTForms still supplies the
-                # field default, 'purchase', so a quantity typed in base units
-                # would be multiplied by the conversion factor and its cost
-                # divided by it. Trust the posted unit only when it was offered.
+                # Derived, never posted. A wholesaler does not restock in single
+                # bottles - stock arrives in crates, cartons and boxes - so where
+                # a product has a real pack, that is the unit an order is placed
+                # in and there is no question to ask. Nothing here reads
+                # `order_unit`: a posted value cannot change what this line means,
+                # which is a stronger guarantee than gating one.
+                #
+                # Products with no pack are still ordered in singles, and a plan
+                # without conversion enters everything in stock units.
                 entered_unit = uom.BASE
-                if limits.has_feature('uom_conversion'):
-                    entered_unit = item_form.order_unit.data or uom.BASE
-                if not uom.has_conversion(product):
-                    entered_unit = uom.BASE
+                if limits.has_feature('uom_conversion') and uom.has_conversion(product):
+                    entered_unit = uom.PURCHASE
 
                 base_quantity = uom.to_base(product, item_form.quantity_ordered.data, entered_unit)
                 base_cost = uom.cost_to_base(product, item_form.unit_cost.data, entered_unit)
@@ -247,8 +253,19 @@ def receive_po(po_id):
 
                 # A delivery arrives in whatever unit the supplier ships. Convert
                 # to base before anything is compared or stored.
+                #
+                # Gated on the plan as well as the product, which it was not.
+                # Order creation twenty lines above has always checked both; this
+                # checked only the product, so a hand-posted `unit_<id>=purchase`
+                # received a carton's worth of stock on a plan that does not
+                # include conversion. The template hides the selector, and hiding
+                # a control enforces nothing - that is the same lesson
+                # tests/test_uom.py already carries a docstring about, for the
+                # other route.
                 entered = request.form.get(f'qty_{item.id}', type=int) or 0
-                entered_unit = request.form.get(f'unit_{item.id}') or uom.BASE
+                entered_unit = uom.BASE
+                if limits.has_feature('uom_conversion'):
+                    entered_unit = request.form.get(f'unit_{item.id}') or uom.BASE
                 if not uom.has_conversion(item.product):
                     entered_unit = uom.BASE
                 qty = uom.to_base(item.product, entered, entered_unit)

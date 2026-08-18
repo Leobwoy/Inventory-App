@@ -52,9 +52,14 @@ Chart.js 4.4.1, plus `static/css/style.css`. Nothing loads from another origin �
 worker cannot reliably cache cross-origin responses, and `tests/test_assets.py` fails if a
 CDN link reappears.
 
-Searchable dropdowns use `static/js/combobox.js` (with `static/css/combobox.css`), applied
-by putting `data-combobox` on a `<select>`. The native `<select>` stays in the DOM and
-still posts its value, so the page works with JavaScript off.
+Choosing a product uses `static/js/picker.js` with `templates/_partials/product_picker.html`
+— a dialog opened from a button carrying `data-picker-for`. The native `<select>` stays in
+the DOM and still posts its value, so the page works with JavaScript off.
+
+There is no general searchable-dropdown component. The one that existed
+(`static/js/combobox.js`) was deleted once the picker replaced its only caller; a second
+searchable select — customers or suppliers — should either widen the picker or bring the
+combobox back from git history, not grow a third pattern.
 
 **Two Bootstrap behaviours that have already cost time:**
 
@@ -101,3 +106,50 @@ still posts its value, so the page works with JavaScript off.
 
 Bootstrap Icons 1.11 (`bi bi-*`). Inline in buttons with `me-1`; standalone at `fs-1` in
 empty states.
+
+## Choosing a product
+
+Products are chosen in a **dialog**, never in a table cell. `templates/_partials/product_picker.html`
+plus `static/js/picker.js`, opened by a `.picker-button` carrying
+`data-picker-for="<selector>"`. One dialog per page serves every line on it.
+
+The reason is arithmetic. On a 1440px laptop the sale form's product cell was 130px and the
+search box inside it 98px, while the longest product name needed 169. Five columns wanted
+about a 1500px window; no width tuning fixes that.
+
+Rules for any page that adopts it:
+
+- The `<select>` stays in the DOM, keeps its name, and stays the source of truth. The picker
+  writes to it and dispatches a bubbling `change`, so existing listeners keep working.
+- The select is hidden by `picker.js` adding `line-enhanced`, **never by the server**. With
+  no script the select is the control and the page still works.
+- Each line wrapper carries `data-line`; the select carries `data-picker-select`.
+- Whatever is worth knowing beside a product - its price on a sale, its last cost on a
+  purchase order - goes on the `<option>` as `data-meta`. The picker itself knows nothing
+  about products.
+
+Lines that used to be table rows with three inputs in them are **cards** instead: purchase
+order lines and goods receipt lines both use this shape, with `.field-grid` inside. A table
+row cannot hold a product name, a quantity, a unit dropdown, a cost and a total at any screen
+width a shop actually owns.
+
+This is the app's **first and only Bootstrap modal**. Bootstrap's JS bundle was already
+loaded and precached on every page, so it cost nothing new. `.modal-content` is solid
+(`--bg-card-solid`), not frosted - a dialog is the one surface with a whole page behind it.
+
+## Asking about units and prices
+
+Never label a field with a database term. "Base UoM" means nothing to someone who sells
+drinks. `templates/products/add_edit.html` asks it as a sentence with boxes in it — *One is
+called `bottle` sold in packs of `24` called a `carton`* — and then **reads the numbers back
+in words** underneath.
+
+The read-back is the point, not decoration. It is what catches a pack price typed into the
+single price box, which used to produce a product listing at 24× with nothing to notice it.
+Any form where the same number can mean two different units owes the user that sentence.
+
+A field whose visible label is carried by surrounding prose still needs a real label, hidden
+with `.visually-hidden`. Prose is not an accessible name.
+
+Every field renders `is-invalid` and an `invalid-feedback` when refused. A form that marks
+one field of seventeen is a form that fails silently.

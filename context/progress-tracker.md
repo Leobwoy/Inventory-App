@@ -209,8 +209,9 @@ templates); **F-29** `email_validator` undeclared; **F-30** `PurchaseOrder` had 
   `TRIAL_DAYS - 1`, which was accommodating the bug.
 - **2.4a** Assets vendored. Bootstrap, Bootstrap Icons and Chart.js served from
   `static/vendor/` with pinned versions; jQuery and Select2 removed in favour of
-  `static/js/combobox.js`. No template loads anything from another origin, which is a
-  precondition for the service worker in 2.4b.
+  `static/js/combobox.js` (itself since deleted — the product picker replaced it, see
+  Stage 3). No template loads anything from another origin, which is a precondition for
+  the service worker in 2.4b.
 
 ### Stage 2.5 — Notification centre and expiry alerts (merged)
 
@@ -556,11 +557,12 @@ was measurement error, and was wrong. Measure against the colour actually in the
 
 ## In Progress
 
-- **Stage 3 — the interface redesign.** Shell complete: tokenised palette, light theme with
-  a per-user switch, the sidebar narrowed to a 140px icon-and-label rail, and phone
-  navigation moved to a bottom bar. Individual pages are still the old layouts in new
-  colours; the sale form and goods receipt are next, because that is where the user found a
-  real problem rather than a cosmetic one.
+- **Stage 3 — the interface redesign.** Shell complete (C1): tokenised palette, light theme
+  with a per-user switch, the sidebar narrowed to a 140px icon-and-label rail, and phone
+  navigation moved to a bottom bar. **C3, the sale form, is complete** — see below.
+  **C2, the dashboard, is still the old layout** and was skipped by mistake, not by
+  decision; it is the next thing to pick up. The remaining pages are still old layouts in
+  new colours.
 - **Answered 2026-08-13: Stage 3 first, as a full redesign.** 2.6 and 2.7 both score
   suppliers from purchase history and need 20–30 completed orders before they show
   anything — with no real customers yet, both would ship as empty screens. The user chose
@@ -577,16 +579,218 @@ was measurement error, and was wrong. Measure against the colour actually in the
   most of the prose on every page — removing it took the swept node count from 942 to 1266,
   still with zero failures.
 
+**C3 — Record a sale.** Two panes, one form: what is being bought, then who bought it and
+how they paid. The split is presentation only — one POST, one route, nothing held in the
+session between steps, and with no JavaScript both panes render and the page works exactly
+as it did. Which pane opens is decided *server-side* from where validation failed, because a
+rejected field behind a hidden pane is a page that reloads looking unchanged. On a desktop
+the running total sits beside the items; on a phone it sticks to the bottom of the screen
+directly above the tab bar. The two dropdowns became radio chips, styled through
+`input:checked + span` rather than `:has()`, which the older Android WebViews in this market
+do not support and would have failed at silently and totally.
+
+Three real defects found by measuring the page rather than looking at it:
+
+- **The sale date was `required` with no default**, so the browser refused to submit until
+  someone picked today's date by hand — every sale, from a phone. The first end-to-end
+  attempt produced no POST at all and no message. Now `default=date.today` (the callable: a
+  frozen `date.today()` would have the server offering the day it booted a week later).
+- **`.btn-lg` has never worked anywhere in the app.** This file's own `.btn { padding }`
+  rule matches at the same specificity as Bootstrap's `.btn-lg` and comes after it, so every
+  large button in every page has been rendering at the ordinary size.
+- **A required field on a hidden pane cannot be focused**, and a browser that cannot focus an
+  invalid control refuses to submit and says nothing — no bubble, no POST. Guarded on both
+  the step change and the submit.
+
+Measured at 375px: every tap target ≥ 44px, no horizontal overflow, the sticky total bar
+lands exactly on the tab bar's top edge. Contrast clean in both themes, worst 5.32:1 light
+and 6.10:1 dark.
+
+**The sweep had a blind spot, and it is closed.** It measures what is *visible*, so the
+second pane of a two-pane page was invisible to it — `sale` dropped from 80 checked nodes to
+78 when the page gained a pane, and said nothing. `capture.py` now takes a second shot of
+any page in `PANED` with every `<script>` stripped, which leaves the server's own
+`data-steps="off"` in place and both panes on screen. That is also the state a phone whose
+script failed to download is in, so it is worth measuring in its own right. `saleboth`
+checks 100 nodes against `sale`'s 78.
+
+Getting there cost an hour to a byte. The strip regex was written with `` in it, which
+became a **literal backspace character** in the source; `grep` and the terminal both render
+0x08 as nothing, so the line read perfectly, matched no scripts at all, and the sweep went
+on reporting the same node count. `findall` with the same pattern typed fresh matched 11.
+Only printing `repr()` of the source line found it. The pattern is now built from `chr()`
+calls, and the capture warns if the stripped copy is not in the no-script state.
+
+**C3 fix + C6 — the product picker.** Reported from the running app with two screenshots: on
+the sale form the product box read "BelA", and on Create Purchase Order the quantity and cost
+controls had collapsed into nested, disconnected boxes.
+
+Measured before touching anything. At 1280px the sale table got 583px and the product input
+**60px**; at 1440px — an ordinary laptop — it was **98px**, against a longest product name
+needing 169. Five columns wanted roughly a 1500px window. Notably this was **desktop-only**:
+on a phone the row stacks and the field gets 301px, so the C3 rebuild had fixed the phone and
+broken the laptop.
+
+The answer was the user's own designs, which show every cell in both the sale cart and the PO
+order-lines table as **plain text**, with "Add line" beneath. Products are now chosen in a
+dialog: `templates/_partials/product_picker.html` + `static/js/picker.js`, one per page,
+serving every line. Bootstrap's Modal, because its bundle was already loaded and precached on
+every page — the first modal this app has ever had. The `<select>` stays, keeps its name, and
+stays the source of truth; `picker.js` hides it, never the server, so no-JS still works.
+Result: product name space went 60px → 168px at 1280px, and 15 of 16 catalogue names now fit
+on one line.
+
+Three defects fixed alongside, all worse than cosmetic:
+
+- **A purchase order could only ever have one line.** No add-row control, no cloning script;
+  the route never appended entries. Every PO this app has created has had exactly one product
+  on it. Now adds and removes lines, with the sale form's renumbering.
+- **`purchases/routes.py` crashed on the "product no longer available" path**, re-rendering
+  without `product_uom` which the template feeds to `|tojson`. It raised inside the `try`, so
+  `except Exception` swallowed it and replaced that specific message with the generic
+  "Something went wrong". Nobody has ever seen the real one.
+- **The PO page rendered no validation errors at all** — no `is-invalid`, no
+  `invalid-feedback`. A refused order came back looking identical to the one sent. Also
+  `order_date` had no default, the same silent submit-blocker the sale form had.
+
+Goods receipt became one card per line — seven columns, five read-only, and the three that
+are typed into were sharing the leftovers on the page where a typo costs real stock.
+
+**Corrected belief, recorded because the obvious guess was wrong:** a *gap* in WTForms
+indexes (`items-0` + `items-2`) is harmless — it compacts. What loses a line is a
+*collision*, which is what removing a middle row causes when the next row is named from
+`length`. Two lines then post under one name and WTForms reads the first. A test asserting
+the gap theory failed, which is how this was found.
+
+**The sweep's dialog blind spot is closed too.** Bootstrap's `.modal` is `display: none`
+until shown, so an ordinary capture measures none of it and reports clean without looking.
+`capture.py` now takes a `dlg` shot with the modal forced open and its list filled from the
+same `<select>` the script reads. 2024 nodes swept across 22 captures, zero failures.
+
+**Follow-up: the combobox is gone.** `static/js/combobox.js` and `static/css/combobox.css`
+were the picker's predecessor and had no callers left once the dialog landed — but they were
+still in `PRECACHE`, so every user downloaded ~8KB of dead code on first visit. Both deleted,
+dropped from `PRECACHE` and from `VENDORED` in `tests/test_assets.py`, `CACHE_VERSION` bumped
+to `tracktrack-v16`. They were kept for a while as a candidate for the customer and supplier
+selects; nothing was ever scheduled, and git history is a better home for that than the
+precache list. A future searchable select should widen the picker or restore the file from
+history rather than invent a third pattern.
+
+**Follow-up from the running app — three fixes.** Reported with a screenshot: a quantity
+over 9 showed only its first digit, and nothing indicated the product box could be tapped.
+
+Measured at 1100px, both were worse than reported. The quantity input was **20px** with
+**5px** of room inside it, so not even one digit rendered, and the product name had **57px**
+— worse than the 98px the picker had just fixed. Three separate causes, all mine:
+
+- `min-width: 0` on the input is explicit permission to collapse, and it collapsed.
+- The column widths were written outside any media query, so `width: 9rem` still capped the
+  quantity cell at 144px on a phone with 300px going spare.
+- The summary panel started sharing the row at 992px, but the row needs about 610px and the
+  items pane only reaches that at roughly 1330px. It drops beneath the items below 1400 now,
+  which is arithmetic rather than taste: 207 for a name, 157 for the stepper, 112 for the
+  price, 80 for the line total, 54 to remove it.
+
+**The lesson is the measuring, not the CSS.** The first pass checked 1280 and 1440 and
+declared victory; every width between 992 and 1200 was broken and unlooked-at. Layout is now
+measured at 375, 1024, 1280 and 1440 as a matter of course.
+
+| Viewport | Quantity box | 4 digits | Name space | Longest name fits |
+|---|---|---|---|---|
+| 375 | 227px | yes | 275px | yes |
+| 1024 | 56px | yes | 281px | yes |
+| 1280 | 56px | yes | 385px | yes |
+| 1440 | 56px | yes | 216px | yes |
+
+**The affordance.** The picker button's border computed to two thirds of a pixel at 10%
+white — invisible on a dark card — and the search icon was hidden the moment a product was
+chosen, which I had done deliberately to reclaim 24px. A bad trade: it bought width with
+discoverability. There is a chevron pinned to the right now that never hides, and a border
+on its own token (`--input-border-strong`) that can actually be seen.
+
+Written as `<i class="bi bi-chevron-down">` markup rather than a CSS `content` escape,
+because a unicode escape written through tooling arrived here as a **control character for
+the third time** — once as a backspace in a regex, twice as a form feed in this rule, the
+second time inside the comment warning about the first. Control characters render as nothing
+and read as correct. The rule is now: never write one; use markup or `chr()`.
+
+**Supplier prices** gained an instant filter. Deliberately unlike the five paginated list
+pages that use `services/listing.py`: this page has no pagination, renders every row at once
+(15 cards over 5 screens), so everything being searched is already in the browser. Matched
+against a `data-search` attribute holding name and SKU, not the card's text — a card also
+holds supplier names and prices, so searching "2" against its text would match every product
+whose price contains one.
+
+**C2 — the dashboard.** Skipped by mistake when the sale form was rebuilt, so it sat on the
+old layout two commits longer than it should have.
+
+Four stat cells, then the trend and what needs doing. Every stat is a link: a number you
+cannot act on is a number you stop reading. The week's takings now carry a comparison with
+the week before — the old page gave a total with nothing to judge it against.
+
+**The right-hand panel is Needs attention, not an activity feed**, and this is the decision
+recorded back in the design phase finally implemented. A feed can only come from the audit
+log, which is `advanced`-tier, so Kiosk, Shop and Depot would open the page to an empty panel
+every day forever. Needs attention comes from `services/notifications.for_user()` — already
+permission-filtered, sharing the nav badge's per-request cache so the two cannot disagree,
+and it empties itself when the work is done.
+
+**Money owed is gated twice:** the credit ledger is a paid feature, and reading the debt book
+is a permission of its own. Worth recording that the Sales Staff preset *does* include
+`credit.view` — they are the people who take the payments — so a test asserting the
+permission gate has to set permissions explicitly rather than lean on a role name.
+
+**The chart's eight hardcoded colours are gone.** Chart.js paints to a canvas and cannot
+inherit a CSS variable, so every colour in it was the dark theme's; anyone on light got a
+chart drawn for a background that was not there. It reads the tokens at build time and
+redraws on `tracktrack:theme` — plus a `MutationObserver`, because the sidebar toggle
+rewrites the attribute directly rather than firing the event.
+
+**A phone target fix that should never have been scoped.** `min-height: 44px` on buttons was
+written as `.sale-form .btn` when the problem was first measured there. The dashboard's own
+"Record a sale" then came out at **33px**, because a page-header rule shrinks buttons on a
+phone and overrides `.btn-lg` entirely. It applies to every button now.
+
+**The query-count test caught a real regression, and the budget was raised on purpose.**
+The dashboard went from 9 queries to 20: measured, Needs attention costs 10 and money owed 1.
+The budget is now 22 with the reasoning written into the test.
+
+This deliberately does *not* follow the badge's precedent. `/products/alerts/count` is
+fetched after load because the sidebar renders on fifty-odd routes and computing alerts for
+all of them would charge pages that never show the number. The dashboard is the page that
+does show them - first on the screen, on a phone - so fetching after load would leave the
+most important panel blank exactly when someone opens the app to see what needs doing.
+
+Left undone deliberately: the route counts low stock for the Restock figure and
+`services/notifications` counts it again. Worth collapsing; not worth holding the page for.
+
+**Three tests were asleep when first written**, all the same shape: an assertion satisfied by
+something other than the thing under test. An `or` across two branches that the fallback
+branch satisfied; `tracktrack:theme` named in the comment explaining why it is listened for;
+and a script slice running to the end of the document, which caught **base.html's own**
+`tracktrack:theme` listener for the sidebar toggle. All three now scope to exactly what they
+mean, and all three falsify.
+
 ## Next Up
 
-1. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
-2. **Stage 2.7** — Smart reorder
-3. **Stage 2.8** — Dashboard rebuild
-4. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
+**Stage 3 is paused after the dashboard.** Units and pricing jump the queue at the user's
+direction (2026-08-17): "of importance and urgency". The remaining redesign pages resume
+after it, because the product form and list are exactly where the new fields live and
+rebuilding them first would mean rebuilding them twice.
+
+1. **Stage U — Sell by the carton.** U1 schema and services, U2 the sale path, U3 the sale
+   form, U4 the product form in plain language, U5 three correctness fixes. See
+   Architecture Decisions below for the model and the research behind it.
+2. **Stage 3 C4** — Products pages to the design (list, add/edit, alerts, low stock)
+3. **Stage 3 C5–C8** — Money owed, purchasing lists, reports, settings, auth, print documents
+4. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
+5. **Stage 2.7** — Smart reorder
+6. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
    registration premise was wrong and the account is pre-approved. See Open Questions:
    no payout has been received, and neither collection path has taken real money yet.
-(Stage 3 is in progress — see In Progress above. Barcode sale entry and branded invoices
-were folded into it; branded invoices already shipped as F-36.)
+
+(Stage 2.8, the dashboard rebuild, shipped as Stage 3 C2. Barcode sale entry and branded
+invoices were folded into Stage 3; branded invoices already shipped as F-36.)
 
 - **Cramped fields on goods receipt.** Reported from the running app with a screenshot.
   On `templates/purchases/receive.html` the "Receiving now" input is about one digit wide and
@@ -596,6 +800,176 @@ were folded into it; branded invoices already shipped as F-36.)
   a layout change, not a width tweak: the inputs should lead. Due in Phase C6 when Purchasing
   is rebuilt; noted here so it is not lost, since it is the page where a typo costs real
   stock. Same shape of problem is likely on the sale form, which has the same pattern.
+
+### Decision — selling by the carton (2026-08-17)
+
+**Asked for directly:** wholesalers "sell by the crate or carton, not one-one like a
+provision store", the price should be the carton price, and the add-product form's unit
+fields are "confusing to a business owner… they wouldn't understand".
+
+**What the app did.** UOM was applied on the buy side *only*. Zero occurrences of `uom.`,
+`base_uom`, `purchase_uom` or `order_unit` anywhere under `sales/`. `sales/routes.py` passed
+`item_form.quantity.data` straight to `stock.deduct_fefo`. Selling three cartons of 24 meant
+typing 72. One price existed, per single, and nothing in the schema or the form said so.
+
+**Research.** Ghanaian packs are 12 and 24: Club Premium Lager 330ml ships 24 × 330ml with
+12-bottle cartons also sold; Voltic 500ml ships in packs of 24 across 500ml/750ml/1.5L/19.5L.
+The distribution industry models three levels — each, inner pack, case pack — and the ERP
+convention is that **buy units and sell units are independent**: an item may be bought in a
+case, pack or each and sold in an each, a case, a pack, or not have all options for sales.
+This app had one conversion applied on one side. That was the gap.
+
+**The model.** Stock stays in base units — that invariant is what makes FEFO, batches and
+`flask reconcile-stock` work, and it does not move. Only what is charged and what is typed
+change:
+
+- `Product.pack_price`, nullable. Null means a carton is `count × unit_price`. A value means
+  a real wholesale carton price, which **cannot be derived** — the gap between ₵48 a bottle
+  and ₵43.75 a bottle inside a ₵1,050 carton is the entire reason a shop buys a carton.
+- `Product.sell_unit` — `base` | `purchase` | `both`.
+- The sale line carries a unit; `deduct_fefo` still receives base units.
+
+**The form drops the jargon.** "Base UoM / Purchase UoM / Units per Purchase UoM" became
+"How is it packed? Carton of 24 bottles", "What do you sell by?", and two prices — with a
+sentence reading back the derived per-piece figure, so a carton price typed into the singles
+box shows ₵1,050.00 a bottle *before* saving rather than weeks later.
+`uom.cost_per_purchase_unit()` already existed for this and was called from nowhere.
+
+### Stage U progress
+
+**U1 — a pack has a price of its own.** `Product.pack_price` (nullable, null means
+`count × unit_price`) and `Product.sell_unit`. Two CHECK constraints, one overdue:
+`units_per_purchase_uom >= 1` was never enforced — `uom.factor()` clamped bad counts at read
+time, hiding broken rows rather than preventing them. `to_base`/`cost_to_base` now check
+`has_conversion` themselves; they were correct only because both call sites happened to guard
+first, and the sale path is the third caller.
+
+**U2 — the sale path.** A sale line carries the unit it was rung up in.
+`SaleItem.quantity` stays base units and `price_at_sale` stays per base unit, so the four
+places that sum `price_at_sale * quantity` — `services/credit.py:47`, `credit/models.py:71`,
+`reports/routes.py:94,100` — keep working untouched, as does every stock query. `sell_unit`
+and `sold_quantity` are added only so the invoice can say "2 cartons" instead of "48
+bottles", and both are frozen history for the same reason `list_price` is.
+
+Three things that would have been wrong and were caught by writing the arithmetic down:
+
+- **F-41, again, on the side the customer pays.** A carton at ₵1,000 for 24 is ₵41.666… a
+  bottle; at two decimals two cartons bill ₵2,000.16 against the ₵2,000.00 agreed.
+  `price_at_sale` and `list_price` widened to `Numeric(14,6)`, matching
+  `PurchaseOrderItem.unit_cost`.
+- **The below-cost floor compared a carton price against a bottle's cost.** Cost is stored
+  per base unit; `requested` is per unit sold. A carton that cost ₵921.60 would have passed
+  the floor at ₵500. It converts with `uom.cost_per_purchase_unit` now.
+- **`pricing.resolve` skipped the `is_finite()` check** that `code-standards.md:131` requires
+  and `api/routes.py:226` already performed. `NumberRange(min=0)` has no max, so
+  `Decimal('Infinity')` reached it and came back out as the charged price.
+
+**The widening leaked, and the suite caught it.** Two tests failed the moment
+`price_at_sale` became `Numeric(14,6)`: a total read `0.300000`, and the overpayment guard
+compared a tendered `800.00` against an outstanding `800.000000` and refused a correct
+payment. Storage precision was right; letting it escape was not. Money now rounds once at
+the boundary where a person reads or pays it — `credit.sale_total()` quantises, and the SQL
+sum in `services/credit.py` rounds. The old test asserting `str(total) == '0.30'` was
+asserting the *column width*, not the guarantee, and now asserts at the money boundary
+instead. A new test covers what a customer is told they owe, which nothing covered before.
+
+**U3 — the control on the page.** A Carton/Single toggle inside the quantity cell, not a
+sixth column: this table fought for width once already and a new column would take it
+straight back off the product name. It shows the business's own words — "pcs" and "carton",
+not "Single" and "Carton" — because those are the words they typed when they set the product
+up. It appears only where there is a real choice, and `units` is filtered server-side so the
+control cannot offer what the server would refuse.
+
+Everything the page needs travels in the **existing** `product_prices` variable rather than a
+new one. That template is rendered from five places in this route, and the purchase order
+page has already shipped a bug where one path forgot a variable the template required.
+
+Measured at 375 / 1024 / 1280 / 1440: quantity holds four digits everywhere, the product name
+still fits, the toggle never clips, nothing under 44px on a phone, no horizontal overflow.
+
+**The contrast sweep earned its keep again**, and cost an hour doing it. The chosen unit
+rendered at 2.43:1 on dark and 2.66:1 on light — the word saying whether you are selling one
+bottle or twenty-four, unreadable on its own highlight. `background` from that same rule
+applied; only `color` lost. Established: the rule matches, `--on-accent` resolves on the
+element, the winning declaration is inside `style.css` (disabling it changes the result),
+appending an identical rule later does not win, `!important` does, and no `!important` colour
+rule in the file matches that element. It is now `!important` with all of that written beside
+it, because the readability of that word is not worth more of the budget than it already
+took. **A large part of the hour was spent measuring a cached stylesheet** — every reading
+after every edit came back identical, which is the signature, and I read it as "the fix
+failed" four times before recognising it.
+
+**U4 — the product form in the owner's words.** The three fields that read "Base UoM",
+"Purchase UoM" and "Units per Purchase UoM" are now a sentence you fill in — *One is called
+`bottle` sold in packs of `24` called a `carton`* — and underneath it the form reads back what
+that means: *"You sell this by the carton of 24 bottles. A carton is ₵1,050.00 — that works
+out at ₵43.75 a bottle."*
+
+That sentence exists for one specific mistake. A carton price typed into the single price box
+produced a product listing at 24× its real price, and nothing on the old form said which unit
+either box was in. It now answers back *"Check the single price - ₵1,050.00 for one bottle
+looks like a carton price"* before Save rather than after the first sale.
+
+The pack price and the sell-by dropdown appear only once a real pack is described, and the
+dropdown speaks the words just typed — "bottles only / cartons only / Both".
+
+**Field names are unchanged deliberately.** `tests/test_audit.py` posts this exact set;
+renaming them would be a schema-shaped change dressed up as wording.
+
+**A nonsense setup cannot be saved.** "Both" on a product whose pack is one item, or whose
+pack is named the same as the item, saves as singles-only — otherwise the sale form offers a
+carton the server then refuses, which reads as the app being broken rather than the product
+being set up wrong. A blank pack price stays **null**, not zero: null means "a pack is count
+× the single price", zero would mean free.
+
+**Two gaps of my own, found by the tests I had just written.** The form rendered a reason for
+exactly *one* of seventeen fields, so a refused product came back looking identical to the
+one sent — all of them explain themselves now. And the sentence had replaced the labels
+entirely, leaving a screen reader three unlabelled boxes wedged between loose words; each
+keeps a real label, visually hidden.
+
+**U5 — purchasing is pack-only, and the receipt loophole is shut.**
+
+Reported from the running app: *"no wholesaler will procure or restock in single bottles.
+Everything comes in crates or carton or box."* Correct, and it made the page simpler rather
+than more complex — the unit dropdown was asking a question with one answer. There is no
+control now: the line states its unit in the product's own word, the server **derives** it,
+and a posted value is ignored. That is a stronger guarantee than gating a control, because
+there is nothing left to post past. A product with no real pack is still ordered in singles.
+
+The unit is consistent across the app now: declared once on the product, stated on
+purchasing, carried through receiving, and chosen per line only on the sale — the one place
+both genuinely happen.
+
+**The goods receipt gate.** It checked the product but never the plan, unlike order creation
+twenty lines above it. My first test of it used the free plan, which cannot open that page at
+all — so nothing was received and I read that as the gate working. The real case is **Shop**:
+`purchase_orders` is basic tier and `uom_conversion` is standard, so Shop can order and
+cannot convert. That is the plan the test uses.
+
+**Also reported: a three-figure price losing its last digit on the sale form.** Measured, the
+box had 40px of usable space when even "44.16" needs 41 — *every* price was clipped, and the
+four-figure carton prices only made it visible. Fixed and checked at all four widths.
+
+Twice in a row now an `<input>` with `width: auto` has ballooned its column: the intrinsic
+size is about twenty characters, so the price column took 265px and stole it from the product
+name, exactly as the quantity box did. Both carry an explicit basis.
+
+**A bug I wrote and caught:** the "is this in packs" flag was computed one line above the
+variable it reads. `var` hoists the declaration but not the value, so it was silently false —
+the conversion hint vanished and the supplier comparison read ₵43.07 more instead of ₵0.75,
+measuring a carton against a bottle's best price.
+
+**A falsification that needs two mutations, recorded so it is not mistaken for a sleeping
+test.** "A pack in name only is not multiplied" is protected in two places — the route
+refuses to set the unit, `uom.to_base` refuses to act on it — so breaking either alone comes
+back green. Both together go red.
+
+**A gate that is defensive rather than testable, recorded so nobody deletes it as dead.**
+The API path checks `uom_conversion` before honouring a posted unit, but `offline` and
+`uom_conversion` are both `standard` tier, so every plan that can sync also has conversion.
+They are two features sharing a tier, not one feature — and a queued sale can arrive days
+after a downgrade. The product-level half of that gate *is* reachable and is tested.
 
 ## Open Questions
 
