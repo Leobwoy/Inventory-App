@@ -40,14 +40,18 @@
                     {% endif %}
                 </td>
                 <td data-label="SKU" class="font-monospace small text-muted">{{ product.sku }}</td>
+                {# All three in the same unit, or the comparison between them is
+                   meaningless. The reorder level is typed in cartons on the product
+                   form, so reading it back in bottles here was the same figure in
+                   two different currencies. #}
                 <td data-label="In stock" class="text-end">
                     <span class="{{ 'text-danger fw-bold' if (product.quantity_in_stock or 0) <= 0 else 'text-warning' }}">
-                        {{ product.quantity_in_stock or 0 }}
+                        {{ uom.in_packs(product, product.quantity_in_stock or 0) }}
                     </span>
                 </td>
-                <td data-label="Reorder at" class="text-end text-muted">{{ product.min_stock_alert or 0 }}</td>
+                <td data-label="Reorder at" class="text-end text-muted">{{ uom.in_packs(product, product.min_stock_alert or 0) }}</td>
                 <td data-label="Short by" class="text-end">
-                    {{ (product.min_stock_alert or 0) - (product.quantity_in_stock or 0) }}
+                    {{ uom.in_packs(product, (product.min_stock_alert or 0) - (product.quantity_in_stock or 0)) }}
                 </td>
                 <td data-label="" class="cell-actions text-end">
                     <a href="{{ url_for('products.edit_product', product_id=product.id) }}"

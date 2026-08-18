@@ -30,11 +30,13 @@
                     <td data-label="SKU" class="font-monospace text-muted">{{ product.sku }}</td>
                     <td data-label="Description" class="text-muted small">{{ product.description }}</td>
                     <td data-label="Price" class="fw-medium">₵{{ product.unit_price }}</td>
+                    {# A stock report is checked against a physical count, so this one
+                       carries the base total as well as the cartons. #}
                     <td data-label="In Stock" class="text-end">
                         {% if product.quantity_in_stock <= product.min_stock_alert %}
-                            <span class="badge bg-danger fs-6"><i class="bi bi-exclamation-triangle me-1"></i> {{ product.quantity_in_stock }}</span>
+                            <span class="badge bg-danger fs-6"><i class="bi bi-exclamation-triangle me-1"></i> {{ uom.describe(product, product.quantity_in_stock) }}</span>
                         {% else %}
-                            <span class="badge bg-success fs-6">{{ product.quantity_in_stock }}</span>
+                            <span class="badge bg-success fs-6">{{ uom.describe(product, product.quantity_in_stock) }}</span>
                         {% endif %}
                     </td>
                 </tr>

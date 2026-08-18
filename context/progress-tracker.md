@@ -1159,6 +1159,35 @@ sentence before anything is saved.
 **The invoice had no test coverage at all** before this - the pages that a customer
 physically holds. Seven now.
 
+**W5 — stock reads in the unit the business counts in.** Storage is unchanged and stays
+unchanged; what moved is that a wholesaler no longer divides by 24 in their head to know
+whether they are about to run out. Product list, low stock, stock report, goods receipt and
+the low-stock alert all read *"13 cartons + 6 bottles"*.
+
+**The remainder is kept, at the user's direction.** A carton gets broken open the first time
+somebody buys three bottles, and those six loose bottles are real stock on the floor -
+rounding them away would put the books out and hide it. Under one carton reads plainly as
+*"18 bottles"* rather than *"0 cartons + 18 bottles"*.
+
+**Two helpers, because two screens want different things.** `uom.in_packs` is short, for
+badges and table cells. `uom.describe` adds the base-unit total, for the stock report -
+which is the page somebody stands in front of shelves with, checking against a physical
+count.
+
+**The low-stock page was comparing two different currencies.** Since W2 the reorder level is
+*typed* in cartons; this page read it back in bottles, next to a stock figure also in
+bottles, and called the difference "short by". All three columns are in cartons now.
+
+**`describe` had disagreed with its own docstring since U1** - the example said "10 cartons
++ 6 pcs" and the code produced "10 carton". `uom.plural()` from W4 fixes it, and one test
+that had asserted the singular now asserts what the docstring always claimed.
+
+**A falsification that looked like a sleeping test and was not.** Mutating the stock report
+came back green because the template has the same expression in both branches of an
+if/else and the harness replaced only the first - the unrendered one. Replacing both goes
+red. Worth recording: **a mutation that lands in a branch the test does not exercise proves
+nothing**, and `str.replace(old, new, 1)` makes that easy to do by accident.
+
 ## Open Questions
 
 - **Self-service password reset still does not exist (F-43), but the lockout risk is

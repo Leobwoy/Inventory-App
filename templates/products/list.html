@@ -67,14 +67,18 @@
                         </td>
                         <td data-label="SKU" class="font-monospace text-muted">{{ product.sku }}</td>
                         <td data-label="Price" class="fw-medium">₵{{ product.unit_price }}</td>
-                        <td data-label="Stock">
+                        {# Counted in what the business counts in. "318 in stock" is a
+                           number a wholesaler has to divide before it means anything;
+                           the remainder is kept because a broken carton is real stock
+                           sitting loose on the floor. #}
+                        <td data-label="Stock" title="{{ uom.describe(product, product.quantity_in_stock) }}">
                             {% if product.quantity_in_stock <= product.min_stock_alert %}
                                 <span class="badge bg-danger">
-                                    <i class="bi bi-exclamation-circle me-1"></i> {{ product.quantity_in_stock }} left (Low)
+                                    <i class="bi bi-exclamation-circle me-1"></i> {{ uom.in_packs(product, product.quantity_in_stock) }} left (Low)
                                 </span>
                             {% else %}
                                 <span class="badge bg-success">
-                                    <i class="bi bi-check-circle me-1"></i> {{ product.quantity_in_stock }} in stock
+                                    <i class="bi bi-check-circle me-1"></i> {{ uom.in_packs(product, product.quantity_in_stock) }} in stock
                                 </span>
                             {% endif %}
                         </td>

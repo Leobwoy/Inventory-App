@@ -174,5 +174,8 @@ def test_nothing_about_buying_changed(carton):
 
     assert uom.factor(product) == 24
     assert uom.has_conversion(product) is True
-    assert uom.describe(product, 246) == '10 carton + 6 bottles (246 bottles)'
+    # W5: 'carton' is what the business typed and 'cartons' is what ten of
+    # them are called. This asserted the singular, against describe's own
+    # docstring example, since U1.
+    assert uom.describe(product, 246) == '10 cartons + 6 bottles (246 bottles)'
     assert uom.cost_per_purchase_unit(product, '2.00') == Decimal('48.00')

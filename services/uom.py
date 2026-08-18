@@ -75,20 +75,45 @@ def split(product, base_quantity):
     return divmod(base_quantity, per)
 
 
-def describe(product, base_quantity):
-    """Human-readable quantity, e.g. '10 cartons + 6 pcs (246 pcs)'."""
+def in_packs(product, base_quantity):
+    """A stock figure in the unit the business counts in: '13 cartons + 6 bottles'.
+
+    The remainder is kept rather than rounded, at the user's direction. A
+    wholesaler genuinely holds part-cartons - a carton gets broken open the
+    first time somebody buys three bottles - and rounding it away would put
+    the books out and hide the stock that is actually loose on the floor.
+
+    Short on purpose: this goes in table cells and badges. `describe` adds the
+    base-unit total for the places that need to reconcile against a count.
+    """
     base_quantity = int(base_quantity or 0)
-    base_unit = product.base_uom or 'pcs'
     if not has_conversion(product):
-        return f'{base_quantity} {base_unit}'
+        return quantity_label(product, base_quantity, BASE)
 
     whole, remainder = split(product, base_quantity)
-    purchase_unit = product.purchase_uom or 'unit'
     if whole and remainder:
-        return f'{whole} {purchase_unit} + {remainder} {base_unit} ({base_quantity} {base_unit})'
+        return (f'{quantity_label(product, whole, PURCHASE)} + '
+                f'{quantity_label(product, remainder, BASE)}')
     if whole:
-        return f'{whole} {purchase_unit} ({base_quantity} {base_unit})'
-    return f'{base_quantity} {base_unit}'
+        return quantity_label(product, whole, PURCHASE)
+    return quantity_label(product, remainder, BASE)
+
+
+def describe(product, base_quantity):
+    """As `in_packs`, plus the base-unit total: '10 cartons + 6 pcs (246 pcs)'.
+
+    For the places that have to reconcile against a physical count, where the
+    number of individual items is the thing being checked.
+    """
+    base_quantity = int(base_quantity or 0)
+    if not has_conversion(product):
+        return quantity_label(product, base_quantity, BASE)
+
+    whole, _remainder = split(product, base_quantity)
+    if not whole:
+        return quantity_label(product, base_quantity, BASE)
+    return (f'{in_packs(product, base_quantity)} '
+            f'({quantity_label(product, base_quantity, BASE)})')
 
 
 def cost_to_base(product, cost, unit=BASE):
