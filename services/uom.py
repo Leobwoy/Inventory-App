@@ -223,6 +223,18 @@ def plural(word):
     return word + 's'
 
 
+def packing(product):
+    """How this product is packed, in one phrase: 'carton of 24', or 'bottle'.
+
+    For the column that has to say what unit the numbers beside it are in. A
+    spreadsheet cannot hold "13 cartons + 6 bottles" in a cell somebody sums,
+    so exports name the unit once and keep every figure numeric.
+    """
+    if not has_conversion(product):
+        return unit_label(product, BASE)
+    return f'{unit_label(product, PURCHASE)} of {factor(product)}'
+
+
 def quantity_label(product, count, unit=BASE):
     """A quantity as it should be printed: "2 cartons", "1 carton", "48 pcs"."""
     count = int(count or 0)

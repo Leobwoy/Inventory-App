@@ -1188,6 +1188,37 @@ if/else and the harness replaced only the first - the unrendered one. Replacing 
 red. Worth recording: **a mutation that lands in a branch the test does not exercise proves
 nothing**, and `str.replace(old, new, 1)` makes that easy to do by accident.
 
+**W6 — reports and exports name their units.** Eleven headers named none. The visible
+consequence was already reachable: an order placed as **10 cartons** exported as
+*"Ordered: 240"*, so anyone reconciling the sheet against a delivery note was comparing two
+different things. One header list feeds PDF, Excel and CSV per report, so each fix landed in
+three formats.
+
+**The constraint that shaped the whole item: a spreadsheet cell has to stay summable.**
+*"13 cartons + 6 bottles"* reads well on a page and cannot be totalled, sorted or filtered.
+So the exports name the unit once in a column of its own - *"Sold by: carton of 24"* - and
+every figure beside it stays a number, with whole packs and the loose remainder in separate
+columns and the singles total kept for checking against a physical count. This is the one
+place in Stage W where the page and the export deliberately differ in form while agreeing
+on substance.
+
+**A row that does not divide exactly falls back to singles for every column.** Reporting
+whole cartons and dropping the remainder would have been a report that quietly loses stock,
+which is worse than one using a clumsier unit. Orders are pack-only since U5 so this should
+never fire on new data; it exists for rows that predate that rule.
+
+**The on-screen tables moved with the exports**, including two that had been left showing a
+per-bottle price beside a carton stock count - the product list and the stock report. A row
+carrying two units is the thing this stage exists to remove.
+
+**The summary row is hand-built from literal blanks**, so adding a column silently shifts
+the total under the wrong heading. There is a test asserting every row has as many cells as
+there are headers, and that the label still sits beside its number.
+
+**A permission test broke on the rename** - it asserted the literal header "Cost Price". The
+guarantee it protects is unaffected (the column is omitted entirely for staff who may not
+see cost), so it asserts the new name plus "no column with 'cost' in it by any other name".
+
 ## Open Questions
 
 - **Self-service password reset still does not exist (F-43), but the lockout risk is

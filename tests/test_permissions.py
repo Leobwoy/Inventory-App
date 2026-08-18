@@ -256,14 +256,18 @@ def test_export_omits_cost_price_for_unpermitted_staff(business, make_staff, mak
     body = inventory.post('/products/bulk_action',
                           data={'action': 'export_csv', 'product_ids': [str(product.id)]}
                           ).get_data(as_text=True)
-    assert 'Cost Price' not in body
+    # W6 renamed this header to "Cost each", because the figure under it is now
+    # per carton rather than per bottle. The guarantee is unchanged: the column
+    # is absent entirely rather than blanked, so there is nothing to widen.
+    assert 'Cost each' not in body
+    assert 'cost' not in body.splitlines()[0].lower(), 'a cost column by another name'
     assert sku in body
 
     manager = make_staff(business, 'Manager', 'mgr2@x.example.com')
     manager_body = manager.post('/products/bulk_action',
                                 data={'action': 'export_csv', 'product_ids': [str(product.id)]}
                                 ).get_data(as_text=True)
-    assert 'Cost Price' in manager_body
+    assert 'Cost each' in manager_body
 
 
 def test_a_supplier_with_purchase_history_cannot_be_deleted(register, make_product, make_po):

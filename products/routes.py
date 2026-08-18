@@ -664,26 +664,40 @@ def bulk_action():
         # The export is the easiest way to walk out with margins, so it obeys the
         # same gate as the screen - the column is omitted entirely, not blanked.
         show_cost = current_user.can('products.cost_price.view')
-        headers = ['Name', 'SKU', 'Brand', 'Item Group', 'Variant']
+        # Every money and quantity column here is per *pack* where there is one,
+        # because that is what the business types and quotes. The unit is named
+        # once in its own column so the numbers stay numeric and summable, and
+        # the singles total is kept for checking against a physical count.
+        headers = ['Name', 'SKU', 'Brand', 'Item Group', 'Variant', 'Sold by']
         if show_cost:
-            headers.append('Cost Price')
-        headers += ['Unit Price', 'Quantity in Stock']
+            headers.append('Cost each')
+        headers += ['Price each', 'In stock', 'Loose singles', 'Singles in total']
 
         data = []
         for p in products:
+            unit = uom.PURCHASE if uom.has_conversion(p) else uom.BASE
+            whole, loose = uom.split(p, p.quantity_in_stock)
             row = [
                 p.name,
                 p.sku,
                 p.brand.name if p.brand else '',
                 p.item_group.name if p.item_group else '',
                 p.variant_label,
+                uom.packing(p),
             ]
             if show_cost:
-                # Stored to six decimals because it is derived from a pack cost;
-                # nobody wants to read 41.666667 in a spreadsheet. Rounded here
-                # rather than stored short, so the round trip stays exact.
-                row.append(round(float(p.cost_price or 0), 2))
-            row += [float(p.unit_price or 0), p.quantity_in_stock]
+                # cost_price is stored to six decimals because it is derived
+                # from a pack cost; nobody wants to read 41.666667 in a
+                # spreadsheet. Rounded here rather than stored short, so the
+                # round trip stays exact.
+                row.append(round(float(uom.cost_per_purchase_unit(p, p.cost_price)
+                                       if unit == uom.PURCHASE else (p.cost_price or 0)), 2))
+            row += [
+                float(uom.price_for(p, unit)),
+                whole if unit == uom.PURCHASE else p.quantity_in_stock,
+                loose if unit == uom.PURCHASE else 0,
+                p.quantity_in_stock,
+            ]
             data.append(row)
         df = pd.DataFrame(data, columns=headers)
 

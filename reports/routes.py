@@ -14,6 +14,40 @@ from reportlab.platypus import Table, TableStyle
 import pandas as pd
 from flask_login import login_required, current_user
 from auth.decorators import permission_required
+from services import uom
+
+
+def _order_view(product, *base_quantities):
+    """Which unit a purchase line's numbers should be shown in.
+
+    Packs, normally: orders are placed and received in cartons, so the figures
+    divide exactly. A row that does *not* divide exactly falls back to singles
+    for every column, rather than reporting whole cartons and quietly dropping
+    the remainder - a report that loses stock is worse than one using a less
+    convenient unit, and legacy rows predate the pack-only ordering rule.
+    """
+    if product is None or not uom.has_conversion(product):
+        return uom.BASE
+    per = uom.factor(product)
+    if any(int(q or 0) % per for q in base_quantities):
+        return uom.BASE
+    return uom.PURCHASE
+
+
+def _in_units(product, base_quantity, unit):
+    """A stored base quantity expressed in `unit`."""
+    base_quantity = int(base_quantity or 0)
+    if unit != uom.PURCHASE or product is None:
+        return base_quantity
+    return base_quantity // uom.factor(product)
+
+
+def _cost_in_units(product, base_cost, unit):
+    """A stored per-single cost expressed per `unit`."""
+    if unit != uom.PURCHASE or product is None:
+        return base_cost
+    return uom.cost_per_purchase_unit(product, base_cost)
+
 
 def generate_pdf_report(title, headers, data_rows):
     buffer = io.BytesIO()
@@ -92,16 +126,22 @@ def sales_report():
                 continue
                 
             total += item.price_at_sale * item.quantity
+            # Numbers stay numeric and the unit gets a column of its own. A
+            # spreadsheet cell holding "2 cartons" cannot be summed, and a
+            # column headed "Quantity" holding 48 for a sale of 2 cartons is
+            # the round trip that does not close.
+            sold, sold_unit = item.sold_as
             data_rows.append([
-                str(sale.sale_date), 
-                item.product.name, 
-                item.quantity, 
-                float(item.price_at_sale), 
+                str(sale.sale_date),
+                item.product.name,
+                sold_unit,
+                sold,
+                float(item.price_per_sold_unit),
                 float(item.price_at_sale * item.quantity)
             ])
-            
-    headers = ['Date', 'Product', 'Quantity', 'Unit Price', 'Total']
-    data_rows.append(['', '', '', 'Summary Total', float(total)])
+
+    headers = ['Date', 'Product', 'Sold by', 'Quantity', 'Price each', 'Total']
+    data_rows.append(['', '', '', '', 'Summary Total', float(total)])
     export = request.args.get('export')
     if export and not current_user.can('reports.export'):
         flash('You do not have permission to export reports.', 'danger')
@@ -147,19 +187,29 @@ def purchases_report():
     purchases = query.order_by(PurchaseOrder.order_date.desc()).all()
     total = sum((item.unit_cost or 0) * item.quantity_ordered for item in purchases)
     products = Product.query.filter_by(business_id=current_user.business_id).all()
-    headers = ['Date', 'PO', 'Product', 'Ordered', 'Received', 'Unit Cost', 'Supplier', 'Status', 'Total']
-    data_rows = [[
-        str(item.purchase_order.order_date),
-        f'PO-{item.po_id}',
-        item.product.name if item.product else '',
-        item.quantity_ordered,
-        item.quantity_received or 0,
-        float(item.unit_cost or 0),
-        item.purchase_order.supplier.name if item.purchase_order.supplier else '',
-        item.purchase_order.status,
-        float((item.unit_cost or 0) * item.quantity_ordered),
-    ] for item in purchases]
-    data_rows.append(['', '', '', '', '', '', '', 'Summary Total', float(total)])
+    # An order placed as 10 cartons exported as "Ordered: 240", which is the
+    # round trip that was already visible to anyone reconciling a delivery note
+    # against this sheet. Quantities and the cost beside them are in the unit
+    # the order was actually placed in; the line total is unchanged, because
+    # cartons x cost-per-carton is the same money as bottles x cost-per-bottle.
+    headers = ['Date', 'PO', 'Product', 'Ordered by', 'Ordered', 'Received',
+               'Cost each', 'Supplier', 'Status', 'Total']
+    data_rows = []
+    for item in purchases:
+        unit = _order_view(item.product, item.quantity_ordered, item.quantity_received)
+        data_rows.append([
+            str(item.purchase_order.order_date),
+            f'PO-{item.po_id}',
+            item.product.name if item.product else '',
+            uom.unit_label(item.product, unit) if item.product else '',
+            _in_units(item.product, item.quantity_ordered, unit),
+            _in_units(item.product, item.quantity_received or 0, unit),
+            float(_cost_in_units(item.product, item.unit_cost or 0, unit)),
+            item.purchase_order.supplier.name if item.purchase_order.supplier else '',
+            item.purchase_order.status,
+            float((item.unit_cost or 0) * item.quantity_ordered),
+        ])
+    data_rows.append(['', '', '', '', '', '', '', '', 'Summary Total', float(total)])
     export = request.args.get('export')
     if export and not current_user.can('reports.export'):
         flash('You do not have permission to export reports.', 'danger')
@@ -181,8 +231,21 @@ def purchases_report():
 @permission_required('reports.view')
 def stock_report():
     products = Product.query.filter_by(business_id=current_user.business_id).all()
-    headers = ['Name', 'SKU', 'Description', 'Unit Price', 'Quantity in Stock']
-    data_rows = [[p.name, p.sku, p.description, float(p.unit_price), p.quantity_in_stock] for p in products]
+    # Whole packs and the loose remainder in separate numeric columns, plus the
+    # singles total to check a physical count against. One column reading
+    # "13 cartons + 6 bottles" would be unsummable.
+    headers = ['Name', 'SKU', 'Description', 'Sold by', 'Price each',
+               'In stock', 'Loose singles', 'Singles in total']
+    data_rows = []
+    for p in products:
+        whole, loose = uom.split(p, p.quantity_in_stock)
+        data_rows.append([
+            p.name, p.sku, p.description, uom.packing(p),
+            float(uom.price_for(p, uom.PURCHASE if uom.has_conversion(p) else uom.BASE)),
+            whole if uom.has_conversion(p) else p.quantity_in_stock,
+            loose if uom.has_conversion(p) else 0,
+            p.quantity_in_stock,
+        ])
     export = request.args.get('export')
     if export and not current_user.can('reports.export'):
         flash('You do not have permission to export reports.', 'danger')

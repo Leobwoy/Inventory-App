@@ -19,8 +19,8 @@
                     <th>Product Name</th>
                     <th>SKU</th>
                     <th>Description</th>
-                    <th>Unit Price (₵)</th>
-                    <th class="text-end">Quantity in Stock</th>
+                    <th>Price each (₵)</th>
+                    <th class="text-end">In stock</th>
                 </tr>
             </thead>
             <tbody>
@@ -29,7 +29,8 @@
                     <td data-label="Product" class="fw-bold">{{ product.name }}</td>
                     <td data-label="SKU" class="font-monospace text-muted">{{ product.sku }}</td>
                     <td data-label="Description" class="text-muted small">{{ product.description }}</td>
-                    <td data-label="Price" class="fw-medium">₵{{ product.unit_price }}</td>
+                    {# The pack price, matching the "In stock" column beside it. #}
+                    <td data-label="Price" class="fw-medium">₵{{ '%.2f'|format(uom.price_for(product, 'purchase' if uom.has_conversion(product) else 'base')) }}</td>
                     {# A stock report is checked against a physical count, so this one
                        carries the base total as well as the cartons. #}
                     <td data-label="In Stock" class="text-end">
