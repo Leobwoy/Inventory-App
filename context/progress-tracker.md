@@ -781,11 +781,16 @@ rebuilding them first would mean rebuilding them twice.
 1. **Stage U — Sell by the carton.** U1 schema and services, U2 the sale path, U3 the sale
    form, U4 the product form in plain language, U5 three correctness fixes. See
    Architecture Decisions below for the model and the research behind it.
-2. **Stage 3 C4** — Products pages to the design (list, add/edit, alerts, low stock)
-3. **Stage 3 C5–C8** — Money owed, purchasing lists, reports, settings, auth, print documents
-4. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
-5. **Stage 2.7** — Smart reorder
-6. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
+2. **Stage W — The carton *is* the unit.** Follows directly from U, at the user's
+   correction (2026-08-18): U treated the carton as a second price alongside the single.
+   That was still backwards. W1 backup data loss, W2 the carton becomes what you type,
+   W3 the purchase order names its unit, W4 the invoice, W5 stock reads in cartons,
+   W6 exports name their units, W7 the sale opens on Carton.
+3. **Stage 3 C4** — Products pages to the design (list, add/edit, alerts, low stock)
+4. **Stage 3 C5–C8** — Money owed, purchasing lists, reports, settings, auth, print documents
+5. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
+6. **Stage 2.7** — Smart reorder
+7. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
    registration premise was wrong and the account is pre-approved. See Open Questions:
    no payout has been received, and neither collection path has taken real money yet.
 
@@ -970,6 +975,57 @@ The API path checks `uom_conversion` before honouring a posted unit, but `offlin
 `uom_conversion` are both `standard` tier, so every plan that can sync also has conversion.
 They are two features sharing a tier, not one feature — and a queued sale can arrive days
 after a downgrade. The product-level half of that gate *is* reachable and is tested.
+
+### Decision — the carton is the unit, not a second price (2026-08-18)
+
+Stage U gave the carton a price of its own. Asked why the purchase order form showed a carton
+price beside a per-bottle comparison, the user named the real error rather than the symptom:
+
+> *"We've been highly mistaken since the onset. The main unit of measurement here should be
+> the carton. We don't care what a single bottle costs, because different retailers charge
+> different prices for the same bottle — one shop sells Bigoo at ₵3.00 and the next at ₵3.50.
+> What we care about is the carton. Selling a single bottle belongs on the sales side; it
+> should not reach the purchase order side."*
+
+Traceable to one cause: `services/uom.py` was built around the rule *everything is stored in
+base units*, which is right for storage, and that assumption leaked upward into every screen
+until the app was asking a wholesaler to think in bottles.
+
+**Storage does not move.** Quantities stay in base units — that is what lets a delivery
+arrive as "10 cartons and 6 loose" and what makes FEFO and batch expiry work. What changes is
+everything typed and everything read.
+
+`Product.unit_price` stays `NOT NULL` and stays stored; it simply stops being *typed*. The
+form asks the carton price and the route derives the per-bottle figure via
+`uom.per_base_price()`, which already existed and was called from nowhere. That deliberately
+avoids the null-handling blast radius: price sorting (`products/routes.py:26-27`, where NULL
+sorts unpredictably on Postgres), the offline catalogue payload, and `test_queries.py:185`.
+`services/pricing.py` needs no change at all — it reads `uom.price_for()` and never touches
+`unit_price`.
+
+### Stage W progress
+
+**W1 — the backup was losing the carton price.** Found while mapping, not by a report, and
+done first because it is live data loss rather than a wrong label. `EXPORT_SPEC` omitted
+`pack_price` and `sell_unit` from products, and `list_price`, `sell_unit` and `sold_quantity`
+from sale lines. Every archive taken since Stage U shipped silently dropped the wholesale
+price and any record that a sale was rung up in cartons; restoring one repriced a whole
+catalogue at bottle rates and turned two cartons back into forty-eight bottles.
+
+**A claimed bug that falsification disproved, kept because the write-up is the point.** The
+restore path collapsed *absent* and *blank* into the same value — `record.get(column) or ''`,
+and `_coerce` turns `''` into `None`. I recorded that as a second bug: an archive from before
+`sell_unit` existed would pass `None` explicitly, override the model default and fail NOT
+NULL. Reverting the guard left the test green, so I probed the insert directly: SQLAlchemy
+treats an explicitly-`None` attribute as unset and fires the column default anyway —
+`sell_unit` arrives as `'base'`. The failure cannot happen today.
+
+The guard stays, with the comment rewritten to say that. It rescues *defaulted* columns and
+nothing else, so the day a NOT NULL column without a default is added, every older archive
+would stop importing — that is worth two lines. The test stays too, saying in its own
+docstring that it passed before the change, because a test that cannot go red is worth
+keeping only when it is honest about what it pins: the guarantee that an archive from before
+the carton columns still restores.
 
 ## Open Questions
 
