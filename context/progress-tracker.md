@@ -557,12 +557,16 @@ was measurement error, and was wrong. Measure against the colour actually in the
 
 ## In Progress
 
-- **Stage 3 — the interface redesign.** Shell complete (C1): tokenised palette, light theme
-  with a per-user switch, the sidebar narrowed to a 140px icon-and-label rail, and phone
-  navigation moved to a bottom bar. **C3, the sale form, is complete** — see below.
-  **C2, the dashboard, is still the old layout** and was skipped by mistake, not by
-  decision; it is the next thing to pick up. The remaining pages are still old layouts in
-  new colours.
+- **Stage 3 — the interface redesign.** C1 the shell (tokenised palette, light theme with a
+  per-user switch, the sidebar narrowed to a 140px icon-and-label rail, phone navigation
+  moved to a bottom bar), **C2 the dashboard** (commit `1b6a1a1`, "Rebuild the dashboard,
+  and stop the chart ignoring the theme") and **C3 the sale form** are all complete. This
+  entry claimed C2 was "still the old layout and skipped by mistake" long after it shipped;
+  corrected 2026-08-18. **C4 onwards is the next thing to pick up.** The remaining pages are
+  still old layouts in new colours.
+- **Stages U and W are complete** (2026-08-18). Everything typed and everything read is now
+  in the unit a wholesaler works in. That is why the redesign was paused here: C4 is the
+  products pages, which is exactly where the new fields live.
 - **Answered 2026-08-13: Stage 3 first, as a full redesign.** 2.6 and 2.7 both score
   suppliers from purchase history and need 20–30 completed orders before they show
   anything — with no real customers yet, both would ship as empty screens. The user chose
@@ -773,24 +777,27 @@ mean, and all three falsify.
 
 ## Next Up
 
-**Stage 3 is paused after the dashboard.** Units and pricing jump the queue at the user's
-direction (2026-08-17): "of importance and urgency". The remaining redesign pages resume
-after it, because the product form and list are exactly where the new fields live and
-rebuilding them first would mean rebuilding them twice.
+**Units and pricing are finished; Stage 3 resumes.** Stage 3 was paused after the dashboard
+at the user's direction (2026-08-17): "of importance and urgency". Stages U and W are both
+complete as of 2026-08-18, so the redesign picks up where it stopped - and picks up on the
+right side of the inversion, which is why it was paused here. Rebuilding the product pages
+first would have meant rebuilding them twice.
 
-1. **Stage U — Sell by the carton.** U1 schema and services, U2 the sale path, U3 the sale
-   form, U4 the product form in plain language, U5 three correctness fixes. See
-   Architecture Decisions below for the model and the research behind it.
-2. **Stage W — The carton *is* the unit.** Follows directly from U, at the user's
-   correction (2026-08-18): U treated the carton as a second price alongside the single.
-   That was still backwards. W1 backup data loss, W2 the carton becomes what you type,
-   W3 the purchase order names its unit, W4 the invoice, W5 stock reads in cartons,
-   W6 exports name their units, W7 the sale opens on Carton.
-3. **Stage 3 C4** — Products pages to the design (list, add/edit, alerts, low stock)
-4. **Stage 3 C5–C8** — Money owed, purchasing lists, reports, settings, auth, print documents
-5. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
-6. **Stage 2.7** — Smart reorder
-7. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
+~~**Stage U — Sell by the carton.**~~ **Done.** U1 schema and services, U2 the sale path,
+U3 the sale form, U4 the product form in plain language, U5 three correctness fixes.
+
+~~**Stage W — The carton *is* the unit.**~~ **Done.** Followed directly from U, at the
+user's correction: U had treated the carton as a second price beside the single, which was
+still backwards. W1 backup data loss, W2 the carton becomes what you type, W3 the purchase
+order names its unit, W4 the invoice, W5 stock reads in cartons, W6 exports name their
+units, W7 the sale opens on Carton. Seven commits, each falsified. Two gaps left open
+deliberately - the offline catalogue payload and cost reconciliation - both recorded above.
+
+1. **Stage 3 C4** — Products pages to the design (list, add/edit, alerts, low stock)
+2. **Stage 3 C5–C8** — Money owed, purchasing lists, reports, settings, auth, print documents
+3. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
+4. **Stage 2.7** — Smart reorder
+5. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
    registration premise was wrong and the account is pre-approved. See Open Questions:
    no payout has been received, and neither collection path has taken real money yet.
 
@@ -1248,6 +1255,20 @@ exactly, so `price_at_sale x quantity` is 460.000008. Asserted at the boundary w
 person reads or pays it - the same rule U2 established after the widening leaked.
 
 ## Open Questions
+
+- **The offline catalogue still prices in bottles (`api/routes.py:138-140`).** Deliberately
+  left out of Stage W, and the one place in the app that has not inverted. The payload an
+  installed phone caches ships `unit_price` and no pack fields, so a device selling offline
+  cannot price a carton locally. It cannot simply be changed: an installed PWA holds that
+  payload and may sync days later, so the change needs a **payload version** and a migration
+  path for sales already queued against the old shape. Until then, offline selling is
+  per-bottle only. The server re-validates price on sync, so nothing is mispriced - it is a
+  capability gap, not a correctness one.
+- **`Product.cost_price` is what somebody typed, not what was paid.** The product form asks
+  the carton cost and stores it divided; goods receipt records the real `unit_cost` on the
+  purchase order line and never writes it back. So margin reporting uses an estimate while
+  the actual figure sits one join away. Reconciling them is a real feature (which cost -
+  latest, average, FEFO-matched to the batch sold?) and needs a decision before code.
 
 - **Self-service password reset still does not exist (F-43), but the lockout risk is
   closed.** Recovery is now done by a person rather than by email — see F-47 below. What is
