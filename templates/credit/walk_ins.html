@@ -14,7 +14,7 @@
 <div class="glass-card">
   <div class="card-toolbar">
     <h5 class="mb-0">Sales to customers not on your customer list</h5>
-    <div class="fs-5 fw-bold text-warning">₵{{ '%.2f'|format(total) }}</div>
+    <div class="fs-5 fw-bold text-warning">₵{{ total|money }}</div>
   </div>
 
   {% if rows %}
@@ -47,12 +47,12 @@
             <a href="{{ url_for('sales.sale_invoice', sale_id=sale.id) }}"
                class="text-decoration-none">#{{ sale.id }}</a>
           </td>
-          <td data-label="Total" class="text-end">₵{{ '%.2f'|format(total_amount) }}</td>
+          <td data-label="Total" class="text-end">₵{{ total_amount|money }}</td>
           <td data-label="Paid" class="text-end text-success">
-            {% if paid %}₵{{ '%.2f'|format(paid) }}{% else %}—{% endif %}
+            {% if paid %}₵{{ paid|money }}{% else %}—{% endif %}
           </td>
           <td data-label="Owing" class="text-end fw-medium text-warning">
-            ₵{{ '%.2f'|format(balance) }}
+            ₵{{ balance|money }}
           </td>
           <td data-label="" class="cell-actions text-center">
             {% if current_user.can('credit.record_payment') %}

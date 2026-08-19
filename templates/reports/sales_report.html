@@ -77,7 +77,7 @@
                         {% for item in sale.items %}
                             {# Unformatted, this printed 41.666667: price_at_sale is
                                Numeric(14,6) because it is derived from a pack price. #}
-                            <li>₵{{ '%.2f'|format(item.price_per_sold_unit) }}</li>
+                            <li>₵{{ item.price_per_sold_unit|money }}</li>
                         {% endfor %}
                         </ul>
                     </td>
@@ -88,7 +88,7 @@
                         {% for item in sale.items %}
                             {% set row.total = row.total + (item.price_at_sale * item.quantity) %}
                         {% endfor %}
-                        ₵{{ '%.2f'|format(row.total) }}
+                        ₵{{ row.total|money }}
                     </td>
                 </tr>
                 {% endfor %}
@@ -103,7 +103,7 @@
                                 {% set ns.grand_total = ns.grand_total + (item.price_at_sale * item.quantity) %}
                             {% endfor %}
                         {% endfor %}
-                        ₵{{ '%.2f'|format(ns.grand_total) }}
+                        ₵{{ ns.grand_total|money }}
                     </td>
                 </tr>
             </tfoot>

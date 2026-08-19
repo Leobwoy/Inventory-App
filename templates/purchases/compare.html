@@ -51,10 +51,10 @@
       <div class="alert alert-success py-2 px-3 mb-3" style="font-size: 0.9rem;">
         <i class="bi bi-arrow-down-circle me-1"></i>
         You last bought from <strong>{{ row.savings['from'].supplier.name }}</strong> at
-        ₵{{ '%.2f'|format(row.savings['from'].latest) }}.
+        ₵{{ row.savings['from'].latest|money }}.
         <strong>{{ row.savings.to.supplier.name }}</strong> charges
-        ₵{{ '%.2f'|format(row.savings.to.latest) }} &mdash; saving
-        <strong>₵{{ '%.2f'|format(row.savings.per_unit) }}</strong> per {{ row.product.base_uom }}.
+        ₵{{ row.savings.to.latest|money }} &mdash; saving
+        <strong>₵{{ row.savings.per_unit|money }}</strong> per {{ row.product.base_uom }}.
       </div>
       {% endif %}
 
@@ -76,11 +76,11 @@
                 {% if loop.first %}<span class="badge bg-success ms-1">Cheapest</span>{% endif %}
               </td>
               <td class="text-end fw-medium">
-                ₵{{ '%.2f'|format(option.latest) }}
+                ₵{{ option.latest|money }}
                 {% if option.trend == 'up' %}<i class="bi bi-arrow-up-short text-danger"></i>
                 {% elif option.trend == 'down' %}<i class="bi bi-arrow-down-short text-success"></i>{% endif %}
               </td>
-              <td class="text-end text-muted">₵{{ '%.2f'|format(option.best) }}</td>
+              <td class="text-end text-muted">₵{{ option.best|money }}</td>
               <td class="text-end text-muted">{{ option.times }}</td>
             </tr>
             {% endfor %}

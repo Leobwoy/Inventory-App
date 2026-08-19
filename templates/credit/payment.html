@@ -20,12 +20,12 @@
     </div>
     <div class="col-4 text-end">
       <div class="text-muted small">Sale total</div>
-      <div class="fw-bold">₵{{ '%.2f'|format(total) }}</div>
-      <div class="text-muted small">Paid so far: ₵{{ '%.2f'|format(paid) }}</div>
+      <div class="fw-bold">₵{{ total|money }}</div>
+      <div class="text-muted small">Paid so far: ₵{{ paid|money }}</div>
     </div>
     <div class="col-4 text-end">
       <div class="text-muted small">Still owed</div>
-      <div class="fw-bold fs-4 text-warning">₵{{ '%.2f'|format(balance) }}</div>
+      <div class="fw-bold fs-4 text-warning">₵{{ balance|money }}</div>
     </div>
   </div>
 </div>

@@ -21,7 +21,7 @@ from platform_console.auth import (current_admin, platform_required, sign_in,
 from platform_console.forms import ChangePlanForm, PlatformLoginForm, PaymentActionForm
 from platform_console.models import PlatformAdmin
 from services import billing as billing_service
-from services import limits
+from services import limits, notices
 
 
 @platform_bp.context_processor
@@ -185,6 +185,14 @@ def act_on_payment(transaction_id, action):
         # customer, and their catalogue has to match what they are now paying
         # for. Harmless on an upgrade: enforcement only ever removes access, so
         # there is nothing left for it to do.
+        # Tell the business, not just the log. Somebody opening the app on
+        # Monday wondering why their plan changed over the weekend is the whole
+        # reason this exists; the activity log answers that months later and is
+        # no use at all on Monday.
+        if changed:
+            notices.raise_for_payment(transaction, action, admin.email)
+            db.session.commit()
+
         if action == 'confirm' and changed:
             if limits.enforce_plan_limits(transaction.business_id):
                 db.session.commit()

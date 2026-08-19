@@ -25,9 +25,9 @@
       <div class="d-flex justify-content-between align-items-center">
         <div class="text-muted">Amount</div>
         <div class="fs-4 fw-bold text-success" id="amount-due"
-             data-monthly="{{ '%.2f'|format(plan.price_monthly_ghs) if plan.price_monthly_ghs else '' }}"
-             data-annual="{{ '%.2f'|format(plan.price_annual_ghs) if plan.price_annual_ghs else '' }}">
-          &#8373;{{ '%.2f'|format(instructions.amount) }}
+             data-monthly="{{ plan.price_monthly_ghs|money if plan.price_monthly_ghs else '' }}"
+             data-annual="{{ plan.price_annual_ghs|money if plan.price_annual_ghs else '' }}">
+          &#8373;{{ instructions.amount|money }}
         </div>
       </div>
       <p class="text-muted small mt-3 mb-0">

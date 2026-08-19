@@ -29,13 +29,13 @@
 <div class="stat-strip">
     <a class="stat-cell" href="{{ url_for('reports.sales_report') }}">
         <span class="stat-label">Sales &middot; 7 days</span>
-        <span class="stat-value accent">&#8373;{{ '%.2f'|format(sales_data.values()|sum) }}</span>
+        <span class="stat-value accent">&#8373;{{ sales_data.values()|sum|money }}</span>
         {% set week = sales_data.values()|sum %}
         {% if previous_total or week %}
         {% set delta = week - previous_total %}
         <span class="stat-delta {{ 'is-up' if delta >= 0 else 'is-down' }}">
             <i class="bi bi-arrow-{{ 'up' if delta >= 0 else 'down' }}-short" aria-hidden="true"></i>
-            &#8373;{{ '%.2f'|format(delta|abs) }} on last week
+            &#8373;{{ delta|abs|money }} on last week
         </span>
         {% else %}
         <span class="stat-delta">nothing sold yet</span>
@@ -45,7 +45,7 @@
     {% if owed %}
     <a class="stat-cell" href="{{ url_for('credit.dashboard') }}">
         <span class="stat-label">Owed to you</span>
-        <span class="stat-value">&#8373;{{ '%.2f'|format(owed.total) }}</span>
+        <span class="stat-value">&#8373;{{ owed.total|money }}</span>
         <span class="stat-delta">
             {% if owed.customers %}
             {{ owed.customers }} customer{{ '' if owed.customers == 1 else 's' }}

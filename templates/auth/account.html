@@ -1,0 +1,76 @@
+{% extends 'base.html' %}
+{% block title %}Account | TrackTrack{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <h2>Account</h2>
+</div>
+
+{% include '_partials/settings_tabs.html' %}
+
+<div class="glass-card mb-4">
+  <div class="card-toolbar"><h5 class="mb-0">{{ business.name }}</h5></div>
+  <dl class="row mb-0 small">
+    <dt class="col-sm-3 text-muted fw-normal">Plan</dt>
+    <dd class="col-sm-9">{{ plan.name if plan else 'Kiosk' }}</dd>
+    <dt class="col-sm-3 text-muted fw-normal">Staff accounts</dt>
+    <dd class="col-sm-9">{{ counts.get('users', 0) }}</dd>
+    <dt class="col-sm-3 text-muted fw-normal">Owner</dt>
+    <dd class="col-sm-9">{{ current_user.email }}</dd>
+  </dl>
+</div>
+
+{# The only irreversible thing in the application, so it is the only thing
+   wearing this colour, it is on a page of its own, and it says what it will
+   destroy in counts rather than in adjectives. #}
+<div class="glass-card danger-zone">
+  <div class="card-toolbar">
+    <h5 class="mb-0"><i class="bi bi-exclamation-octagon me-2"></i>Close this account</h5>
+  </div>
+
+  <p class="mb-3">
+    This deletes <strong>{{ business.name }}</strong> and everything in it, for
+    everyone. It cannot be undone and we cannot recover it for you afterwards.
+  </p>
+
+  {% if counts %}
+  <ul class="delete-counts">
+    {% for label, n in counts.items() %}
+    <li><b>{{ '{:,}'.format(n) }}</b> {{ label|replace('_', ' ') }}</li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <p class="text-muted small">
+    <i class="bi bi-download me-1"></i>
+    If you might want any of this later, take a
+    <a href="{{ url_for('backup_restore') }}">backup</a> first &mdash; it is a
+    single file and it downloads in seconds.
+  </p>
+
+  <form method="post" class="mt-4">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    <div class="field" style="max-width: 420px;">
+      <label class="form-label" for="confirm_name">
+        Type <strong>{{ business.name }}</strong> to confirm
+      </label>
+      {# The business name rather than a fixed word: a fixed word can be typed
+         from muscle memory, and this one cannot be typed at all without
+         reading which account is about to go. #}
+      <input class="form-control" id="confirm_name" name="confirm_name"
+             autocomplete="off" placeholder="{{ business.name }}" required>
+    </div>
+
+    <div class="field" style="max-width: 420px;">
+      <label class="form-label" for="password">Your password</label>
+      <input type="password" class="form-control" id="password" name="password"
+             autocomplete="current-password" required>
+    </div>
+
+    <button type="submit" class="btn btn-danger">
+      <i class="bi bi-trash me-1"></i> Delete this account permanently
+    </button>
+  </form>
+</div>
+{% endblock %}

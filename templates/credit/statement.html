@@ -26,7 +26,7 @@
       <div class="col-md-6 text-md-end">
         <div class="text-muted small">Currently owing</div>
         <div class="fw-bold fs-3 {{ 'text-warning' if balance > 0 else 'text-success' }}">
-          ₵{{ '%.2f'|format(balance) }}
+          ₵{{ balance|money }}
         </div>
       </div>
     </div>
@@ -51,9 +51,9 @@
           <tr>
             <td data-label="Date" class="text-muted">{{ sale.sale_date }}</td>
             <td data-label="Sale" class="font-monospace">#{{ sale.id }}</td>
-            <td data-label="Total" class="text-end">₵{{ '%.2f'|format(total) }}</td>
-            <td data-label="Paid" class="text-end text-muted">₵{{ '%.2f'|format(paid) }}</td>
-            <td data-label="Owing" class="text-end fw-bold text-warning">₵{{ '%.2f'|format(owing) }}</td>
+            <td data-label="Total" class="text-end">₵{{ total|money }}</td>
+            <td data-label="Paid" class="text-end text-muted">₵{{ paid|money }}</td>
+            <td data-label="Owing" class="text-end fw-bold text-warning">₵{{ owing|money }}</td>
             <td data-label="" class="text-end cell-actions">
               {% if current_user.can('credit.record_payment') %}
               <a href="{{ url_for('credit.record_payment', sale_id=sale.id) }}"
@@ -95,7 +95,7 @@
               {% if event.status == 'paid' %}
               <span class="badge bg-success ms-1">Settled</span>
               {% elif event.status == 'partial' %}
-              <span class="badge bg-warning text-dark ms-1">₵{{ '%.2f'|format(event.outstanding) }} still owing</span>
+              <span class="badge bg-warning text-dark ms-1">₵{{ event.outstanding|money }} still owing</span>
               {% else %}
               <span class="badge bg-secondary ms-1">Unpaid</span>
               {% endif %}
@@ -115,12 +115,12 @@
               {{ event.ref or '—' }}
             </td>
             <td data-label="Charged" class="text-end">
-              {% if event.charged %}₵{{ '%.2f'|format(event.charged) }}{% else %}—{% endif %}
+              {% if event.charged %}₵{{ event.charged|money }}{% else %}—{% endif %}
             </td>
             <td data-label="Paid" class="text-end text-success">
-              {% if event.paid %}₵{{ '%.2f'|format(event.paid) }}{% else %}—{% endif %}
+              {% if event.paid %}₵{{ event.paid|money }}{% else %}—{% endif %}
             </td>
-            <td data-label="Balance" class="text-end fw-medium">₵{{ '%.2f'|format(event.balance) }}</td>
+            <td data-label="Balance" class="text-end fw-medium">₵{{ event.balance|money }}</td>
           </tr>
           {% endfor %}
         </tbody>

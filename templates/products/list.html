@@ -64,7 +64,7 @@
             </div>
         </div>
 
-        <div class="table-responsive">
+        <div class="table-responsive table-responsive-cards">
             <table class="table table-hover table-cards">
                 <thead>
                     <tr>
@@ -119,12 +119,12 @@
                            it. |capitalize touches the first letter only. #}
                         <td data-label="Unit" class="text-muted">{{ uom.packing(product)|capitalize }}</td>
                         {% if current_user.can('products.cost_price.view') %}
-                        <td data-label="Cost" class="text-end text-muted num">₵{{ '%.2f'|format(uom.cost_per_purchase_unit(product, product.cost_price) if uom.has_conversion(product) else (product.cost_price or 0)) }}</td>
+                        <td data-label="Cost" class="text-end text-muted num">₵{{ (uom.cost_per_purchase_unit(product, product.cost_price) if uom.has_conversion(product) else (product.cost_price or 0))|money }}</td>
                         {% endif %}
                         {# Price and stock in the same unit as each other and as the
                            Unit column beside them. A per-bottle price against
                            "13 cartons" is two units in one row. #}
-                        <td data-label="Price" class="text-end fw-medium num">₵{{ '%.2f'|format(uom.price_for(product, 'purchase' if uom.has_conversion(product) else 'base')) }}</td>
+                        <td data-label="Price" class="text-end fw-medium num">₵{{ (uom.price_for(product, 'purchase' if uom.has_conversion(product) else 'base'))|money }}</td>
                         <td data-label="Stock" class="text-end num"
                             title="{{ uom.describe(product, product.quantity_in_stock) }}">{{ uom.in_packs(product, product.quantity_in_stock) }}</td>
                         {# Status is its own cell in the mockup, and it reads better:

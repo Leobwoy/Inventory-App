@@ -62,8 +62,10 @@ def test_a_carton_sale_reads_as_cartons(carton_shop):
     page = client.get('/sales/invoice/%d' % sale.id).get_data(as_text=True)
 
     assert cells(page, 'Quantity') == ['2 cartons']
-    assert cells(page, 'Unit Price') == ['₵1050.00']
-    assert cells(page, 'Total') == ['₵2100.00']
+    # Grouped in thousands since the `money` filter landed: a carton price
+    # and a day's takings are exactly where the digits stop being readable.
+    assert cells(page, 'Unit Price') == ['₵1,050.00']
+    assert cells(page, 'Total') == ['₵2,100.00']
 
 
 def test_the_line_total_still_matches_the_database_exactly(carton_shop):
@@ -117,8 +119,8 @@ def test_a_discount_is_struck_through_in_the_same_unit(carton_shop):
     page = client.get('/sales/invoice/%d' % sale.id).get_data(as_text=True)
     unit_cell = cells(page, 'Unit Price')[0]
 
-    assert '1000.00' in unit_cell
-    assert '1050.00' in unit_cell, 'the struck price is not in the carton unit'
+    assert '1,000.00' in unit_cell
+    assert '1,050.00' in unit_cell, 'the struck price is not in the carton unit'
     assert '48.00' not in unit_cell, 'the struck price fell back to a bottle'
 
 
@@ -132,7 +134,7 @@ def test_bulk_invoices_say_the_same_thing(carton_shop):
     page = client.get('/sales/bulk_print_invoices?ids=%d' % sale.id).get_data(as_text=True)
 
     assert cells(page, 'Quantity') == ['2 cartons']
-    assert cells(page, 'Total') == ['₵2100.00']
+    assert cells(page, 'Total') == ['₵2,100.00']
 
 
 def test_bulk_invoices_no_longer_print_six_decimals(carton_shop):
@@ -149,5 +151,5 @@ def test_bulk_invoices_no_longer_print_six_decimals(carton_shop):
 
     assert '41.666667' not in page
     assert '2000.000000' not in page
-    assert cells(page, 'Total') == ['₵2000.00']
-    assert 'Grand Total' in page and '2000.00' in page
+    assert cells(page, 'Total') == ['₵2,000.00']
+    assert 'Grand Total' in page and '2,000.00' in page

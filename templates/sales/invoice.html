@@ -64,16 +64,16 @@
                      price_at_sale x quantity, exactly, so the arithmetic on the
                      page is the arithmetic in the database. #}
                   <td data-label="Unit Price">
-                    ₵{{ '%.2f'|format(item.price_per_sold_unit) }}
+                    ₵{{ item.price_per_sold_unit|money }}
                     {% if item.was_discounted %}
                     <div class="text-muted small">
-                      <s>₵{{ '%.2f'|format(item.list_price_per_sold_unit) }}</s>
+                      <s>₵{{ item.list_price_per_sold_unit|money }}</s>
                       &minus;{{ item.discount_percent }}%
                     </div>
                     {% endif %}
                   </td>
                   <td data-label="Quantity">{{ item.sold_as_text }}</td>
-                  <td data-label="Total">₵{{ '%.2f'|format(item.price_at_sale * item.quantity) }}</td>
+                  <td data-label="Total">₵{{ (item.price_at_sale * item.quantity)|money }}</td>
                 </tr>
                 {% set ns.grand_total = ns.grand_total + (item.price_at_sale * item.quantity) %}
                 {% endfor %}
@@ -85,11 +85,11 @@
               {% if sale.was_discounted %}
               <div class="mb-1">
                 Discount given:
-                <span class="text-warning">&minus;₵{{ '%.2f'|format(sale.total_discount) }}</span>
+                <span class="text-warning">&minus;₵{{ sale.total_discount|money }}</span>
               </div>
               {% endif %}
               <h4 class="mb-0">Grand Total:
-                <span class="text-success">₵{{ '%.2f'|format(ns.grand_total) }}</span>
+                <span class="text-success">₵{{ ns.grand_total|money }}</span>
               </h4>
             </div>
           </div>
