@@ -17,7 +17,7 @@ from billing.models import Plan, Subscription
 from credit.models import Payment, sale_balance, sale_paid, sale_total, settlement_status
 from extensions import db
 from sales.models import Customer, Sale
-from services import credit
+from services import credit, limits
 
 TODAY = datetime.date.today()
 
@@ -293,7 +293,18 @@ def test_credit_is_a_paid_feature(shop, app):
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.plan_id = Plan.query.filter_by(code='basic').one().id
     subscription.status = 'active'
+    # `paid_through` as well as the status, or `effective_plan` reads this as
+    # lapsed and falls back to Free - which blocks the same thing for a quite
+    # different reason, so this passed without ever exercising the plan it
+    # names.
+    subscription.paid_through = datetime.datetime.utcnow() + datetime.timedelta(days=30)
     db.session.commit()
+    # Stated rather than assumed. Setting the plan and finding the feature
+    # blocked is not evidence the *plan* blocked it, and the two are
+    # indistinguishable from the response alone - which is how this went
+    # unnoticed. Assert the premise, and a silent fallback fails here with a
+    # reason instead of passing quietly further down.
+    assert limits.effective_plan(business_id).code == 'basic'
 
     response = client.get('/credit/', follow_redirects=True)
     assert 'not included in your current plan' in response.get_data(as_text=True)
@@ -306,7 +317,18 @@ def test_without_the_feature_every_sale_settles_in_full(shop):
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.plan_id = Plan.query.filter_by(code='basic').one().id
     subscription.status = 'active'
+    # `paid_through` as well as the status, or `effective_plan` reads this as
+    # lapsed and falls back to Free - which blocks the same thing for a quite
+    # different reason, so this passed without ever exercising the plan it
+    # names.
+    subscription.paid_through = datetime.datetime.utcnow() + datetime.timedelta(days=30)
     db.session.commit()
+    # Stated rather than assumed. Setting the plan and finding the feature
+    # blocked is not evidence the *plan* blocked it, and the two are
+    # indistinguishable from the response alone - which is how this went
+    # unnoticed. Assert the premise, and a silent fallback fails here with a
+    # reason instead of passing quietly further down.
+    assert limits.effective_plan(business_id).code == 'basic'
 
     sale = sell(client, product, customer, quantity=8, settlement='credit')
 

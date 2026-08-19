@@ -251,15 +251,33 @@ def enforce_plan_limits(business_id, actor_id=None):
     switched_off = {}
 
     if plan.max_products is not None:
-        # Newest kept, oldest retired. Any rule here is arbitrary and this one is
-        # at least predictable and stable: it does not reshuffle each time it
-        # runs. A kinder rule would keep whatever has sold most recently; it is
-        # noted in the tracker rather than guessed at here.
+        # **Stock on hand first, then what sells.** Chosen against the dev
+        # catalogue rather than in the abstract: the first rule written here was
+        # "keep the newest", and measured against real data it kept two products
+        # with no stock and no sales while retiring four of the best-selling
+        # lines. A wholesaler's staples are the ones they have carried longest,
+        # so newest-first is close to a rule for switching off the business.
+        #
+        # Stock leads because that is the sharpest pain - goods already paid for,
+        # sitting on the floor, that the app will not let them sell. Sales break
+        # the tie within each group, and `id` breaks it after that so the result
+        # is stable and does not reshuffle every time this runs.
+        from sqlalchemy import func
+
+        from sales.models import SaleItem
+
+        sold = (db.session.query(
+                    SaleItem.product_id.label('product_id'),
+                    func.coalesce(func.sum(SaleItem.quantity), 0).label('units'))
+                .group_by(SaleItem.product_id).subquery())
         keep = [row.id for row in
-                Product.query.with_entities(Product.id)
+                db.session.query(Product.id)
+                .outerjoin(sold, sold.c.product_id == Product.id)
                 .filter(Product.business_id == business_id,
                         Product.is_active.isnot(False))
-                .order_by(Product.id.desc())
+                .order_by((Product.quantity_in_stock > 0).desc(),
+                          func.coalesce(sold.c.units, 0).desc(),
+                          Product.id.desc())
                 .limit(plan.max_products).all()]
         retired = (Product.query
                    .filter(Product.business_id == business_id,

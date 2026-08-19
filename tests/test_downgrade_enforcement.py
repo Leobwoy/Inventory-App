@@ -51,6 +51,25 @@ def big_shop(register, make_product, make_staff):
     return client, business_id
 
 
+def stocked_fillers(make_product, business_id, count):
+    """Products that are certainly safe: stock on the floor, so they lead."""
+    return [make_product(business_id, sku='FILL-%02d' % i, name='Filler %d' % i,
+                         stock=100) for i in range(count)]
+
+
+def record_sales(business_id, product, units):
+    import datetime
+
+    from sales.models import Sale, SaleItem
+
+    sale = Sale(business_id=business_id, sale_date=datetime.date.today())
+    db.session.add(sale)
+    db.session.flush()
+    db.session.add(SaleItem(sale_id=sale.id, product_id=product.id, quantity=units,
+                            price_at_sale=1, sell_unit='base'))
+    db.session.commit()
+
+
 def active_products(business_id):
     return Product.query.filter_by(business_id=business_id).filter(
         Product.is_active.isnot(False)).count()
@@ -155,23 +174,68 @@ def test_the_owner_is_never_the_one_suspended(big_shop):
     assert left[0].id == people[-1].id
 
 
-def test_the_newest_products_are_the_ones_kept(big_shop):
-    """Any rule here is arbitrary; this one is at least stable, so running it
-    twice does not reshuffle which products a business can sell."""
-    _client, business_id = big_shop
+def test_stock_on_the_floor_outranks_a_proven_seller(register, make_product):
+    """Which products stay sellable was chosen against real data, not in the
+    abstract. The first rule written here was "keep the newest"; measured
+    against the development catalogue it kept two products with no stock and no
+    sales while retiring four of the best-selling lines, because a wholesaler's
+    staples are the ones they have carried longest.
+
+    Stock leads. Goods already paid for and sitting on the floor that the app
+    will not let them sell is the sharpest version of this pain - a fast mover
+    they are out of costs them nothing today.
+
+    Nineteen stocked fillers plus one more stocked product fill Kiosk's twenty
+    exactly, so the seller with an empty shelf is the one that has to go.
+    """
+    _client, business_id = register()
+    stocked_fillers(make_product, business_id, 19)
+    held = make_product(business_id, sku='HELD', name='On the floor', stock=400)
+    empty_seller = make_product(business_id, sku='SOLD', name='Sells fast', stock=0)
+    record_sales(business_id, empty_seller, 900)
     on_plan(business_id, 'free')
 
     limits.enforce_plan_limits(business_id)
     db.session.commit()
 
-    kept = {p.sku for p in Product.query.filter_by(business_id=business_id).filter(
-        Product.is_active.isnot(False)).all()}
-    assert kept == {'P%02d' % i for i in range(5, 25)}
+    db.session.refresh(held)
+    db.session.refresh(empty_seller)
+    assert held.is_active is True, 'stock the business is holding was switched off'
+    assert empty_seller.is_active is False
+
+
+def test_among_products_with_no_stock_the_fast_movers_win(register, make_product):
+    """The second half of the rule. Nothing on the floor to protect, so what has
+    actually sold decides - and it has to beat creation order, which is what the
+    rule used to go on."""
+    _client, business_id = register()
+    stocked_fillers(make_product, business_id, 19)
+    sold_well = make_product(business_id, sku='SOLD', name='Sells fast', stock=0)
+    record_sales(business_id, sold_well, 900)
+    # Created last, so it wins every tiebreak that is not about selling.
+    dead = make_product(business_id, sku='DEAD', name='Never moved', stock=0)
+    on_plan(business_id, 'free')
+
+    limits.enforce_plan_limits(business_id)
+    db.session.commit()
+
+    db.session.refresh(sold_well)
+    db.session.refresh(dead)
+    assert sold_well.is_active is True, 'a proven seller lost to one that never sold'
+    assert dead.is_active is False
 
 
 def test_running_it_again_changes_nothing(big_shop):
     """It runs on every daily check, so it has to be a no-op once a business is
-    inside its plan."""
+    inside its plan.
+
+    This is also where "the choice does not reshuffle between runs" is
+    covered. A separate test for that was written and then deleted: it could
+    not be made to fail. The first run brings the count to exactly the cap,
+    so the second finds nothing over it - the stability follows from
+    enforcement only ever *removing* access, not from anything about the
+    ordering.
+    """
     _client, business_id = big_shop
     on_plan(business_id, 'free')
     limits.enforce_plan_limits(business_id)

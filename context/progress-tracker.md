@@ -1434,9 +1434,48 @@ account first — the only arrangement where keeping the Owner has to be deliber
 that, breaking the sort goes red; the `if not u.is_owner` filter is a redundant second
 guard, and only the sort is load-bearing today. Recorded so it is not deleted as dead.
 
-**Deferred, deliberately**: which products survive a cut is "newest kept, oldest retired",
-which is arbitrary but stable — it does not reshuffle on each run. A kinder rule would keep
-whatever has sold most recently. Not guessed at here.
+**Which products survive a cut, decided against real data rather than in the abstract.**
+The first rule was "keep the newest", chosen for stability. Measured against the development
+catalogue it kept **Vody** and **Club Beer 330ml U4** - both zero stock, zero sales, both
+leftovers from testing - while retiring Malta Guinness (1,008 sold), BelAqua 750ml (840),
+Verna 750ml (816) and Vitamalt (792). Newest-first and best-selling overlapped on 2 of 6. A
+wholesaler's staples are the lines they have carried longest, so newest-first was close to a
+rule for switching off the business.
+
+The rule is now **stock on hand first, then what sells**, at the user's decision. Stock
+leads because that is the sharpest version of the pain - goods already paid for, sitting on
+the floor, that the app will not let them sell; a fast mover they are out of costs them
+nothing today. Sales break the tie within each group, `id` after that.
+
+**A test written and then deleted, because it could not be made to fail.** "The choice does
+not reshuffle between runs" stayed green with every ordering clause removed - any `order_by`
+with a unique tiebreak is stable, and the property actually follows from enforcement only
+ever *removing* access: the first run lands exactly on the cap, so the second finds nothing
+over it. It is noted in the docstring of `test_running_it_again_changes_nothing`, which
+covers it properly, so nobody writes it again.
+
+### Three tests that passed for the wrong reason (2026-08-19)
+
+Bounded follow-up to the `paid_through` pattern, which had by then produced a silently
+vacuous test four times. Two files set a paid plan and never set `paid_through`, so
+`effective_plan` read the subscription as lapsed and fell back to **Free** - which blocks the
+same feature for an entirely different reason. `test_credit.py` (x2) and `test_sourcing.py`
+gave the right answer and proved nothing; had `credit_ledger` been moved down to Shop, they
+would have passed and shipped it.
+
+**The first attempt at fixing them was itself wrong**, and falsification caught it. Adding
+`paid_through` and then mutating the tier in `billing/plans.py` left both green - because
+`has_feature` reads `plan.features` from the **database**, and `plans.py` is not the source
+of truth for tiers either. The same trap as the product caps, one layer along.
+
+What makes them real is asserting the premise: `effective_plan(business_id).code == 'basic'`
+before the request. Setting a plan and finding a feature blocked is not evidence the *plan*
+blocked it, and the two are indistinguishable from the response - which is exactly how this
+went unnoticed. A silent fallback now fails on that line with a reason.
+
+**A general audit of the suite was considered and declined** by the user, in favour of these
+three. The other patterns are caught by the falsification habit; sweeping 765 tests would
+cost hours to find problems that only matter when the code they guard next changes.
 
 ## Open Questions
 
