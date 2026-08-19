@@ -42,6 +42,11 @@ def overview():
         # What this plan is currently holding back. The counts above say what is
         # in use; these say what upgrading would give back, which is the number
         # somebody deciding whether to pay actually wants.
+        # What each tier adds over the one below it, read from the same
+        # catalogue the gates enforce. Written out by hand it would drift from
+        # what is actually gated, and a pricing page that promises a feature the
+        # code refuses is the worst kind of wrong.
+        plan_adds=_plan_adds(),
         locked_products=Product.query.filter_by(
             business_id=business_id, locked_by_plan=True).count(),
         suspended_users=User.query.filter_by(
@@ -49,6 +54,25 @@ def overview():
         payments=billing_service.history(business_id),
         provider=providers.active(),
     )
+
+
+def _plan_adds():
+    """`{plan code: [what this tier adds]}`, cheapest first.
+
+    Descriptions come from `billing/plans.FEATURES`, which is also what the
+    upgrade prompt shows when a gate refuses something - so the page selling a
+    feature and the page withholding it use the same words.
+    """
+    from billing.plans import FEATURES, TIER_ORDER
+
+    adds, seen = {}, set()
+    for tier in TIER_ORDER:
+        new_here = sorted(desc for _code, (desc, first) in FEATURES.items()
+                          if first == tier)
+        if new_here:
+            adds[tier] = new_here
+        seen.update(new_here)
+    return adds
 
 
 @billing_bp.route('/upgrade/<plan_code>', methods=['GET', 'POST'])

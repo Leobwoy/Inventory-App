@@ -1561,6 +1561,42 @@ measurement finds. At 0.82 it is 5.35/5.04.
 
 `CACHE_VERSION` is `tracktrack-v21`.
 
+### The subscription page, and the login slider (2026-08-19)
+
+**Login, second pass.** The wordmark was missing - the brand panel had a placeholder square
+where `static/logo-wordmark.png` belongs. And the four description points are a **swipeable
+slider** on a phone at the user's direction: the sale form's pane idea without the step
+numbers above it. Scroll snap rather than a script, so there is nothing to initialise and
+nothing to fail; on a desktop it stays a plain list, where there is room for all four.
+
+**Two measured overflow bugs getting there, both from the same misunderstanding.** The
+full-bleed negative margin made the list wider than the panel with nothing clipping it -
+144px of horizontal page scroll. Removing it and switching to a fixed basis made it worse,
+661px, because **a flex item will not shrink below its content unless told to**, so an
+`overflow-x` child of one expands the page instead of scrolling. `min-width: 0` down the
+chain fixes it: page overflow 0, four 240px cards in a 335px viewport, the next one peeking.
+
+**Subscription, per `08-settings.html` and the reference the user gave.** Plan cards rather
+than a six-column table: a table makes somebody read across a row to price a decision, a card
+puts the decision in one place. Price large, limits under it, one button, then what that tier
+*adds* over the one below.
+
+**The feature lists are derived, not typed.** `_plan_adds()` reads `billing/plans.FEATURES`,
+which is the same catalogue the gates enforce and the same wording the upgrade prompt uses
+when a gate refuses something. Written by hand they would drift, and a pricing page promising
+a feature the code refuses is the worst kind of wrong. Each card names only what its tier
+adds - repeating inherited features four times is what makes a pricing page a wall.
+
+**Usage bars** from the mockup, on the staff and product counts. A number is a fact; a bar is
+a feeling, and the feeling is what makes somebody click Upgrade. Amber past 90%.
+
+**Kept quiet on purpose**, per *"don't make the page look overwhelmed"*: no gradients, no
+badge competing with the price, one button per card, and the current plan marked by its
+border rather than a colour wash - a wash competes with the primary button on every other
+card, which is the one thing this page needs somebody to see.
+
+`CACHE_VERSION` is `tracktrack-v22`.
+
 ## Open Questions
 
 - **The offline catalogue still prices in bottles (`api/routes.py:138-140`).** Deliberately

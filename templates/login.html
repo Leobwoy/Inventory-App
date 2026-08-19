@@ -14,7 +14,8 @@
 <div class="auth-split">
 
   <section class="auth-brand">
-    <div class="auth-brand-mark"><span class="mark"></span> TrackTrack</div>
+    <img class="auth-logo" src="{{ url_for('static', filename='logo-wordmark.png') }}"
+         alt="TrackTrack">
 
     <div>
       <h2>Know your stock. Know who owes you.</h2>
@@ -23,6 +24,11 @@
         doorway, not the office.
       </p>
 
+      {# A slider on a phone, per the user: four stacked points made the page
+         long for no reason, and this is the sale form's pane idea without the
+         step numbers - one point at a time, swiped. Scroll snap rather than a
+         script: there is nothing to initialise, nothing to break, and it stays
+         a plain list on a desktop where there is room for all four. #}
       <ul class="auth-points">
         <li>
           <i class="bi bi-box-seam" aria-hidden="true"></i>

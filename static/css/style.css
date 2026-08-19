@@ -2689,21 +2689,15 @@ a.text-decoration-none:hover {
   gap: 2rem;
 }
 
-.auth-brand-mark {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  font-weight: 800;
-  font-size: 1.0625rem;
-}
-
-.auth-brand-mark .mark {
-  width: 26px;
-  height: 26px;
-  border-radius: 7px;
-  background: rgba(255, 255, 255, 0.25);
-  display: block;
-  flex: none;
+/* The real wordmark, not a placeholder square. It is a light-on-transparent
+   asset, which is why it sits on the accent panel and nowhere else on this
+   page. */
+.auth-logo {
+  height: 34px;
+  width: auto;
+  max-width: 190px;
+  object-fit: contain;
+  align-self: flex-start;
 }
 
 .auth-brand h2 {
@@ -2788,10 +2782,200 @@ a.text-decoration-none:hover {
     grid-template-columns: 1fr;
     min-height: 0;
   }
+
+  /* One point at a time, swiped - the sale form's pane idea without the step
+     numbers above it. Four stacked points made the page long for nothing, and
+     a phone has one thumb and no room. No script: scroll snap does it, so
+     there is nothing to initialise and nothing to fail. */
+  /* A flex item will not shrink below its content unless told to, so an
+     overflow-x child of one expands the page instead of scrolling. Measured
+     both ways getting here: 144px of page overflow, then 661px. */
+  .auth-brand, .auth-brand > * { min-width: 0; }
+
+  .auth-points {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.25rem;
+    max-width: none;
+    min-width: 0;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    /* No full-bleed negative margin. It made the list wider than the panel,
+       nothing clipped it, and the whole page scrolled sideways by 144px - the
+       peek is not worth a horizontal scrollbar on a phone. */
+  }
+
+  .auth-points::-webkit-scrollbar { display: none; }
+
+  .auth-points li {
+    /* Basis rather than a percentage: a percentage of a flex container that is
+       itself sized by its content is how the overflow started. */
+    flex: 0 0 15rem;
+    min-width: 0;
+    scroll-snap-align: start;
+    background: rgba(255, 255, 255, 0.14);
+    border-radius: 12px;
+    padding: 0.85rem 1rem;
+  }
+
+  .auth-logo { height: 28px; }
   /* Form first, description after. Source order stays brand-then-form so a
      screen reader and a search engine both meet the description first; only the
      painted order changes. */
   .auth-panel { order: -1; padding: 2rem 1.25rem; }
   .auth-brand { padding: 2rem 1.25rem 2.5rem; }
   .auth-brand h2 { font-size: 1.25rem; }
+}
+
+/* --- plans (08-settings) ---------------------------------------------------
+   Cards, not a six-column table. A table makes somebody read across a row to
+   price a decision; a card puts the whole decision in one place.
+
+   Kept deliberately quiet: no gradients, no badges competing with the price,
+   one button per card. The page is asking for money and the fastest way to
+   look untrustworthy is to shout. */
+.plans-head {
+  margin: 0 0 0.9rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.plan-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.plan-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-card);
+  backdrop-filter: var(--glass-backdrop);
+  border: 1px solid var(--border-color);
+  border-radius: 1rem;
+  padding: 1.5rem 1.25rem 1.25rem;
+}
+
+/* The plan they are on is marked by its border, not by a colour wash: the wash
+   competes with the primary button on every other card, which is the one thing
+   this page needs somebody to see. */
+.plan-card.is-current {
+  border-color: var(--accent-primary);
+}
+
+.plan-flag {
+  position: absolute;
+  top: -0.6rem;
+  left: 1.25rem;
+  background: var(--accent-primary);
+  color: var(--on-accent);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  padding: 0.15rem 0.55rem;
+  border-radius: 20px;
+}
+
+.plan-name {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0 0 0.6rem;
+}
+
+.plan-price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+
+.plan-amount {
+  font-size: 1.875rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.plan-per {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+.plan-limits {
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  margin-bottom: 1.1rem;
+}
+
+.plan-cta {
+  width: 100%;
+  margin-bottom: 1.1rem;
+}
+
+.plan-cta-none {
+  display: block;
+  text-align: center;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+  padding: 0.5rem 0;
+}
+
+.plan-adds {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.5rem;
+  border-top: 1px solid var(--border-color);
+  padding-top: 1rem;
+}
+
+.plan-adds li {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: var(--text-primary);
+}
+
+.plan-adds .plan-adds-head {
+  color: var(--text-secondary);
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.plan-adds i {
+  flex: none;
+  margin-top: 0.15rem;
+  color: var(--accent-success);
+}
+
+/* The usage bar from the mockup: a number is a fact, a bar is a feeling, and
+   the feeling is the part that makes somebody click Upgrade. */
+.usage-bar {
+  height: 8px;
+  border-radius: 5px;
+  background: var(--progress-track);
+  overflow: hidden;
+  margin-top: 0.4rem;
+}
+
+.usage-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--accent-primary);
+}
+
+.usage-bar.is-full > span {
+  background: var(--accent-warning);
 }

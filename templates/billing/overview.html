@@ -32,6 +32,13 @@
       <div class="fs-4 fw-bold">
         {{ users_used }}{% if plan and plan.max_users %} <span class="text-muted fs-6">of {{ plan.max_users }}</span>{% endif %}
       </div>
+      {% if plan and plan.max_users %}
+      {% set pct = (users_used / plan.max_users * 100) | round | int %}
+      <div class="usage-bar{{ ' is-full' if pct >= 90 else '' }}"
+           role="img" aria-label="{{ users_used }} of {{ plan.max_users }} staff accounts used">
+        <span style="width: {{ [pct, 100] | min }}%"></span>
+      </div>
+      {% endif %}
       {% if suspended_users %}
       <div class="small text-warning mt-1">
         <i class="bi bi-person-dash me-1"></i>{{ suspended_users }} suspended
@@ -43,6 +50,13 @@
       <div class="fs-4 fw-bold">
         {{ products_used }}{% if plan and plan.max_products %} <span class="text-muted fs-6">of {{ plan.max_products }}</span>{% endif %}
       </div>
+      {% if plan and plan.max_products %}
+      {% set pct = (products_used / plan.max_products * 100) | round | int %}
+      <div class="usage-bar{{ ' is-full' if pct >= 90 else '' }}"
+           role="img" aria-label="{{ products_used }} of {{ plan.max_products }} products used">
+        <span style="width: {{ [pct, 100] | min }}%"></span>
+      </div>
+      {% endif %}
       {% if locked_products %}
       <div class="small text-warning mt-1">
         <i class="bi bi-lock-fill me-1"></i>{{ locked_products }} switched off by this plan
@@ -59,51 +73,73 @@
   </p>
 </div>
 
-<div class="glass-card mb-4">
-  <div class="card-toolbar"><h5 class="mb-0">Plans</h5></div>
-  <div class="table-responsive">
-    <table class="table table-hover table-cards align-middle">
-      <thead>
-        <tr><th>Plan</th><th class="text-end">Monthly</th><th class="text-end">Annual</th>
-            <th class="text-center">Staff</th><th class="text-center">Products</th><th></th></tr>
-      </thead>
-      <tbody>
-        {% for option in plans %}
-        <tr>
-          <td data-label="Plan" class="fw-medium">
-            {{ option.name }}
-            {% if plan and option.id == plan.id %}<span class="badge bg-primary ms-1">Current</span>{% endif %}
-          </td>
-          <td data-label="Monthly" class="text-end">
-            {% if option.price_monthly_ghs is none %}<span class="text-muted">Contact us</span>
-            {% elif option.price_monthly_ghs == 0 %}Free
-            {% else %}&#8373;{{ '%.0f'|format(option.price_monthly_ghs) }}{% endif %}
-          </td>
-          <td data-label="Annual" class="text-end">
-            {% if option.price_annual_ghs %}&#8373;{{ '%.0f'|format(option.price_annual_ghs) }}
-            <div class="text-muted" style="font-size:0.7rem;">2 months free</div>
-            {% else %}<span class="text-muted">&mdash;</span>{% endif %}
-          </td>
-          <td data-label="Staff" class="text-center">{{ option.max_users or 'Unlimited' }}</td>
-          <td data-label="Products" class="text-center">{{ option.max_products or 'Unlimited' }}</td>
-          <td data-label="" class="cell-actions text-end">
-            {# The current plan gets Renew, not nothing. Mobile money cannot
-               charge anyone automatically, so renewing is the single most
-               common thing a paying customer comes here to do - hiding the
-               button on the plan they are already on hides exactly that. #}
-            {% if option.price_monthly_ghs %}
-            <a href="{{ url_for('billing.upgrade', plan_code=option.code) }}"
-               class="btn btn-sm {{ 'btn-outline-primary' if plan and option.id == plan.id else 'btn-primary' }}">
-              {{ 'Renew' if plan and option.id == plan.id else 'Choose' }}
-            </a>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+{# Plan cards rather than a six-column table, at the user's direction and to
+   the shape of the reference they gave: the price large, what you get as a short
+   checklist, one button. A table makes somebody read across a row to price a
+   decision; a card puts the decision in one place.
+
+   Deliberately not every feature of every plan. Each card names what that tier
+   *adds* to the one below it, which is how the tiers actually stack - repeating
+   the inherited features four times is what makes a pricing page a wall. #}
+<h5 class="plans-head">Plans</h5>
+<div class="plan-grid mb-4">
+  {% for option in plans %}
+  {% set is_current = plan and option.id == plan.id %}
+  <div class="plan-card{{ ' is-current' if is_current else '' }}">
+    {% if is_current %}<span class="plan-flag">Current plan</span>{% endif %}
+
+    <h3 class="plan-name">{{ option.name }}</h3>
+
+    <div class="plan-price">
+      {% if option.price_monthly_ghs is none %}
+      <span class="plan-amount">Let's talk</span>
+      {% elif option.price_monthly_ghs == 0 %}
+      <span class="plan-amount">Free</span>
+      {% else %}
+      <span class="plan-amount">&#8373;{{ '%.0f'|format(option.price_monthly_ghs) }}</span>
+      <span class="plan-per">GHS / month<br>
+        {% if option.price_annual_ghs %}&#8373;{{ '%.0f'|format(option.price_annual_ghs) }} billed annually{% else %}billed monthly{% endif %}
+      </span>
+      {% endif %}
+    </div>
+
+    <div class="plan-limits">
+      {{ option.max_products or 'Unlimited' }} products
+      &middot; {{ option.max_users or 'Unlimited' }} {{ 'person' if option.max_users == 1 else 'staff' }}
+    </div>
+
+    {% if option.price_monthly_ghs %}
+    <a href="{{ url_for('billing.upgrade', plan_code=option.code) }}"
+       class="btn {{ 'btn-outline-primary' if is_current else 'btn-primary' }} plan-cta">
+      {# Renew, not nothing, on the plan they are already on. Mobile money
+         cannot charge anybody automatically, so renewing is the single most
+         common reason a paying customer opens this page. #}
+      {{ 'Renew' if is_current else 'Choose ' ~ option.name }}
+    </a>
+    {% elif option.price_monthly_ghs is none %}
+    <a href="{{ url_for('billing.overview') }}#contact" class="btn btn-outline-primary plan-cta">Contact us</a>
+    {% else %}
+    <span class="plan-cta plan-cta-none">{{ 'You are here' if is_current else 'Where everyone starts' }}</span>
+    {% endif %}
+
+    {% set adds = plan_adds.get(option.code) %}
+    {% if adds %}
+    <ul class="plan-adds">
+      <li class="plan-adds-head">{{ 'Everything free, and:' if option.code == 'basic' else 'Everything below, and:' }}</li>
+      {% for line in adds %}
+      <li><i class="bi bi-check2" aria-hidden="true"></i> {{ line }}</li>
+      {% endfor %}
+    </ul>
+    {% endif %}
   </div>
+  {% endfor %}
 </div>
+
+<p class="text-muted small mb-4">
+  <i class="bi bi-shield-check me-1"></i>
+  No commitment. Nothing renews on its own, and nothing is taken without you
+  sending it.
+</p>
 
 <div class="glass-card">
   <div class="card-toolbar"><h5 class="mb-0">Payments</h5></div>
