@@ -27,16 +27,33 @@ def factor(product):
     return max(1, int(product.units_per_purchase_uom or 1))
 
 
+def describes_pack(count, purchase_uom, base_uom):
+    """Do these three values describe a real pack?
+
+    The rule itself, separated from where the values come from, because it is
+    asked in two places: of a saved product by `has_conversion` below, and of a
+    half-filled form by `ProductForm.has_pack` before there is a product to ask
+    about. Two copies of it drifted once already - the form required a pack name
+    and this did not, so a product saved with a blank purchase unit counted as
+    convertible here and not there.
+
+    Three conditions, and all of them matter. More than one to a pack; a name
+    for the pack; and a name different from the single, because a "carton" of 24
+    bottles called a bottle is two names for one thing.
+    """
+    pack = (purchase_uom or '').strip().lower()
+    base = (base_uom or 'pcs').strip().lower()
+    return int(count or 0) > 1 and bool(pack) and pack != base
+
+
 def has_conversion(product):
     """True when buying and selling genuinely use different units.
 
     A product bought and sold in pieces needs none of this, and showing it a
     carton/piece selector would be noise.
     """
-    return (
-        factor(product) > 1
-        and (product.purchase_uom or '').strip().lower() != (product.base_uom or '').strip().lower()
-    )
+    return describes_pack(product.units_per_purchase_uom,
+                          product.purchase_uom, product.base_uom)
 
 
 def has_conversion_available(products):
@@ -75,20 +92,45 @@ def split(product, base_quantity):
     return divmod(base_quantity, per)
 
 
-def describe(product, base_quantity):
-    """Human-readable quantity, e.g. '10 cartons + 6 pcs (246 pcs)'."""
+def in_packs(product, base_quantity):
+    """A stock figure in the unit the business counts in: '13 cartons + 6 bottles'.
+
+    The remainder is kept rather than rounded, at the user's direction. A
+    wholesaler genuinely holds part-cartons - a carton gets broken open the
+    first time somebody buys three bottles - and rounding it away would put
+    the books out and hide the stock that is actually loose on the floor.
+
+    Short on purpose: this goes in table cells and badges. `describe` adds the
+    base-unit total for the places that need to reconcile against a count.
+    """
     base_quantity = int(base_quantity or 0)
-    base_unit = product.base_uom or 'pcs'
     if not has_conversion(product):
-        return f'{base_quantity} {base_unit}'
+        return quantity_label(product, base_quantity, BASE)
 
     whole, remainder = split(product, base_quantity)
-    purchase_unit = product.purchase_uom or 'unit'
     if whole and remainder:
-        return f'{whole} {purchase_unit} + {remainder} {base_unit} ({base_quantity} {base_unit})'
+        return (f'{quantity_label(product, whole, PURCHASE)} + '
+                f'{quantity_label(product, remainder, BASE)}')
     if whole:
-        return f'{whole} {purchase_unit} ({base_quantity} {base_unit})'
-    return f'{base_quantity} {base_unit}'
+        return quantity_label(product, whole, PURCHASE)
+    return quantity_label(product, remainder, BASE)
+
+
+def describe(product, base_quantity):
+    """As `in_packs`, plus the base-unit total: '10 cartons + 6 pcs (246 pcs)'.
+
+    For the places that have to reconcile against a physical count, where the
+    number of individual items is the thing being checked.
+    """
+    base_quantity = int(base_quantity or 0)
+    if not has_conversion(product):
+        return quantity_label(product, base_quantity, BASE)
+
+    whole, _remainder = split(product, base_quantity)
+    if not whole:
+        return quantity_label(product, base_quantity, BASE)
+    return (f'{in_packs(product, base_quantity)} '
+            f'({quantity_label(product, base_quantity, BASE)})')
 
 
 def cost_to_base(product, cost, unit=BASE):
@@ -179,6 +221,42 @@ def unit_label(product, unit=BASE):
     if unit == PURCHASE and has_conversion(product):
         return product.purchase_uom or 'unit'
     return product.base_uom or 'pcs'
+
+
+def plural(word):
+    """A unit word for more than one of it.
+
+    These are words the business typed, so they are whatever they are: "pcs",
+    "box", "crate". Appending a bare "s" produced "pcss" and "boxs", and "pcs"
+    is the default base unit, so that was the common case rather than an edge
+    one. Lives here because this module owns what a unit is called; the same
+    three lines run in the browser on the product and purchase order forms.
+    """
+    word = (word or '').strip()
+    if not word or word.lower().endswith('s'):
+        return word
+    if word.lower().endswith(('x', 'z', 'ch', 'sh')):
+        return word + 'es'
+    return word + 's'
+
+
+def packing(product):
+    """How this product is packed, in one phrase: 'carton of 24', or 'bottle'.
+
+    For the column that has to say what unit the numbers beside it are in. A
+    spreadsheet cannot hold "13 cartons + 6 bottles" in a cell somebody sums,
+    so exports name the unit once and keep every figure numeric.
+    """
+    if not has_conversion(product):
+        return unit_label(product, BASE)
+    return f'{unit_label(product, PURCHASE)} of {factor(product)}'
+
+
+def quantity_label(product, count, unit=BASE):
+    """A quantity as it should be printed: "2 cartons", "1 carton", "48 pcs"."""
+    count = int(count or 0)
+    word = unit_label(product, unit)
+    return f'{count} {word if count == 1 else plural(word)}'
 
 
 def price_to_base(product, price, unit=BASE):

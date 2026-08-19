@@ -29,6 +29,23 @@
     <a href="{{ url_for('billing.overview') }}" class="btn btn-sm btn-primary">Choose a plan</a>
   </div>
 </div>
+{% elif trial and trial.phase == 'lapsed' %}
+{# A customer who paid before and is now on Kiosk. Named plainly, because the
+   alternative is them working it out from a product that will not save. #}
+<div class="glass-card mb-4" style="border-left: 3px solid var(--bs-warning);">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+      <strong>Your plan has lapsed.</strong>
+      <span class="text-muted">
+        You are on {{ trial.plan.name }}, which covers {{ trial.plan.max_products }}
+        products and {{ trial.plan.max_users }}
+        {{ 'person' if trial.plan.max_users == 1 else 'people' }}. Everything you
+        had is still here - renew and you can switch it all back on.
+      </span>
+    </div>
+    <a href="{{ url_for('billing.overview') }}" class="btn btn-sm btn-primary">Renew</a>
+  </div>
+</div>
 {% endif %}
 
 {% if setup and not setup.complete %}

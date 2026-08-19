@@ -2,19 +2,25 @@
 
 ## Theme
 
-**Current: dark only, glassmorphic.** Near-black slate background, translucent blurred
-cards, blue accent, Bootstrap 5 with a custom layer on top. Sidebar navigation on desktop,
-collapsing to a top bar with an overlay drawer on mobile.
+**Light, dark, or follow the device**, chosen per user and remembered. `:root` carries the
+dark palette and `[data-theme="light"]` overrides it; `templates/base.html` stamps both
+`data-theme` and `data-bs-theme` on `<html>`, always concrete, because Bootstrap 5.3 has no
+`prefers-color-scheme` support of its own and a missing attribute is not a default. Sidebar
+navigation on desktop, collapsing to a bottom bar on phones.
 
-> **Scheduled for replacement in Stage 3.1.** This theme is documented as it stands, not as
-> it should be. Dark glass at 70% opacity with a backdrop blur is the lowest-contrast
-> combination available, and this app is used on a phone in warehouse doorways and open
-> markets in full daylight. It also costs real GPU time on the budget Android hardware
-> this market runs. Stage 3.1 rebuilds the palette light-first with dark by toggle and
-> `prefers-color-scheme`, and drops the blur.
->
-> Three consecutive commits early in the project were corrections forcing text back to a
-> readable colour. That is the interface reporting that the effect fights legibility.
+Cards keep the frosted look - it is the identity, and the user asked to keep it - but the
+palette behind it was rebuilt light-first in Stage 3 C1. **Dialogs are the exception and are
+solid** (`--bg-card-solid`): a dialog is the one surface with a whole page behind it, and
+frosting that is how text ends up sitting on text.
+
+> **The history, kept because it is the reason for the rule.** This was dark-only glass at
+> 70% opacity with a backdrop blur - the lowest-contrast combination available - in an app
+> used on a phone in warehouse doorways and open markets in full daylight, on budget Android
+> hardware where the blur costs real GPU time. Three consecutive commits early in the project
+> were corrections forcing text back to a readable colour. That is the interface reporting
+> that the effect fights legibility, and it is why every colour here is measured rather than
+> picked: `design/verify/capture.py` sweeps both themes and composites alpha before reading
+> contrast.
 
 ## Colors
 
@@ -30,8 +36,9 @@ Defined as CSS custom properties in `static/css/style.css`. Components use the t
 | Border | `--border-color` | `rgba(148, 163, 184, 0.2)` |
 
 Semantic state uses Bootstrap's contextual classes (`text-success`, `bg-danger`,
-`badge bg-warning`) rather than custom tokens. Stage 3.1 should give these real tokens —
-semantic colour is separate from the accent and should not depend on Bootstrap defaults.
+`badge bg-warning`) rather than custom tokens. **Still outstanding**: semantic colour is
+separate from the accent and should not depend on Bootstrap defaults. The palette rebuild
+that was going to carry this shipped as Stage 3 C1 without it.
 
 Currency is always rendered with the cedi sign and two decimals: `₵{{ '%.2f'|format(x) }}`.
 

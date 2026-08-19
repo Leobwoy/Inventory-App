@@ -121,6 +121,18 @@ def confirm_payment_command(reference, by, note):
 
     billing_service.confirm(transaction, confirmed_by=by, note=note)
     db.session.commit()
+
+    # Same rule as the console route: a paid plan change can go down as well as
+    # up, and the two paths must not disagree about what confirming a payment
+    # does.
+    from services import limits
+
+    switched_off = limits.enforce_plan_limits(transaction.business_id)
+    if switched_off:
+        db.session.commit()
+        click.echo('Brought the business inside the plan: '
+                   f'{len(switched_off.get("products", []))} products deactivated, '
+                   f'{len(switched_off.get("users", []))} staff suspended.')
     click.echo('Confirmed. The plan is active.')
 
 

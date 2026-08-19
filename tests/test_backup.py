@@ -151,3 +151,116 @@ def test_no_drop_database_remains_in_the_codebase():
         if 'drop database' in text or 'pg_dump' in text:
             offenders.append(path.name)
     assert offenders == []
+
+
+# --- what a backup must not forget -------------------------------------------
+
+def test_the_carton_price_survives_a_round_trip(two_shops, app):
+    """It did not. `pack_price` and `sell_unit` were missing from the export
+    spec, so every backup taken before this silently dropped the wholesale price
+    and whether a product was sold by the carton.
+
+    That was survivable while the single price was primary. It is not now: a
+    restore would reprice an entire catalogue at bottle rates.
+    """
+    from decimal import Decimal
+    from extensions import db
+
+    owner_a, business_a, _b = two_shops
+    product = Product.query.filter_by(business_id=business_a).one()
+    product.base_uom = 'bottles'
+    product.purchase_uom = 'carton'
+    product.units_per_purchase_uom = 24
+    product.pack_price = Decimal('1050.00')
+    product.sell_unit = 'both'
+    db.session.commit()
+
+    archive = owner_a.post('/backup_restore', data={'backup': '1'}).data
+    owner_a.post('/backup_restore', data={
+        'restore': '1', 'confirm_restore': 'REPLACE',
+        'restore_file': (io.BytesIO(archive), 'backup.zip'),
+    }, content_type='multipart/form-data', follow_redirects=True)
+
+    restored = Product.query.filter_by(business_id=business_a).one()
+    assert restored.pack_price == Decimal('1050.00'), 'the wholesale price was lost'
+    assert restored.sell_unit == 'both', 'how it is sold was lost'
+    assert restored.units_per_purchase_uom == 24
+
+
+def test_a_restored_sale_remembers_it_was_cartons(two_shops, app):
+    """Without sell_unit and sold_quantity a restored sale forgets it was two
+    cartons and reads as forty-eight bottles; without list_price every
+    historical discount vanishes from the record."""
+    import datetime
+    from decimal import Decimal
+    from extensions import db
+    from sales.models import Sale, SaleItem
+
+    owner_a, business_a, _b = two_shops
+    product = Product.query.filter_by(business_id=business_a).one()
+
+    sale = Sale(business_id=business_a, sale_date=datetime.date.today())
+    db.session.add(sale)
+    db.session.flush()
+    db.session.add(SaleItem(sale_id=sale.id, product_id=product.id, quantity=48,
+                            price_at_sale=Decimal('43.750000'),
+                            list_price=Decimal('48.000000'),
+                            sell_unit='purchase', sold_quantity=2))
+    db.session.commit()
+
+    archive = owner_a.post('/backup_restore', data={'backup': '1'}).data
+    owner_a.post('/backup_restore', data={
+        'restore': '1', 'confirm_restore': 'REPLACE',
+        'restore_file': (io.BytesIO(archive), 'backup.zip'),
+    }, content_type='multipart/form-data', follow_redirects=True)
+
+    line = (SaleItem.query.join(Sale, Sale.id == SaleItem.sale_id)
+            .filter(Sale.business_id == business_a).one())
+    assert line.quantity == 48
+    assert line.sold_quantity == 2, 'the sale forgot it was cartons'
+    assert line.sell_unit == 'purchase'
+    assert line.list_price == Decimal('48.000000'), 'the discount record was lost'
+
+
+def test_an_archive_from_before_these_columns_still_imports(two_shops, app):
+    """The other half of the change: adding columns to the export spec must not
+    stop older archives being readable.
+
+    This one passed before the fix too, and it is worth saying why rather than
+    leaving it looking like proof. Absent columns used to be handed to the model
+    as an explicit None, and that survived only because SQLAlchemy treats an
+    explicitly-None attribute as unset and applies the column default - so
+    sell_unit landed on 'base' by luck of it having a default. The restore path
+    now leaves absent columns out of the insert instead of relying on that. What
+    this test pins is the guarantee itself: an archive from before the carton
+    columns existed still restores, and the defaults still apply.
+    """
+    owner_a, business_a, _b = two_shops
+    archive = owner_a.post('/backup_restore', data={'backup': '1'}).data
+
+    # Strip the new columns back out, exactly as an older backup would lack them.
+    old = io.BytesIO()
+    with zipfile.ZipFile(io.BytesIO(archive)) as src, zipfile.ZipFile(old, 'w') as dst:
+        for name in src.namelist():
+            data = src.read(name).decode('utf-8')
+            if name.endswith('products.csv'):
+                rows = list(csv.DictReader(io.StringIO(data)))
+                keep = [c for c in (rows[0].keys() if rows else [])
+                        if c not in ('pack_price', 'sell_unit')]
+                out = io.StringIO()
+                writer = csv.DictWriter(out, fieldnames=keep)
+                writer.writeheader()
+                for row in rows:
+                    writer.writerow({k: row[k] for k in keep})
+                data = out.getvalue()
+            dst.writestr(name, data)
+
+    response = owner_a.post('/backup_restore', data={
+        'restore': '1', 'confirm_restore': 'REPLACE',
+        'restore_file': (io.BytesIO(old.getvalue()), 'old-backup.zip'),
+    }, content_type='multipart/form-data', follow_redirects=True)
+
+    assert response.status_code == 200
+    restored = Product.query.filter_by(business_id=business_a).one()
+    assert restored.sell_unit == 'base', 'the model default did not apply'
+    assert restored.pack_price is None

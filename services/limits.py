@@ -184,3 +184,136 @@ def _current_business_id():
     if getattr(current_user, 'is_authenticated', False):
         return current_user.business_id
     return None
+
+
+# --- bringing a business into line after a downgrade -------------------------
+
+def over_limit(business_id=None):
+    """How far past its plan a business currently is.
+
+    `{'products': 380, 'users': 14}`, counting only what is actually over. Read
+    only - it says nothing about whether anything has been done about it, which
+    is what lets the same figures drive both the enforcement below and the
+    upgrade prompt somebody reads.
+    """
+    business_id = business_id or _current_business_id()
+    plan = effective_plan(business_id)
+    if plan is None:
+        return {}
+
+    over = {}
+    if plan.max_products is not None:
+        excess = active_product_count(business_id) - plan.max_products
+        if excess > 0:
+            over['products'] = excess
+    if plan.max_users is not None:
+        excess = active_user_count(business_id) - plan.max_users
+        if excess > 0:
+            over['users'] = excess
+    return over
+
+
+def enforce_plan_limits(business_id, actor_id=None):
+    """Bring a business within its plan. Returns what was switched off.
+
+    Invariant 10 has said since it was written that a downgrade "removes access,
+    not records: products deactivate, staff suspend, nothing is destroyed". That
+    described an intention nobody had built - the caps were only ever consulted
+    when *adding* something, so a Distributor with four hundred products who
+    dropped to Kiosk kept all four hundred active and sellable. This is the
+    invariant becoming true.
+
+    Three rules hold it together:
+
+    **It only ever takes access away, never gives it back.** Upgrading does not
+    resurrect anything: a product the owner retired on purpose must not reappear
+    in their catalogue because they bought a bigger plan, and only they know
+    which of the four hundred they actually want. So this is safe to call on any
+    plan change in either direction, and on a schedule.
+
+    **The Owner is never suspended.** Kiosk has one seat, so a literal reading of
+    "suspend everyone over the cap" locks the last person out of a business that
+    still owes money - and `auth/routes.py` refuses to suspend an Owner anyway.
+    The Owner holds the seat; everyone else goes.
+
+    **Nothing is deleted.** Deactivated products stay in the catalogue, visible
+    and marked, and suspended staff keep their accounts and their history. Every
+    past sale, order and report is untouched, because the records are the
+    business's and the plan only governs what can be done with them today.
+    """
+    from auth.models import User
+    from services import audit
+
+    plan = effective_plan(business_id)
+    if plan is None:
+        return {}
+
+    switched_off = {}
+
+    if plan.max_products is not None:
+        # **Stock on hand first, then what sells.** Chosen against the dev
+        # catalogue rather than in the abstract: the first rule written here was
+        # "keep the newest", and measured against real data it kept two products
+        # with no stock and no sales while retiring four of the best-selling
+        # lines. A wholesaler's staples are the ones they have carried longest,
+        # so newest-first is close to a rule for switching off the business.
+        #
+        # Stock leads because that is the sharpest pain - goods already paid for,
+        # sitting on the floor, that the app will not let them sell. Sales break
+        # the tie within each group, and `id` breaks it after that so the result
+        # is stable and does not reshuffle every time this runs.
+        from sqlalchemy import func
+
+        from sales.models import SaleItem
+
+        sold = (db.session.query(
+                    SaleItem.product_id.label('product_id'),
+                    func.coalesce(func.sum(SaleItem.quantity), 0).label('units'))
+                .group_by(SaleItem.product_id).subquery())
+        keep = [row.id for row in
+                db.session.query(Product.id)
+                .outerjoin(sold, sold.c.product_id == Product.id)
+                .filter(Product.business_id == business_id,
+                        Product.is_active.isnot(False))
+                .order_by((Product.quantity_in_stock > 0).desc(),
+                          func.coalesce(sold.c.units, 0).desc(),
+                          Product.id.desc())
+                .limit(plan.max_products).all()]
+        retired = (Product.query
+                   .filter(Product.business_id == business_id,
+                           Product.is_active.isnot(False),
+                           Product.id.notin_(keep) if keep else sa_true())
+                   .all())
+        for product in retired:
+            product.is_active = False
+            product.locked_by_plan = True
+        if retired:
+            switched_off['products'] = [p.sku for p in retired]
+
+    if plan.max_users is not None:
+        # Ordered so the Owner keeps a seat and, on Kiosk's single seat, is the
+        # only one who does. Sorted in Python because `is_owner` is derived from
+        # the role relationship rather than stored - there is no column to order
+        # by, and a business holds at most fifteen people.
+        staff = sorted(
+            User.query.filter(User.business_id == business_id,
+                              User.is_active.isnot(False)).all(),
+            key=lambda u: (not u.is_owner, u.id))
+        suspended = [u for u in staff[plan.max_users:] if not u.is_owner]
+        for user in suspended:
+            user.is_active = False
+        if suspended:
+            switched_off['users'] = [u.email for u in suspended]
+
+    if switched_off:
+        audit.log('billing.limits_enforced', entity_type='business',
+                  entity_id=business_id, business_id=business_id,
+                  user_id=actor_id, plan=plan.code, **switched_off)
+    return switched_off
+
+
+def sa_true():
+    """A always-true clause, for the case where a plan allows nothing at all."""
+    from sqlalchemy import true
+
+    return true()

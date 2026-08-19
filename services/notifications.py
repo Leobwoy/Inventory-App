@@ -26,6 +26,7 @@ from sqlalchemy.orm import joinedload
 from extensions import db
 from products.models import ItemGroup, Product
 from purchases.models import StockBatch
+from services import uom
 
 #: Worst first. The dashboard and the bell both read this order.
 SEVERITY_ORDER = {'critical': 0, 'warning': 1, 'info': 2}
@@ -139,13 +140,21 @@ def for_business(business_id):
 
     alerts = []
 
-    expired = expired_batches(business_id)
+    # Expiry is its own paid capability, gated the same way the credit ledger is
+    # below. Only the *alerts* are gated, never the tracking underneath: batches
+    # and expiry dates are what FEFO picks stock by, so switching them off would
+    # change which bottle leaves the shelf, not just what gets said about it.
+    tracks_expiry = limits.has_feature('expiry_alerts', business_id)
+
+    expired = expired_batches(business_id) if tracks_expiry else []
     if expired:
         units = sum(b.quantity_remaining for b in expired)
         alerts.append(_alert(
             'expired', 'critical',
             f'{len(expired)} batch{"es" if len(expired) > 1 else ""} already expired',
-            f'{units} units are past their date and still counted as sellable. '
+            # Batches from different products, so there is no single unit to
+            # convert into - "items" is the honest word for a mixed count.
+            f'{units} items are past their date and still counted as sellable. '
             'FEFO will hand them to the next customer.',
             'products.list_products', {'stock': 'expiring'}, len(expired)))
 
@@ -159,7 +168,7 @@ def for_business(business_id):
             + (f' and {len(empty) - 3} more' if len(empty) > 3 else ''),
             'products.low_stock', {}, len(empty)))
 
-    soon = expiring_batches(business_id)
+    soon = expiring_batches(business_id) if tracks_expiry else []
     if soon:
         nearest = soon[0].expiry_date
         alerts.append(_alert(
@@ -173,8 +182,12 @@ def for_business(business_id):
         alerts.append(_alert(
             'low_stock', 'warning',
             f'{len(running_out)} product{"s" if len(running_out) > 1 else ""} below reorder level',
+            # "(18 left)" named no unit at all, on the two screens most likely
+            # to be read at a glance. 18 bottles and 18 cartons are different
+            # decisions.
             'Lowest: ' + ', '.join(
-                f'{p.name} ({p.quantity_in_stock} left)' for p in running_out[:3]),
+                f'{p.name} ({uom.in_packs(p, p.quantity_in_stock)} left)'
+                for p in running_out[:3]),
             'products.low_stock', {}, len(running_out)))
 
     if limits.has_feature('credit_ledger', business_id):

@@ -62,20 +62,20 @@
             <div class="recv-line {{ 'is-complete' if outstanding <= 0 }}">
                 <div class="recv-head">
                     <div class="recv-what">
-                        <div class="recv-name">{{ item.product.name if item.product else '&mdash;' }}</div>
+                        <div class="recv-name">{{ item.product.name if item.product else '—' }}</div>
                         <div class="recv-sub">
                             {% if item.product and item.product.sku %}
                             <span class="font-monospace">{{ item.product.sku }}</span> &middot;
                             {% endif %}
-                            {{ item.quantity_ordered }} ordered
+                            {{ uom.in_packs(item.product, item.quantity_ordered) }} ordered
                             {% if item.quantity_received %}
-                            &middot; {{ item.quantity_received }} already in
+                            &middot; {{ uom.in_packs(item.product, item.quantity_received) }} already in
                             {% endif %}
                         </div>
                     </div>
                     <div class="recv-status">
                         {% if outstanding > 0 %}
-                        <span class="badge bg-warning text-dark">{{ outstanding }} outstanding</span>
+                        <span class="badge bg-warning text-dark">{{ uom.in_packs(item.product, outstanding) }} outstanding</span>
                         {% if item.product and uom.has_conversion(item.product) %}
                         <div class="recv-sub">{{ uom.describe(item.product, outstanding) }}</div>
                         {% endif %}

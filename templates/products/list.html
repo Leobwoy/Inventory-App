@@ -4,12 +4,35 @@
 
 {% block content %}
 <div class="page-header">
-    <h2>Products Inventory</h2>
+    {# "Products · 16 tracked" per the mockup, and the count is the plan's own
+       measure - active products, the number the cap is about - so the page says
+       what it costs to add another. #}
+    <h2>Products <span class="page-count">{{ products_used }} tracked</span></h2>
     <div class="page-header-actions">
-        <a href="{{ url_for('products.add_product') }}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> Add Product</a>
-        <a href="{{ url_for('products.upload_products') }}" class="btn btn-outline-primary"><i class="bi bi-cloud-upload me-1"></i> Upload Excel</a>
+        <a href="{{ url_for('products.upload_products') }}" class="btn btn-outline-secondary"><i class="bi bi-collection me-1"></i> Upload</a>
+        <a href="{{ url_for('products.add_product') }}" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i> Add product</a>
     </div>
 </div>
+
+{# The plan holding stock back is the one moment this app has a fair claim on
+   somebody's attention about money, so it says so plainly and once: what is
+   switched off, what the plan covers, and a way out. Nothing is hidden and
+   nothing is deleted - the products are all still in the list below. #}
+{% if locked_count %}
+<div class="glass-card mb-4" style="border-left: 3px solid var(--bs-warning);">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+      <strong>{{ locked_count }} product{{ '' if locked_count == 1 else 's' }}
+        switched off by your plan.</strong>
+      <span class="text-muted">
+        {{ plan.name }} covers {{ plan.max_products }} active products. The rest are
+        still here with all their history - upgrade and you can switch them back on.
+      </span>
+    </div>
+    <a href="{{ url_for('billing.overview') }}" class="btn btn-sm btn-primary">See plans</a>
+  </div>
+</div>
+{% endif %}
 
 <div class="glass-card">
     {% set search_placeholder = 'Name, SKU, barcode or variant' %}
@@ -45,11 +68,22 @@
             <table class="table table-hover table-cards">
                 <thead>
                     <tr>
+                        {# Columns per the approved mockup (03-products): the unit a
+                           product is sold in, then cost, price, stock and status,
+                           each in its own cell. Brand, group and SKU move under the
+                           name rather than taking three more columns - this table
+                           already lost that fight once, at 130px for the product
+                           cell on a 1440px laptop, which is what moved product
+                           choosing into a dialog. #}
                         <th style="width: 40px;"><input class="form-check-input" type="checkbox" id="select-all"></th>
-                        <th>Product Details</th>
-                        <th>SKU</th>
-                        <th>Unit Price</th>
-                        <th>Stock Status</th>
+                        <th>Product</th>
+                        <th>Unit</th>
+                        {% if current_user.can('products.cost_price.view') %}
+                        <th class="text-end">Cost</th>
+                        {% endif %}
+                        <th class="text-end">Price</th>
+                        <th class="text-end">Stock</th>
+                        <th>Status</th>
                         <th class="text-end">Actions</th>
                     </tr>
                 </thead>
@@ -61,21 +95,51 @@
                         </td>
                         <td data-label="Product">
                             <div>
-                                <div class="fw-bold">{{ product.name }}</div>
-                                <small class="text-muted text-truncate" style="max-width: 200px; display: inline-block;">{{ product.description }}</small>
+                                <div class="fw-bold">{{ product.name }}
+                                    {# Only where the plan is the reason. A line the
+                                       owner retired says nothing, because it is not
+                                       an upgrade prompt. #}
+                                    {% if product.locked_by_plan %}
+                                    <span class="badge bg-warning text-dark ms-1"
+                                          title="Switched off because {{ plan.name }} covers {{ plan.max_products }} active products">
+                                        <i class="bi bi-lock-fill me-1"></i>Plan
+                                    </span>
+                                    {% endif %}
+                                </div>
+                                <small class="text-muted d-block text-truncate" style="max-width: 260px;">
+                                    {%- if product.brand %}{{ product.brand.name }} · {% endif -%}
+                                    {%- if product.item_group %}{{ product.item_group.name }} · {% endif -%}
+                                    <span class="font-monospace">{{ product.sku }}</span>
+                                </small>
                             </div>
                         </td>
-                        <td data-label="SKU" class="font-monospace text-muted">{{ product.sku }}</td>
-                        <td data-label="Price" class="fw-medium">₵{{ product.unit_price }}</td>
-                        <td data-label="Stock">
-                            {% if product.quantity_in_stock <= product.min_stock_alert %}
-                                <span class="badge bg-danger">
-                                    <i class="bi bi-exclamation-circle me-1"></i> {{ product.quantity_in_stock }} left (Low)
-                                </span>
+                        {# What one of these is, in the business's own words. #}
+                        {# Capitalised for the column, not in the data: the word is
+                           whatever the business typed, and "carton" is how they typed
+                           it. |capitalize touches the first letter only. #}
+                        <td data-label="Unit" class="text-muted">{{ uom.packing(product)|capitalize }}</td>
+                        {% if current_user.can('products.cost_price.view') %}
+                        <td data-label="Cost" class="text-end text-muted num">₵{{ '%.2f'|format(uom.cost_per_purchase_unit(product, product.cost_price) if uom.has_conversion(product) else (product.cost_price or 0)) }}</td>
+                        {% endif %}
+                        {# Price and stock in the same unit as each other and as the
+                           Unit column beside them. A per-bottle price against
+                           "13 cartons" is two units in one row. #}
+                        <td data-label="Price" class="text-end fw-medium num">₵{{ '%.2f'|format(uom.price_for(product, 'purchase' if uom.has_conversion(product) else 'base')) }}</td>
+                        <td data-label="Stock" class="text-end num"
+                            title="{{ uom.describe(product, product.quantity_in_stock) }}">{{ uom.in_packs(product, product.quantity_in_stock) }}</td>
+                        {# Status is its own cell in the mockup, and it reads better:
+                           the badge used to carry the count as well, so it said
+                           "13 cartons + 6 bottles in stock" and was the widest thing
+                           in the row. Three states, not two - out of stock is not the
+                           same problem as running low, and services/notifications.py
+                           has always treated them separately. #}
+                        <td data-label="Status">
+                            {% if (product.quantity_in_stock or 0) <= 0 %}
+                            <span class="badge bg-danger">Out</span>
+                            {% elif product.quantity_in_stock <= product.min_stock_alert %}
+                            <span class="badge bg-warning">Low</span>
                             {% else %}
-                                <span class="badge bg-success">
-                                    <i class="bi bi-check-circle me-1"></i> {{ product.quantity_in_stock }} in stock
-                                </span>
+                            <span class="badge bg-success">In stock</span>
                             {% endif %}
                         </td>
                         <td data-label="" class="cell-actions text-end">

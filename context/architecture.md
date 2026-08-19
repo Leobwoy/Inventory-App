@@ -68,20 +68,40 @@ Blueprints must not import each other's route modules. Cross-domain work goes th
 - **Client-side** — IndexedDB holds a cached catalogue and a queue of sales recorded
   offline. It is a staging area, never a source of truth: the server re-validates stock and
   price on sync, against the truth *now* rather than the truth the device had.
-- Money is `Numeric(10, 2)`, with two deliberate exceptions.
+- Money is `Numeric(10, 2)`, and the exceptions all follow one rule: **money a human types
+  or reads stays at two decimals; money the app derives by dividing keeps six.**
   `Business.max_discount_percent` is `Numeric(5, 2)` — a percentage, not money.
-  `PurchaseOrderItem.unit_cost` is `Numeric(14, 6)` because it is *derived*, by dividing a
-  line cost by a pack quantity; at two decimals that rounding is real money across a carton
-  of 24. Money a human types or reads stays at two.
+  `PurchaseOrderItem.unit_cost` (F-41), `SaleItem.price_at_sale` and `SaleItem.list_price`
+  (Stage U2) and `Product.cost_price` (Stage W2) are all `Numeric(14, 6)`, because each is a
+  per-single figure obtained by dividing a pack figure. At two decimals that rounding is real
+  money across a carton of 24, and on `cost_price` it also drifts on every edit: 1,000 for 24
+  stores 41.67, which the form reads back as a carton costing 1,000.08.
+  `Product.unit_price` deliberately stays at two. It is a genuine per-bottle selling price,
+  charged in whole pesewas, and it is re-derived from the stored pack price on every save
+  rather than round-tripped through the form, so it cannot drift.
 - Quantities are integers in **base units**, on every side. Buying converts at the edge
   (`services/uom.to_base`) and, since Stage U, so does selling: a sale line carries the unit
   it was typed in and is converted before `services/stock.py` sees it. Nothing downstream of
   that ever asks which unit a number is in.
-- **Two selling prices, one of them not derivable.** `Product.unit_price` is per base unit;
-  `Product.pack_price` is per pack and nullable, where null means "count × unit_price". A
-  stored pack price is a negotiated wholesale price - a carton of 24 at ₵1,050 is ₵43.75 a
-  bottle against ₵48 singly - and no arithmetic on the single price can produce that gap.
-  `Product.sell_unit` (`base` | `purchase` | `both`) says what may be chosen.
+- **The pack is the price.** `Product.pack_price` is what the business types and what the
+  business quotes; `Product.unit_price` and `Product.cost_price` are per base unit and are
+  *derived on save* by dividing the typed pack figures (Stage W2). This inverted in W2 and
+  the direction matters: a wholesaler buys, sells and quotes by the carton, and what one
+  bottle costs is both a figure they never work out and one no two shops agree on.
+
+  The per-single columns stay stored and stay `NOT NULL`. Deriving rather than dropping them
+  is what keeps the change contained — making them nullable would push a NULL into price
+  sorting (`products/routes.py` `PRODUCT_SORTS`, where it orders unpredictably on Postgres),
+  into the offline catalogue payload, and into every report that multiplies by them.
+
+  A stored pack price is a negotiated wholesale price - a carton of 24 at ₵1,050 is ₵43.75 a
+  bottle against ₵48 singly - and no arithmetic on a single price can produce that gap, which
+  is why it is the number that is typed rather than the number that is computed.
+  `pack_price` is still nullable and null still means "count × unit_price" to
+  `services/uom.price_for`, for rows that predate W2; the form no longer creates one.
+  A product with no real pack - loose goods - is priced by the single, and both the form and
+  `uom.sell_units()` fall back to that. `Product.sell_unit` (`base` | `purchase` | `both`)
+  says what may be chosen.
 - Free-form context on audit entries and payment payloads is JSON in a `Text` column.
 
 ## Auth and Access Model
@@ -125,39 +145,47 @@ Rules the codebase must never violate. Each was learned from a real defect.
    Hiding a selector is not enforcing anything - a hand-posted unit must not buy a
    conversion the plan does not include.
 
-14. **Conversion guards live in `services/uom.py`, not in its callers.** `to_base` and
+4. **Conversion guards live in `services/uom.py`, not in its callers.** `to_base` and
     `cost_to_base` check `has_conversion` themselves. They multiplied on the pack count
     alone until Stage U, and were safe only because both call sites happened to guard
     first; safety that lives in the callers lasts until the third caller.
 
-4. **Money is `Decimal` end to end.** `float()` only at an export boundary, never before
+5. **Money is `Decimal` end to end.** `float()` only at an export boundary, never before
    a sum.
 
-5. **Schema changes only through migrations.** Never `db.create_all()` — it builds tables
+6. **Schema changes only through migrations.** Never `db.create_all()` — it builds tables
    but runs no seed data, which is exactly how deploys silently produced an app with no
    roles (F-02).
 
-6. **Balances are derived, never stored.** Credit balances compute from sales minus
+7. **Balances are derived, never stored.** Credit balances compute from sales minus
    payments on every read. A stored balance is a cache, and an unreconciled cache drifts.
 
-7. **Audit writes never raise.** A failed log line must not roll back the operation it
+8. **Audit writes never raise.** A failed log line must not roll back the operation it
    describes. A missing log entry is bad; a lost sale is worse.
 
-8. **Read-then-write on shared rows takes a row lock.** `deduct_fefo`, `restore`,
+9. **Read-then-write on shared rows takes a row lock.** `deduct_fefo`, `restore`,
    `receive` and goods receipt all use `with_for_update()`. Without it, two tills selling
    the same product both pass the stock check and both write from a stale read.
 
-9. **Customer data is never deleted to enforce a plan limit.** Downgrading removes
+10. **Customer data is never deleted to enforce a plan limit.** Downgrading removes
    *access*, not records: products deactivate, staff suspend, nothing is destroyed.
+   `services/limits.enforce_plan_limits` is what makes this true — it was a statement of
+   intent with no code behind it until 2026-08-19, when the caps were tightened. Three
+   rules hold it: it only ever takes access away, so it is safe on an upgrade and only the
+   owner decides what comes back; the Owner account is never suspended, because Kiosk's
+   single seat would otherwise lock a business out of paying; and a product switched off by
+   the plan is marked `locked_by_plan`, so the catalogue can say *why* without libelling a
+   line the owner retired on purpose. It runs on the daily check in `billing/__init__.py`
+   and on every deliberate plan change.
 
-10. **Every POST form carries a CSRF token.** `CSRFProtect` is global and a missing token
+11. **Every POST form carries a CSRF token.** `CSRFProtect` is global and a missing token
     is a silent 400 (F-28). There is exactly **one** exemption,
     `api.cron_subscriptions`: server-to-server, authenticated by a shared secret compared
     with `hmac.compare_digest`, taking no input and idempotent. A scheduler has no
     session and cannot fetch a token first. A Paystack webhook would be the second,
     verified by signature. A third needs all four of those properties, not just the first.
 
-11. **Entitlement is decided on read, never by a scheduled job.**
+12. **Entitlement is decided on read, never by a scheduled job.**
     `services/limits.effective_plan()` works out what a business may do from the dates on
     the subscription row, on every request. `services/subscriptions.py` only makes the
     stored `status` agree with it. A run that is skipped, late or failed cannot grant a
@@ -165,12 +193,12 @@ Rules the codebase must never violate. Each was learned from a real defect.
     instance that sleeps and GitHub's scheduler drops runs when it is busy. If the two
     ever disagree, `effective_plan` is right.
 
-12. **A downgrade rewrites `plan_id`, not just `status`.** `effective_plan` reads
+13. **A downgrade rewrites `plan_id`, not just `status`.** `effective_plan` reads
     `status == 'free'` as "on the plan named here, with no expiry" - that is how a comped
     account works. Flipping the status while leaving a paid `plan_id` in place grants that
     plan permanently and it never expires again: the exact opposite of a downgrade.
 
-13. **An alert is only shown to someone allowed to see what it is about.** The alerts
+14. **An alert is only shown to someone allowed to see what it is about.** The alerts
     page spans modules by design, so it crosses permission gates its own `products.view`
     does not cover. `notifications.ALERT_PERMISSIONS` holds the exceptions, and both the
     page and the badge count go through `for_user()` - a badge counting what the page
@@ -235,7 +263,7 @@ left to enter.
 Grace exists because mobile money cannot renew on its own. A lapse means "they have not
 paid *yet today*", not "they left".
 
-It runs three ways, none of them authoritative (invariant 11):
+It runs three ways, none of them authoritative (invariant 12):
 
 - **Lazily**, `before_app_request`, throttled to once a day per signed-in user through the
   session. The marker is written *after* the work, so a connection that blinks is retried

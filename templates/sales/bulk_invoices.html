@@ -41,10 +41,13 @@
             {% set ns = namespace(grand_total=0) %}
             {% for item in sale.items %}
             <tr>
+              {# Same as invoice.html, and these three lines had a second bug of
+                 their own: no format at all, so a carton line printed
+                 41.666667 to a customer. price_at_sale is Numeric(14,6). #}
               <td data-label="Item">{{ item.product.name }}</td>
-              <td data-label="Unit Price">₵{{ item.price_at_sale }}</td>
-              <td data-label="Quantity">{{ item.quantity }}</td>
-              <td data-label="Total">₵{{ item.price_at_sale * item.quantity }}</td>
+              <td data-label="Unit Price">₵{{ '%.2f'|format(item.price_per_sold_unit) }}</td>
+              <td data-label="Quantity">{{ item.sold_as_text }}</td>
+              <td data-label="Total">₵{{ '%.2f'|format(item.price_at_sale * item.quantity) }}</td>
             </tr>
             {% set ns.grand_total = ns.grand_total + (item.price_at_sale * item.quantity) %}
             {% endfor %}
@@ -53,7 +56,7 @@
       </div>
       <div class="d-flex justify-content-end">
         <div class="text-end">
-          <h4 class="mb-0">Grand Total: <span class="text-success">₵{{ ns.grand_total }}</span></h4>
+          <h4 class="mb-0">Grand Total: <span class="text-success">₵{{ '%.2f'|format(ns.grand_total) }}</span></h4>
         </div>
       </div>
       <hr>

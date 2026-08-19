@@ -172,6 +172,10 @@ def add_sale():
             # What this product may actually be rung up in, already filtered by
             # the plan - so the control cannot offer what the server refuses.
             'units': uom.sell_units(p) if may_convert else [uom.BASE],
+            # Which of them the form should open on. A wholesaler reaches for a
+            # carton first; making them pick it every time is the same mistake
+            # as asking them what a bottle costs.
+            'default': uom.default_sell_unit(p) if may_convert else uom.BASE,
         }
         for p in catalogue
     }
@@ -212,8 +216,15 @@ def add_sale():
                 sold_unit = uom.BASE
                 if limits.has_feature('uom_conversion'):
                     asked = item_form.sell_unit.data or uom.BASE
-                    if asked in uom.sell_units(product):
-                        sold_unit = asked
+                    # Falling back to the product's own default rather than to
+                    # singles. A product sold only by the carton, posted without
+                    # a unit - no script running, a trimmed form - used to sell
+                    # as loose bottles at a bottle's price. default_sell_unit
+                    # can only ever return a unit sell_units already allows, so
+                    # this cannot buy a conversion the plan or the product
+                    # refuses; that gate is still the one above.
+                    sold_unit = (asked if asked in uom.sell_units(product)
+                                 else uom.default_sell_unit(product))
 
                 typed_quantity = item_form.quantity.data
                 base_quantity = uom.to_base(product, typed_quantity, sold_unit)

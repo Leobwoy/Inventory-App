@@ -51,17 +51,35 @@
 
 {# data-steps starts at "off" so that with no JavaScript both panes are on the
    page and the form still works. The inline script below turns stepping on. #}
+{# A refused POST comes back with the units the user chose, and those must
+   survive. A fresh GET has chosen nothing yet, so each line opens on whatever
+   its product is actually sold in. `request` is in every Jinja context, so this
+   needs no variable from the route - and this template is rendered from five
+   places, one of which has already shipped a bug by forgetting one. #}
 <form method="post" id="sale-form" class="sale-form" data-steps="off"
+      data-repost="{{ 1 if request.method == 'POST' else 0 }}"
       data-start-step="{{ start_step }}">
     {{ form.hidden_tag() }}
 
+    {# Real buttons, not clickable list items. These move between panes, and a
+       <li> with a click handler is invisible to the keyboard and announces
+       itself as nothing. `type="button"` is load-bearing: they sit inside the
+       form, and a bare <button> submits it.
+
+       The class and data-goto stay on the button rather than the li, because
+       showStep selects `.sale-step` to set aria-current and the delegated
+       handler resolves `closest('[data-goto]')`. #}
     <ol class="sale-steps" id="sale-steps">
-        <li class="sale-step" data-goto="1">
-            <span class="sale-step-n">1</span><span class="sale-step-word">Items</span>
+        <li>
+            <button type="button" class="sale-step" data-goto="1">
+                <span class="sale-step-n">1</span><span class="sale-step-word">Items</span>
+            </button>
         </li>
         <li class="sale-step-line" aria-hidden="true"></li>
-        <li class="sale-step" data-goto="2">
-            <span class="sale-step-n">2</span><span class="sale-step-word">Payment</span>
+        <li>
+            <button type="button" class="sale-step" data-goto="2">
+                <span class="sale-step-n">2</span><span class="sale-step-word">Payment</span>
+            </button>
         </li>
     </ol>
 
@@ -446,6 +464,7 @@
     if (!select || !button) {
       return;
     }
+    if (!window.ProductPicker) { return; }
     var label = window.ProductPicker.labelOf(select);
     button.querySelector('.picker-button-name').textContent =
       label || 'Choose a product';
@@ -498,6 +517,20 @@
         span.textContent = span.dataset.unit === 'purchase' ? product.pack : product.base;
       }
     });
+
+    // Open on the unit this product is actually sold in. Only when the product
+    // on the row has changed, so a choice already made - including one posted
+    // and re-rendered after the form was refused - is never overwritten.
+    var select = row.querySelector('.product-select');
+    var chosenFor = select ? select.value : '';
+    if (product && row.dataset.unitFor !== chosenFor) {
+      var wanted = row.querySelector('[name$="sell_unit"][value="' +
+                                     (product.default || units[0]) + '"]');
+      if (wanted) {
+        wanted.checked = true;
+      }
+    }
+    row.dataset.unitFor = chosenFor;
 
     // A unit that is no longer on offer must not stay selected.
     var picked = row.querySelector('[name$="sell_unit"]:checked');
@@ -672,7 +705,7 @@
     });
 
     body.appendChild(row);
-    window.ProductPicker.enhance(row);
+    if (window.ProductPicker) { window.ProductPicker.enhance(row); }
     attachMeta(row);
     paintPicker(row);
     updateUnitChoice(row);
@@ -728,6 +761,14 @@
   rows().forEach(function (row) {
     attachMeta(row);
     paintPicker(row);
+    // Seed it only on a re-render, so the units the user chose survive a
+    // refusal. On a fresh form nothing is seeded and every line opens on the
+    // unit its product is sold in - including the one already selected, which
+    // is why this cannot simply read the select.
+    if (form && form.dataset.repost === '1') {
+      var select = row.querySelector('.product-select');
+      row.dataset.unitFor = select ? select.value : '';
+    }
     updateUnitChoice(row);
     updatePrice(row);
   });

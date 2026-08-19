@@ -50,7 +50,7 @@
                     <th>Product</th>
                     <th>Ordered</th>
                     <th>Received</th>
-                    <th>Unit Cost (₵)</th>
+                    <th>Cost each (₵)</th>
                     <th>Supplier</th>
                     <th>Status</th>
                     <th class="text-end">Total (₵)</th>
@@ -63,15 +63,18 @@
                     <td data-label="Date" class="text-muted">{{ po.order_date.strftime('%Y-%m-%d') if po.order_date else '' }}</td>
                     <td data-label="PO" class="font-monospace text-muted">PO-{{ item.po_id }}</td>
                     <td data-label="Product" class="fw-medium">{{ item.product.name if item.product else '—' }}</td>
-                    <td data-label="Ordered"><span class="badge bg-secondary">{{ item.quantity_ordered }}</span></td>
+                    {# Cartons, because that is the unit the order was placed in.
+                       "Ordered: 240" against a delivery note saying 10 cartons is
+                       the round trip that did not close. #}
+                    <td data-label="Ordered"><span class="badge bg-secondary">{{ uom.in_packs(item.product, item.quantity_ordered) }}</span></td>
                     <td data-label="Received">
                         {% if (item.quantity_received or 0) >= item.quantity_ordered %}
-                        <span class="badge bg-success">{{ item.quantity_received or 0 }}</span>
+                        <span class="badge bg-success">{{ uom.in_packs(item.product, item.quantity_received or 0) }}</span>
                         {% else %}
-                        <span class="badge bg-warning text-dark">{{ item.quantity_received or 0 }}</span>
+                        <span class="badge bg-warning text-dark">{{ uom.in_packs(item.product, item.quantity_received or 0) }}</span>
                         {% endif %}
                     </td>
-                    <td data-label="Unit Cost" class="text-muted">₵{{ '%.2f'|format(item.unit_cost or 0) }}</td>
+                    <td data-label="Cost each" class="text-muted">₵{{ '%.2f'|format(uom.cost_per_purchase_unit(item.product, item.unit_cost or 0) if uom.has_conversion(item.product) else (item.unit_cost or 0)) }}</td>
                     <td data-label="Supplier" class="text-muted">{{ po.supplier.name if po.supplier else 'N/A' }}</td>
                     <td data-label="Status" class="text-muted text-capitalize">{{ po.status|replace('_', ' ') }}</td>
                     <td data-label="Total" class="text-end fw-medium text-warning">₵{{ '%.2f'|format((item.unit_cost or 0) * item.quantity_ordered) }}</td>

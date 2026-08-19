@@ -5,6 +5,7 @@ account was effectively an admin account. These tests exercise direct URL
 access, which is the thing that actually failed: hiding a nav link protects
 nothing.
 """
+import re
 import pytest
 
 from auth.models import User
@@ -151,12 +152,24 @@ def test_suspension_takes_effect_on_an_active_session(business, make_staff, app)
 
 
 def test_cost_price_field_is_absent_for_unpermitted_staff(business, make_staff):
-    """Hidden in the template is not enough - the bound field is removed."""
+    """Hidden in the template is not enough - the bound field is removed.
+
+    Both cost boxes, not just one: the form asks for a cost per carton as well
+    as a cost per single, and the pack figure is the same secret multiplied by
+    24. Asserted against a real `<input>` rather than the substring, because the
+    page now carries `[name="cost_price"]` inside a script that reads the box
+    when there is one - a selector that finds nothing is not a leaked cost.
+    """
+    def boxes(client):
+        page = client.get('/products/add').get_data(as_text=True)
+        return {name for name in ('cost_price', 'pack_cost')
+                if re.search(r'<input[^>]*name="%s"' % name, page)}
+
     inventory = make_staff(business, 'Inventory Staff', 'inv@x.example.com')
-    assert 'cost_price' not in inventory.get('/products/add').get_data(as_text=True)
+    assert boxes(inventory) == set()
 
     manager = make_staff(business, 'Manager', 'mgr2@x.example.com')
-    assert 'cost_price' in manager.get('/products/add').get_data(as_text=True)
+    assert boxes(manager) == {'cost_price', 'pack_cost'}
 
 
 def test_posted_cost_price_is_ignored_on_edit(business, make_staff, make_product):
@@ -243,14 +256,18 @@ def test_export_omits_cost_price_for_unpermitted_staff(business, make_staff, mak
     body = inventory.post('/products/bulk_action',
                           data={'action': 'export_csv', 'product_ids': [str(product.id)]}
                           ).get_data(as_text=True)
-    assert 'Cost Price' not in body
+    # W6 renamed this header to "Cost each", because the figure under it is now
+    # per carton rather than per bottle. The guarantee is unchanged: the column
+    # is absent entirely rather than blanked, so there is nothing to widen.
+    assert 'Cost each' not in body
+    assert 'cost' not in body.splitlines()[0].lower(), 'a cost column by another name'
     assert sku in body
 
     manager = make_staff(business, 'Manager', 'mgr2@x.example.com')
     manager_body = manager.post('/products/bulk_action',
                                 data={'action': 'export_csv', 'product_ids': [str(product.id)]}
                                 ).get_data(as_text=True)
-    assert 'Cost Price' in manager_body
+    assert 'Cost each' in manager_body
 
 
 def test_a_supplier_with_purchase_history_cannot_be_deleted(register, make_product, make_po):

@@ -31,12 +31,17 @@ EXPORT_SPEC = [
     ('item_groups',           ItemGroup,         ['id', 'name', 'category_id']),
     ('suppliers',             Supplier,          ['id', 'name', 'contact', 'phone', 'email', 'address']),
     ('customers',             Customer,          ['id', 'name', 'phone', 'email', 'address']),
+    # pack_price and sell_unit were missing here until now, so every backup
+    # taken before this line silently dropped the wholesale price and whether a
+    # product was sold by the carton. That is the *primary* price now, and a
+    # restore that loses it would reprice a whole catalogue at bottle rates.
     ('products',              Product,           ['id', 'name', 'sku', 'description', 'unit_price',
-                                                  'cost_price', 'quantity_in_stock', 'min_stock_alert',
+                                                  'cost_price', 'pack_price', 'sell_unit',
+                                                  'quantity_in_stock', 'min_stock_alert',
                                                   'category_id', 'item_group_id', 'brand_id',
                                                   'variant_label', 'size_value', 'size_unit', 'barcode',
                                                   'base_uom', 'purchase_uom', 'units_per_purchase_uom',
-                                                  'is_active']),
+                                                  'is_active', 'locked_by_plan']),
     ('purchase_orders',       PurchaseOrder,     ['id', 'supplier_id', 'status', 'order_date',
                                                   'expected_date']),
     ('purchase_order_items',  PurchaseOrderItem, ['id', 'po_id', 'product_id', 'quantity_ordered',
@@ -45,8 +50,12 @@ EXPORT_SPEC = [
                                                   'quantity_received', 'quantity_remaining',
                                                   'received_date', 'expiry_date']),
     ('sales',                 Sale,              ['id', 'sale_date', 'customer_id']),
+    # Likewise: without sell_unit and sold_quantity a restored sale forgets it
+    # was two cartons and reads as forty-eight bottles, and without list_price
+    # every historical discount vanishes from the record.
     ('sale_items',            SaleItem,          ['id', 'sale_id', 'product_id', 'quantity',
-                                                  'price_at_sale']),
+                                                  'price_at_sale', 'list_price',
+                                                  'sell_unit', 'sold_quantity']),
 ]
 
 # Which columns are foreign keys, and which exported table they point at.
@@ -202,6 +211,18 @@ def import_business(business_id, file_storage, replace=True):
             skip = False
             for column in columns:
                 if column == 'id':
+                    continue
+                # Absent and blank are not the same thing. `.get(column) or ''`
+                # made them identical, and _coerce turns '' into None, so an
+                # archive taken before a column existed passed None explicitly
+                # for it. That happens to survive today only because SQLAlchemy
+                # treats an explicitly-None attribute as unset and fires the
+                # column default anyway - verified, sell_unit arrives as 'base'.
+                # Leaning on that is a trap: it rescues defaulted columns and
+                # nothing else, so the day a NOT NULL column without a default
+                # is added, every older archive stops importing. Leave a column
+                # the archive does not carry out of the insert entirely.
+                if column not in record:
                     continue
                 raw = (record.get(column) or '').strip()
                 if column in FK_TARGETS:

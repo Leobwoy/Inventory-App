@@ -494,7 +494,7 @@ reader user could walk straight out into dimmed, unreachable content. It now sav
 open, traps Tab among the enabled controls, restores focus on close, and the dim absorbs
 clicks.
 
-**The rest.** `tour_seen` was a read-then-write on a shared row, against invariant 8; it is
+**The rest.** `tour_seen` was a read-then-write on a shared row, against invariant 9; it is
 now a conditional `UPDATE ... WHERE tour_seen_at IS NULL` with the audit entry written only
 when exactly one row moved. The trial countdown uses `subscription.is_trialing`, so a lapsed
 trial the lifecycle job has not reconciled yet stops sitting on "0 days left". The ended
@@ -557,12 +557,16 @@ was measurement error, and was wrong. Measure against the colour actually in the
 
 ## In Progress
 
-- **Stage 3 — the interface redesign.** Shell complete (C1): tokenised palette, light theme
-  with a per-user switch, the sidebar narrowed to a 140px icon-and-label rail, and phone
-  navigation moved to a bottom bar. **C3, the sale form, is complete** — see below.
-  **C2, the dashboard, is still the old layout** and was skipped by mistake, not by
-  decision; it is the next thing to pick up. The remaining pages are still old layouts in
-  new colours.
+- **Stage 3 — the interface redesign.** C1 the shell (tokenised palette, light theme with a
+  per-user switch, the sidebar narrowed to a 140px icon-and-label rail, phone navigation
+  moved to a bottom bar), **C2 the dashboard** (commit `1b6a1a1`, "Rebuild the dashboard,
+  and stop the chart ignoring the theme") and **C3 the sale form** are all complete. This
+  entry claimed C2 was "still the old layout and skipped by mistake" long after it shipped;
+  corrected 2026-08-18. **C4 onwards is the next thing to pick up.** The remaining pages are
+  still old layouts in new colours.
+- **Stages U and W are complete** (2026-08-18). Everything typed and everything read is now
+  in the unit a wholesaler works in. That is why the redesign was paused here: C4 is the
+  products pages, which is exactly where the new fields live.
 - **Answered 2026-08-13: Stage 3 first, as a full redesign.** 2.6 and 2.7 both score
   suppliers from purchase history and need 20–30 completed orders before they show
   anything — with no real customers yet, both would ship as empty screens. The user chose
@@ -773,33 +777,38 @@ mean, and all three falsify.
 
 ## Next Up
 
-**Stage 3 is paused after the dashboard.** Units and pricing jump the queue at the user's
-direction (2026-08-17): "of importance and urgency". The remaining redesign pages resume
-after it, because the product form and list are exactly where the new fields live and
-rebuilding them first would mean rebuilding them twice.
+**Units and pricing are finished; Stage 3 resumes.** Stage 3 was paused after the dashboard
+at the user's direction (2026-08-17): "of importance and urgency". Stages U and W are both
+complete as of 2026-08-18, so the redesign picks up where it stopped - and picks up on the
+right side of the inversion, which is why it was paused here. Rebuilding the product pages
+first would have meant rebuilding them twice.
 
-1. **Stage U — Sell by the carton.** U1 schema and services, U2 the sale path, U3 the sale
-   form, U4 the product form in plain language, U5 three correctness fixes. See
-   Architecture Decisions below for the model and the research behind it.
-2. **Stage 3 C4** — Products pages to the design (list, add/edit, alerts, low stock)
-3. **Stage 3 C5–C8** — Money owed, purchasing lists, reports, settings, auth, print documents
-4. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
-5. **Stage 2.7** — Smart reorder
-6. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
+~~**Stage U — Sell by the carton.**~~ **Done.** U1 schema and services, U2 the sale path,
+U3 the sale form, U4 the product form in plain language, U5 three correctness fixes.
+
+~~**Stage W — The carton *is* the unit.**~~ **Done.** Followed directly from U, at the
+user's correction: U had treated the carton as a second price beside the single, which was
+still backwards. W1 backup data loss, W2 the carton becomes what you type, W3 the purchase
+order names its unit, W4 the invoice, W5 stock reads in cartons, W6 exports name their
+units, W7 the sale opens on Carton. Seven commits, each falsified. Two gaps left open
+deliberately - the offline catalogue payload and cost reconciliation - both recorded above.
+
+1. **Stage 3 C4** — Products pages to the design (list, add/edit, alerts, low stock)
+2. **Stage 3 C5–C8** — Money owed, purchasing lists, reports, settings, auth, print documents
+3. **Stage 2.6** — Supplier scorecards (last: needs 20–30 completed POs to show anything)
+4. **Stage 2.7** — Smart reorder
+5. **Stage 2B** — Paystack billing flow. **Not blocked any more, but not decided** — the
    registration premise was wrong and the account is pre-approved. See Open Questions:
    no payout has been received, and neither collection path has taken real money yet.
 
 (Stage 2.8, the dashboard rebuild, shipped as Stage 3 C2. Barcode sale entry and branded
 invoices were folded into Stage 3; branded invoices already shipped as F-36.)
 
-- **Cramped fields on goods receipt.** Reported from the running app with a screenshot.
-  On `templates/purchases/receive.html` the "Receiving now" input is about one digit wide and
-  "Batch number" is squeezed beside it — the row carries seven columns (Product, Ordered,
-  Already in, Outstanding, Receiving now, Batch number, Expiry date) and the three that are
-  actually *typed into* get whatever width is left over after five read-only ones. The fix is
-  a layout change, not a width tweak: the inputs should lead. Due in Phase C6 when Purchasing
-  is rebuilt; noted here so it is not lost, since it is the page where a typo costs real
-  stock. Same shape of problem is likely on the sale form, which has the same pattern.
+- ~~**Cramped fields on goods receipt.**~~ **Done**, ahead of Phase C6, because Stage U5
+  had to touch the same page. The seven-column row — five of them read-only, with the three
+  that are actually typed into sharing whatever width was left — is one card per line now,
+  and the inputs lead. `templates/purchases/receive.html` renders `.recv-line` cards.
+  The same shape of problem on the sale form was fixed in Stage 3 C3.
 
 ### Decision — selling by the carton (2026-08-17)
 
@@ -971,7 +980,602 @@ The API path checks `uom_conversion` before honouring a posted unit, but `offlin
 They are two features sharing a tier, not one feature — and a queued sale can arrive days
 after a downgrade. The product-level half of that gate *is* reachable and is tested.
 
+### Decision — the carton is the unit, not a second price (2026-08-18)
+
+Stage U gave the carton a price of its own. Asked why the purchase order form showed a carton
+price beside a per-bottle comparison, the user named the real error rather than the symptom:
+
+> *"We've been highly mistaken since the onset. The main unit of measurement here should be
+> the carton. We don't care what a single bottle costs, because different retailers charge
+> different prices for the same bottle — one shop sells Bigoo at ₵3.00 and the next at ₵3.50.
+> What we care about is the carton. Selling a single bottle belongs on the sales side; it
+> should not reach the purchase order side."*
+
+Traceable to one cause: `services/uom.py` was built around the rule *everything is stored in
+base units*, which is right for storage, and that assumption leaked upward into every screen
+until the app was asking a wholesaler to think in bottles.
+
+**Storage does not move.** Quantities stay in base units — that is what lets a delivery
+arrive as "10 cartons and 6 loose" and what makes FEFO and batch expiry work. What changes is
+everything typed and everything read.
+
+`Product.unit_price` stays `NOT NULL` and stays stored; it simply stops being *typed*. The
+form asks the carton price and the route derives the per-bottle figure via
+`uom.per_base_price()`, which already existed and was called from nowhere. That deliberately
+avoids the null-handling blast radius: price sorting (`products/routes.py:26-27`, where NULL
+sorts unpredictably on Postgres), the offline catalogue payload, and `test_queries.py:185`.
+`services/pricing.py` needs no change at all — it reads `uom.price_for()` and never touches
+`unit_price`.
+
+### Stage W progress
+
+**W1 — the backup was losing the carton price.** Found while mapping, not by a report, and
+done first because it is live data loss rather than a wrong label. `EXPORT_SPEC` omitted
+`pack_price` and `sell_unit` from products, and `list_price`, `sell_unit` and `sold_quantity`
+from sale lines. Every archive taken since Stage U shipped silently dropped the wholesale
+price and any record that a sale was rung up in cartons; restoring one repriced a whole
+catalogue at bottle rates and turned two cartons back into forty-eight bottles.
+
+**A claimed bug that falsification disproved, kept because the write-up is the point.** The
+restore path collapsed *absent* and *blank* into the same value — `record.get(column) or ''`,
+and `_coerce` turns `''` into `None`. I recorded that as a second bug: an archive from before
+`sell_unit` existed would pass `None` explicitly, override the model default and fail NOT
+NULL. Reverting the guard left the test green, so I probed the insert directly: SQLAlchemy
+treats an explicitly-`None` attribute as unset and fires the column default anyway —
+`sell_unit` arrives as `'base'`. The failure cannot happen today.
+
+The guard stays, with the comment rewritten to say that. It rescues *defaulted* columns and
+nothing else, so the day a NOT NULL column without a default is added, every older archive
+would stop importing — that is worth two lines. The test stays too, saying in its own
+docstring that it passed before the change, because a test that cannot go red is worth
+keeping only when it is honest about what it pins: the guarantee that an archive from before
+the carton columns still restores.
+
+**W2 — the carton is what you type.** The form asks two questions it never asked before -
+what does a carton sell for, what does a carton cost you - and stops asking the two it used
+to. `unit_price` and `cost_price` are derived on save and stay `NOT NULL`; that is the
+decision that kept this contained, because making them nullable would have pushed a NULL
+into `PRODUCT_SORTS`, the offline catalogue payload and every report that multiplies by
+them. `services/pricing.py` needed no change at all - it reads `uom.price_for` and never
+touches `unit_price`.
+
+Loose goods keep the old path. A product with no real pack is still asked for a single
+price, still saveable and still sellable, which is why the two prices are validated as a
+pair in `ProductForm.validate` rather than by marking either field required: a required
+field on a hidden pane blocks submit with no visible reason and no submit event to catch,
+which this project has already been bitten by once.
+
+**`cost_price` was widened to `Numeric(14, 6)`, and the reason is the round trip rather than
+the sale.** The form now asks for a carton cost and stores it divided. At two decimals a
+carton at 1,000 for 24 stores 41.67 a bottle, which the edit form multiplies back to
+1,000.08 - so simply opening a product and saving it would walk its cost upwards, every
+time. `unit_price` deliberately stays at two: it is a real per-bottle price charged in whole
+pesewas, and it is re-derived from the stored pack price rather than round-tripped, so it
+cannot drift. Only one screen displays a cost - the product export - and it rounds, because
+the last widening leaked six decimals onto a page.
+
+**The low-stock threshold is typed in cartons and rounds up.** Down would not just be less
+safe, it would be unstable: 100 bottles at 24 shows 4 cartons, saves 96, shows 4 again -
+walking the warning level down every time the product was opened. Up settles after one step.
+
+**The audit log now records the price somebody actually typed.** It logged `unit_price`
+only, which after this change is a derived figure - the decision behind it would not have
+appeared anywhere.
+
+**Three tests asserted the old direction and were rewritten rather than patched.**
+`test_a_blank_pack_price_is_not_zero` asserted that a packed product saves with no pack
+price, meaning "a pack is count x the single price". That is exactly what W2 reverses, so it
+is now `test_a_packed_product_is_refused_without_a_carton_price`, with the old guarantee
+named in its docstring and still covered at the service level in `test_pack_pricing.py`. The
+form's warning inverted with the boxes: there is no singles box on a packed product any
+more, so the mistake it watches for is a bottle price typed into the carton box, and the
+signal is a carton selling below its cost.
+
+**A U4 bug found by looking at the page rather than the tests.** The read-back sentence,
+the sell-by dropdown and the new threshold suffix all pluralised by appending an `s`, so the
+default base unit rendered as **"pcss"** - on screen for most products since U4 shipped, and
+"boxs" for anyone selling by the box. There is a `plural()` helper now: unchanged if it
+already ends in `s`, `es` after x/z/ch/sh, `s` otherwise.
+
+**An hour's worth of wrong contrast readings, caught by a control.** Measured on dark, the
+guard sentence came back at 2.32:1 and every field label at 1.75:1. The tell was that a
+label W2 never touched measured 1.75 too - if that were real the whole dark theme would have
+been unreadable since it shipped. The cause: `.glass-card` carries `transition: background
+0.2s`, the Browser pane was not compositing, so the transition never advanced and the card
+stayed frozen at the *previous* theme's colour while `.pack-summary`, which has no
+transition, switched immediately. Every reading was near-white text composited over a
+near-white surface that was not actually on screen.
+
+**Injecting `* { transition: none !important }` before measuring is now the rule**, and it
+is cheap. The real figures: the sentence is 16.36:1 on dark and 15.72:1 on light, the labels
+6.10 and 6.04 - identical to the untouched control, which is the point. Layout measured at
+375 / 1024 / 1280 / 1440: no horizontal overflow, nothing clipped with a five-figure carton
+price, every control 49px tall.
+
+**A permission test that broke for the wrong reason.** `cost_price` is withheld from staff
+without the permission, and the test asserted the substring was absent from the page. The
+new script reads the cost box when there is one, so `[name="cost_price"]` now appears in a
+selector - a selector that finds nothing is not a leaked cost. It asserts against a real
+`<input>` now, and covers `pack_cost` as well, which is the same secret multiplied by 24.
+
+**W3 — the purchase order says which unit its price is in.** The reported confusion, and
+the smallest fix in the stage: the box was labelled "Unit Cost", it is filled in with a
+carton price, and the comparison under it quoted a per-bottle figure. Both numbers were
+right and nothing said they were in different units. The label reads "Cost per carton" now,
+in the product's own word, and the comparison leads with the unit being typed - *"Best so
+far: ₵5.52 a carton from Accra Bulk Beverages"*, with *"That is ₵0.46 each."* as a quiet
+second line. Measured against seeded data: typing ₵7.20 for that carton of 12 reads *"this
+is ₵1.68 more a carton"*, which is 12 × the ₵0.14 per-piece gap.
+
+**`services/sourcing.py` was deliberately not inverted**, and that now has a test of its
+own, because "make it all cartons" is exactly the tidying somebody will attempt later. Two
+suppliers who pack the same drink 12 and 24 to a carton cannot be compared on carton price:
+the one with the smaller box would win every product. The comparison stays per single and
+only the display scales up.
+
+**"a pcs".** Naive articles produced *"₵0.46 a pcs"*, and `pcs` is the default base unit, so
+it was the common case rather than an edge one. The line hint on the same page had already
+solved this by saying *"at ₵0.46 each"*; there is a shared `per()` helper now - "each" for
+pcs/pc/unit, "a <word>" otherwise - used by both pages. The product form had the same bug in
+its read-back sentence.
+
+**The substring trap, three times in one stage, once in a test I had just written.**
+`'cost-unit-word' in page` passes with the span deleted, because the page's script names the
+same class in a `querySelector`. Falsification caught it; the assertions match a real
+`<small>` or `<span>` element now, and `hint_elements()` exists so the next one is written
+correctly by default. The same shape broke `test_cost_price_field_is_absent_for_unpermitted_staff`
+in W2. **Any assertion about markup on a page that carries an inline script has to match an
+element, not a class name.**
+
+**A test premise wrong for the third time in this project.** Setting `subscription.status =
+'active'` and a paid `plan_id` is not enough - `effective_plan` reads `paid_through` and
+falls back to Free without it, so the page under test redirected instead of rendering. The
+existing tests that set only the status pass because they assert a feature is *blocked*, and
+the fallback blocks it for the wrong reason.
+
+**W4 — the invoice says what the customer bought.** `SaleItem.sold_as` and
+`price_per_sold_unit` were written in Stage U2 and the migration that added the columns
+states outright that "the invoice then reads 2 cartons rather than 48 bottles". No template
+ever called either, so a two-carton sale printed **₵43.75 × 48** to the customer:
+arithmetically correct, and not what anybody agreed to. Both invoice templates and the sales
+report read in the sold unit now.
+
+**The line total is deliberately still `price_at_sale × quantity`.** Recomputing it from the
+rounded per-carton figure would be the F-41 mistake in a new place - the page would stop
+agreeing with the database. What the customer reads and what was charged are the same
+number, and the unit is the only thing that changed.
+
+**Two more found while wiring it.** `bulk_invoices.html` had no number format at all on any
+of its four money figures, so a carton line printed **₵41.666667** and the grand total
+₵2,000.000000 - the U2 widening leaking onto a page nobody had opened since. And
+`sales_report.html` printed `x48` with the same unformatted price. Both fixed here rather
+than left for W6, because they are the same bug as the one being fixed.
+
+**A struck-through discount had to scale too.** `list_price` is stored per base unit like
+`price_at_sale`, so a carton discounted from ₵1,050 to ₵1,000 would have shown ₵1,000.00
+struck against ₵48.00. `SaleItem.list_price_per_sold_unit` mirrors `price_per_sold_unit`.
+
+**`uom.plural()` and `uom.quantity_label()`** put the unit words in the module that owns
+them: "2 cartons", "1 carton", "48 pcs". The browser copy on the product and purchase order
+forms is three lines of the same rule, kept separate because those pages compute their
+sentence before anything is saved.
+
+**The invoice had no test coverage at all** before this - the pages that a customer
+physically holds. Seven now.
+
+**W5 — stock reads in the unit the business counts in.** Storage is unchanged and stays
+unchanged; what moved is that a wholesaler no longer divides by 24 in their head to know
+whether they are about to run out. Product list, low stock, stock report, goods receipt and
+the low-stock alert all read *"13 cartons + 6 bottles"*.
+
+**The remainder is kept, at the user's direction.** A carton gets broken open the first time
+somebody buys three bottles, and those six loose bottles are real stock on the floor -
+rounding them away would put the books out and hide it. Under one carton reads plainly as
+*"18 bottles"* rather than *"0 cartons + 18 bottles"*.
+
+**Two helpers, because two screens want different things.** `uom.in_packs` is short, for
+badges and table cells. `uom.describe` adds the base-unit total, for the stock report -
+which is the page somebody stands in front of shelves with, checking against a physical
+count.
+
+**The low-stock page was comparing two different currencies.** Since W2 the reorder level is
+*typed* in cartons; this page read it back in bottles, next to a stock figure also in
+bottles, and called the difference "short by". All three columns are in cartons now.
+
+**`describe` had disagreed with its own docstring since U1** - the example said "10 cartons
++ 6 pcs" and the code produced "10 carton". `uom.plural()` from W4 fixes it, and one test
+that had asserted the singular now asserts what the docstring always claimed.
+
+**A falsification that looked like a sleeping test and was not.** Mutating the stock report
+came back green because the template has the same expression in both branches of an
+if/else and the harness replaced only the first - the unrendered one. Replacing both goes
+red. Worth recording: **a mutation that lands in a branch the test does not exercise proves
+nothing**, and `str.replace(old, new, 1)` makes that easy to do by accident.
+
+**W6 — reports and exports name their units.** Eleven headers named none. The visible
+consequence was already reachable: an order placed as **10 cartons** exported as
+*"Ordered: 240"*, so anyone reconciling the sheet against a delivery note was comparing two
+different things. One header list feeds PDF, Excel and CSV per report, so each fix landed in
+three formats.
+
+**The constraint that shaped the whole item: a spreadsheet cell has to stay summable.**
+*"13 cartons + 6 bottles"* reads well on a page and cannot be totalled, sorted or filtered.
+So the exports name the unit once in a column of its own - *"Sold by: carton of 24"* - and
+every figure beside it stays a number, with whole packs and the loose remainder in separate
+columns and the singles total kept for checking against a physical count. This is the one
+place in Stage W where the page and the export deliberately differ in form while agreeing
+on substance.
+
+**A row that does not divide exactly falls back to singles for every column.** Reporting
+whole cartons and dropping the remainder would have been a report that quietly loses stock,
+which is worse than one using a clumsier unit. Orders are pack-only since U5 so this should
+never fire on new data; it exists for rows that predate that rule.
+
+**The on-screen tables moved with the exports**, including two that had been left showing a
+per-bottle price beside a carton stock count - the product list and the stock report. A row
+carrying two units is the thing this stage exists to remove.
+
+**The summary row is hand-built from literal blanks**, so adding a column silently shifts
+the total under the wrong heading. There is a test asserting every row has as many cells as
+there are headers, and that the label still sits beside its number.
+
+**A permission test broke on the rename** - it asserted the literal header "Cost Price". The
+guarantee it protects is unaffected (the column is omitted entirely for staff who may not
+see cost), so it asserts the new name plus "no column with 'cost' in it by any other name".
+
+**W7 — the sale form opens on the carton.** The smallest item and the one felt most often:
+`sell_unit` defaulted to `base`, so every line of every sale started on Single and a
+wholesaler pressed Carton each time. `uom.default_sell_unit` had returned the pack first
+since U1 and nothing called it.
+
+**The old code only re-selected when the checked unit was not on offer**, which is why a
+packs-only product happened to work and a "both" product - the common case - never did.
+Single was still on offer, so nothing forced the change and the pre-checked radio survived.
+
+**A refused sale must not lose the units already chosen**, so the default applies only when
+the product on a line changes. Telling a fresh form from a re-render needed no new variable:
+`request.method` is in every Jinja context, and this template is rendered from **five**
+places in the route - one of which has already shipped a bug by forgetting to pass one.
+
+**The server stopped depending on the page.** Its fallback for an un-offered unit was
+`base`, so a packs-only product posted without a unit - no script, a trimmed form - sold
+twelve loose bottles at a bottle's price. It falls back to `default_sell_unit` now, which
+resolves through `sell_units` and therefore cannot hand out a unit the plan or the product
+refuses. The gate is unchanged; only the fallback moved.
+
+**A test premise wrong again, in a way worth recording**: a POST with no `sale_date` does
+*not* refuse, because `sale_date` defaults to today - which is a fix from earlier in this
+project, not an oversight. The refusal now comes from ordering more than there is in stock.
+
+**And one assertion too strict**: 230 over 12 is 19.1666..., which six decimals cannot hold
+exactly, so `price_at_sale x quantity` is 460.000008. Asserted at the boundary where a
+person reads or pays it - the same rule U2 established after the widening leaked.
+
+### The plans now gate what they sell (2026-08-18)
+
+Asked what each subscription tier includes beyond the user and product limits. Answering it
+turned up the real finding: **`billing/plans.py` declared fourteen feature codes and only
+seven were checked anywhere.** A Kiosk account could export to Excel and PDF, read the
+alerts inbox and receive expiry warnings - all three sold as paid capabilities.
+
+**Four gates added.** `exports.csv` on Shop and `exports.all` on Depot, across the three
+report exports and the catalogue bulk export; `notifications` on the alerts inbox, its badge
+route, the sidebar entry and the dashboard panel; `expiry_alerts` on the two expiry entries
+inside `notifications.for_business`.
+
+**Three stay ungated on purpose**, and this is worth keeping visible so nobody "finishes the
+job" by decorating them: `supplier_scorecards` (Stage 2.6, not built), `margin_reports`
+(there is no profit report at all - `cost_price` is read by `services/pricing.py` and the
+catalogue export and nothing else) and `api_access` (there is no public API; the offline sync
+endpoints are gated on `offline`). Gating a capability that does not exist is advertising by
+decorator.
+
+**Exports gate inline rather than by decorator.** Reading a report is free and only taking it
+away costs money, so `_allowed_export()` flashes and renders the report, exactly as the
+`reports.export` permission check already did. Redirecting somebody off a page they are
+entitled to read is a strange way to say a button costs extra. The catalogue export is the
+opposite case - the whole request *is* the export - so it returns to the list.
+
+**Only the expiry alerts are gated, never the tracking underneath.** Batches and expiry dates
+are what FEFO picks stock by, so switching them off on a cheaper plan would change which
+bottle leaves the shelf. That is a correctness change dressed as a billing one, and there is
+a test pinning it.
+
+**A gate that would have introduced a lie.** With the inbox off, `alerts` is empty, and the
+dashboard's empty state read *"Nothing needs you right now - stock, expiry dates and debts
+are all where they should be"* to a shop that might be out of stock across the board. The
+panel now tells three states apart: has alerts, has none, cannot see them - the third
+linking to plans.
+
+**Two things checked before trusting them.** The guided tour anchors a step to `#nav-alerts`,
+which is now hidden on cheaper plans; `static/js/tour.js:43` already keeps only steps whose
+anchor exists, so the step drops rather than leaving an empty bubble. And subscription
+warnings do not travel through the inbox alone - `_partials/onboarding.html` carries the
+trial countdown and the "trial has ended" notice independently - so gating the inbox cannot
+hide a billing state from anyone.
+
+**Three test premises wrong, all found by running them.** Expiry alerts need
+`ItemGroup.track_expiry`, which is off by default and deliberately so. `stock.deduct_fefo`
+takes `business_id` explicitly. And `'nav-alerts' in page` matches the tour's own step list
+on every plan - the fourth time this exact substring trap has appeared, and the reason these
+assertions match elements now.
+
+**A falsification that was inert rather than green.** Mutating `_allowed_export` to return a
+redirect changed nothing, because the caller compares its result to `'csv'`/`'excel'`/`'pdf'`
+and a Response object matches none of them - so it fell through to the same render. The
+faithful mutation is the design the test rules out: gate the whole page the way
+`@requires_feature` would. **A mutation has to be an alternative implementation, not just a
+different line.**
+
+### CodeRabbit review, round 3 (2026-08-18)
+
+Sixteen inline findings and eleven nitpicks. Two were already fixed, one was stale, and
+three turned out to be worse than reported.
+
+**Worse than reported.** `tests/test_uom.py` set `status='active'` and a paid `plan_id`
+without `paid_through`, so `effective_plan` read the subscription as lapsed, fell back to
+Free — which has no purchase orders at all — and the test fetched a **302 redirect** and
+asserted `order_unit` was absent from it. True, and about nothing. The finding asked for one
+more assertion; the premise underneath it had to be fixed first. **That is the fourth time
+this exact `paid_through` premise has produced a silently vacuous test in this project.**
+
+`static/js/picker.js` filtered on `el.textContent`, which includes the meta line, so typing
+"44" matched every product costing 44-something. W5 made it materially worse three commits
+earlier: stock now reads "13 cartons + 6 bottles", so **"carton" matched every packed
+product in the catalogue**. It filters on a `data-name` attribute now.
+
+`design/verify/capture.py` printed a warning and carried on when it failed to force the
+dialog open, writing a screenshot of a *closed* dialog that the contrast sweep then measured
+as if it were the dialog. It raises now. A warning in a scrolling log is exactly how an hour
+went into measuring a cached stylesheet in Stage U3.
+
+**The one design disagreement, half-accepted.** The finding asked for refused selling units
+to be rejected rather than converted, in both the API and the web form.
+
+*Accepted for the API.* A device that queued "2 cartons" and synced after the product
+changed to packs-only had that sale silently recorded as 2 bottles — money already taken at
+the till, written down as a twenty-fourth of itself. That is precisely what rule 3 of
+`api/routes.py` forbids: *"a conflict is reported, never resolved quietly."* It raises
+`_Conflict` now, so the device keeps the sale for a human.
+
+*Declined for the web form.* The premise was stale by seven commits: W7 changed that
+fallback from base units to the product's **own default**, so there is no silent
+misconversion left to fix — a packs-only product posted without a unit now sells a carton,
+which is the correct answer. Refusing instead would break the no-script path outright: with
+JavaScript off the form always posts `base`, so every no-JS sale of a packs-only product
+would be refused.
+
+**Also fixed:** the invariant list in `architecture.md` numbered an item 14 between 3 and 4
+(renumbered, and the three references to invariants 8 and 11 elsewhere in the repo moved with
+it — a blind renumber would have traded one wrong number for three); an `&mdash;` entity
+inside a Jinja expression, which autoescapes and renders literally; two form fields that
+never showed why they were refused, which was the gap U4 was supposed to close; the sale
+form's step list as clickable `<li>`s, invisible to the keyboard, now real buttons with
+`type="button"` because they sit inside a form; unguarded `window.ProductPicker` calls that
+would take the whole inline script down with them if `picker.js` failed to arrive; a
+duplicated assertion; and two Ruff findings.
+
+**`ProductForm.has_pack` was an invariant violation, not a nitpick.** Invariant 4 says
+conversion guards live in `services/uom.py` rather than in callers, and this was a second
+copy of the pack rule living in a form. The two had already drifted: the form required a
+pack *name* and `uom.has_conversion` did not, so a product saved with a blank purchase unit
+counted as convertible in one and not the other. Both call `uom.describes_pack` now.
+
+**Declined, with reasons.** Extracting a shared sale-line helper across the web and API
+paths, replacing the credit summary loop with an aggregate query, and refactoring the
+purchase order add-line handler are all real improvements and all larger than this review —
+they change working, tested code on the two paths that move money, and belong in their own
+change with their own verification rather than riding in on a review pass. Recorded here so
+they are not lost.
+
+**Context files reconciled**: purchasing is cartons-only (U5), the theme section describes
+the light/dark/system support that shipped in C1 rather than the dark-only glass it replaced,
+the goods-receipt layout item is closed, and `CACHE_VERSION` is `tracktrack-v19` — bumped in
+this commit because `picker.js` is precached.
+
+### Plan limits, and a downgrade that actually means something (2026-08-19)
+
+**New caps, at the user's direction**: Kiosk 20, Shop 70, Depot 200, Distributor 500,
+Enterprise unlimited. Every one is a reduction and Distributor gains a ceiling it never had.
+The trial moved with Distributor to 500 — not on the list, and it grants the advanced tier,
+so leaving it unlimited would let somebody build 600 products in a fortnight and lose a
+hundred the day it ended.
+
+**`billing/plans.py` is not read at runtime.** It seeded the `plan` table once, in
+migration `c2a67f81d940`, and every limit is read from the row. Changing the file alone
+changes nothing; there is a test now asserting the two agree, because the drift would be
+invisible until somebody trusted the file.
+
+**Invariant 10 was fiction.** It had said since it was written that a downgrade "removes
+access, not records: products deactivate, staff suspend, nothing is destroyed". Nothing
+did that. The caps were consulted in exactly four places, all of them *adding* something —
+so a Distributor with 400 products who dropped to Kiosk kept all 400 active and sellable,
+and all fifteen staff kept logging in. The ceiling only stopped them creating number 401.
+`services/limits.enforce_plan_limits` makes the invariant true.
+
+**Two decisions the user made rather than me.** The Owner keeps their seat — Kiosk has one,
+and a literal "suspend everyone over the cap" locks the last person out of a business that
+still owes money, which `auth/routes.py` refuses to do anyway. And what is switched off
+stays *visible*: the catalogue keeps every product, marked, with what a bigger plan gives
+back, because hiding stock a wholesaler physically holds reads as the app losing their data.
+
+**`Product.locked_by_plan`**, because `is_active = false` could not tell the plan's decision
+from the owner's. Printing "locked by your plan — upgrade to unlock" over a line somebody
+deliberately stopped stocking would be a lie in the one place the app asks them for money.
+Reactivating clears it. It went into the backup spec in the same commit — the W1 bug was
+exactly this, a new column the archive silently dropped.
+
+**Enforcement only ever removes access, never restores it.** Upgrading does not resurrect
+anything: only the owner knows which of the 400 they want back, and a product retired on
+purpose must not reappear because they bought a bigger plan. That is also what makes it
+safe to run on any plan change in either direction, and on the daily check.
+
+**Where it runs.** The daily `reconcile_on_use` check is the safety net that catches
+everything — including a business put over a cap by the caps themselves changing, where no
+transition falls due at all. Both payment paths (console route and CLI) and the console's
+manual plan change call it directly, so a deliberate change is immediate rather than
+next-login.
+
+**A lapsed paying customer used to be told nothing.** The trial banner is keyed to the trial
+date and times out after a fortnight, and the alerts inbox that carries subscription
+warnings is itself a paid feature — so falling to Kiosk removed the thing that would have
+explained falling to Kiosk. That gap was introduced by the feature-gating commit the day
+before. `onboarding.trial_state` has a third phase now, `lapsed`, with no time limit,
+because it describes a present state rather than a past event and ends when they pay.
+
+**Reinstating staff is seat-checked**, which it never was — reactivating a *product* always
+has been. Without it a business could undo the enforcement one click at a time.
+
+**A test that proved nothing, found by falsification.** "The Owner is never suspended"
+passed with the sort broken, the guard broken, and *both* broken together: the Owner
+registers before any staff, so they hold the lowest id and any ordering leaves them first.
+It was passing on an accident of row order. The test now moves ownership to the newest
+account first — the only arrangement where keeping the Owner has to be deliberate. With
+that, breaking the sort goes red; the `if not u.is_owner` filter is a redundant second
+guard, and only the sort is load-bearing today. Recorded so it is not deleted as dead.
+
+**Which products survive a cut, decided against real data rather than in the abstract.**
+The first rule was "keep the newest", chosen for stability. Measured against the development
+catalogue it kept **Vody** and **Club Beer 330ml U4** - both zero stock, zero sales, both
+leftovers from testing - while retiring Malta Guinness (1,008 sold), BelAqua 750ml (840),
+Verna 750ml (816) and Vitamalt (792). Newest-first and best-selling overlapped on 2 of 6. A
+wholesaler's staples are the lines they have carried longest, so newest-first was close to a
+rule for switching off the business.
+
+The rule is now **stock on hand first, then what sells**, at the user's decision. Stock
+leads because that is the sharpest version of the pain - goods already paid for, sitting on
+the floor, that the app will not let them sell; a fast mover they are out of costs them
+nothing today. Sales break the tie within each group, `id` after that.
+
+**A test written and then deleted, because it could not be made to fail.** "The choice does
+not reshuffle between runs" stayed green with every ordering clause removed - any `order_by`
+with a unique tiebreak is stable, and the property actually follows from enforcement only
+ever *removing* access: the first run lands exactly on the cap, so the second finds nothing
+over it. It is noted in the docstring of `test_running_it_again_changes_nothing`, which
+covers it properly, so nobody writes it again.
+
+### Three tests that passed for the wrong reason (2026-08-19)
+
+Bounded follow-up to the `paid_through` pattern, which had by then produced a silently
+vacuous test four times. Two files set a paid plan and never set `paid_through`, so
+`effective_plan` read the subscription as lapsed and fell back to **Free** - which blocks the
+same feature for an entirely different reason. `test_credit.py` (x2) and `test_sourcing.py`
+gave the right answer and proved nothing; had `credit_ledger` been moved down to Shop, they
+would have passed and shipped it.
+
+**The first attempt at fixing them was itself wrong**, and falsification caught it. Adding
+`paid_through` and then mutating the tier in `billing/plans.py` left both green - because
+`has_feature` reads `plan.features` from the **database**, and `plans.py` is not the source
+of truth for tiers either. The same trap as the product caps, one layer along.
+
+What makes them real is asserting the premise: `effective_plan(business_id).code == 'basic'`
+before the request. Setting a plan and finding a feature blocked is not evidence the *plan*
+blocked it, and the two are indistinguishable from the response - which is exactly how this
+went unnoticed. A silent fallback now fails on that line with a reason.
+
+**A general audit of the suite was considered and declined** by the user, in favour of these
+three. The other patterns are caught by the falsification habit; sweeping 765 tests would
+cost hours to find problems that only matter when the code they guard next changes.
+
+### Stage 3 C4 — Products pages (2026-08-19)
+
+**The mockups were reachable after all.** I said they were not — `design/pages/` holds only
+`dashboard.html`, and the tracker said the ten were built "in a companion project". They are
+in the Claude Design project and readable through the design MCP: `01-dashboard` through
+`10-login`, plus `shell.css` and the generated `tokens.css`. C4 is built against
+`03-products.html` and `02-alerts.html` rather than inferred from C2/C3.
+
+**What `shell.css` is, so nobody imports it.** It is mockup chrome — a fake desktop rail
+(`.desk`/`.rail`/`.bar`) and a fake phone frame (`.phone`/`.ptop`/`.tabs`) so a mockup stands
+alone in a browser. The app has the real shell from C1. What C4 took is the page *content*
+vocabulary: table columns, the status badge, the icon tile, the count beside a title.
+
+**The catalogue table now says which unit everything is in.** Columns per the mockup:
+Product, Unit, Cost, Price, Stock, Status. Brand, group and SKU moved under the name rather
+than taking three more columns — this table already lost the width fight once, at 130px for
+the product cell on a 1440px laptop, which is what moved product choosing into a dialog.
+Measured after: 300px at 1440, 292px at 1024, no page overflow at either, and it scrolls
+inside its own wrapper below that.
+
+**Status became its own column, and gained a third state.** The badge used to carry the
+count as well — *"13 cartons + 6 bottles in stock"* — and was the widest thing in the row.
+Out of stock is not the same problem as running low, and `services/notifications.py` has
+always treated them separately; the catalogue now agrees with it.
+
+**Two layout systems in one form, resolved.** The product form ran Bootstrap's
+`row`/`col-md-4` for its first nine fields and the design system's `field-grid` for the
+rest, with nine copies of the same six lines. There is a `field()` macro in `_macros.html`
+now. The label, the invalid state and the error list are exactly the parts that were
+quietly inconsistent, and each has been a bug here before: one of seventeen fields rendered
+a reason until U4, and two were still missing in review round 3.
+
+**The alerts page was a card per alert with the last two colour literals in the app**
+(`#dc2626`, `#fbbf24`) after B1 tokenised the other 33. It is one card holding a list now,
+with the mockup's icon tile.
+
+**The icon tiles needed the badge foregrounds, not the accents.** `--accent-danger` on its
+own tint measured **3.41:1** on dark — clears the 3:1 an icon needs, misses the 4.5 this app
+holds everywhere. `--badge-danger-fg` exists because badges hit the same wall, and reusing
+it puts them at 4.63/6.80.
+
+**An hour's trap avoided by one suspicious number.** The icon tiles measured *exactly* the
+title's ratio, which is what inheriting the body colour looks like. The stylesheet was the
+service worker's precached copy: `CACHE_VERSION` had not been bumped. Every reading taken
+before that was against the old sheet, including a `page-count` of 17.06 that is really
+6.96. **The signature is a measurement that matches something it has no reason to match.**
+`CACHE_VERSION` is `tracktrack-v20`.
+
+**Chip filters stay deferred.** The mockups put chips across the top of both pages — by item
+group on products, by kind on alerts — and neither filter exists in the app. That is the
+`Decided` line from the Stage 3 plan: Phase C restyles what the app already does. The
+existing stock and status selects are untouched.
+
+### The way in — login as a landing page (2026-08-19)
+
+Built against `10-login.html`, plus what the user asked for on top of it: *"would be very
+nice if it was transformed as a kind of landing website page, which also briefly describes
+the entire application"*.
+
+The mockup's split screen carries it — accent panel on the left saying what this is, sign-in
+card on the right — and the four points under the headline are the addition. Each names
+something the app does **today**; nothing advertises a deferred feature, because the first
+thing a new customer looks for is the thing that made them sign up.
+
+**The order flips on a phone, and the source order does not.** Below 992px the form is
+painted first and the description follows it. A landing page you have to scroll past to
+sign in annoys the people who use it every day, and they are the overwhelming majority of
+the traffic this page will ever see. `order: -1` on the panel does that visually while the
+markup still reads description-then-form for a screen reader and a crawler.
+
+**`auth_full`**, a second block in `base.html`, so a page can opt out of the centred
+container. Register and the password pages stay centred cards; only this one reaches both
+edges. Opting one page out beats making every page opt in.
+
+**Measured**: 720/720 at 1440 with no overflow; at 375 the form starts at 92px with the
+Sign in button above the fold and 50px inputs. Contrast in both themes - headline 7.23/6.70,
+lead 6.00/5.56, points 7.23/6.70, form label 6.96/5.32.
+
+**One miss the sweep caught**: the footer line at `opacity: 0.75` measured **4.48:1** on the
+light accent - under AA by two hundredths, which is exactly the kind of miss nothing but a
+measurement finds. At 0.82 it is 5.35/5.04.
+
+`CACHE_VERSION` is `tracktrack-v21`.
+
 ## Open Questions
+
+- **The offline catalogue still prices in bottles (`api/routes.py:138-140`).** Deliberately
+  left out of Stage W, and the one place in the app that has not inverted. The payload an
+  installed phone caches ships `unit_price` and no pack fields, so a device selling offline
+  cannot price a carton locally. It cannot simply be changed: an installed PWA holds that
+  payload and may sync days later, so the change needs a **payload version** and a migration
+  path for sales already queued against the old shape. Until then, offline selling is
+  per-bottle only. The server re-validates price on sync, so nothing is mispriced - it is a
+  capability gap, not a correctness one.
+- **`Product.cost_price` is what somebody typed, not what was paid.** The product form asks
+  the carton cost and stores it divided; goods receipt records the real `unit_cost` on the
+  purchase order line and never writes it back. So margin reporting uses an estimate while
+  the actual figure sits one join away. Reconciling them is a real feature (which cost -
+  latest, average, FEFO-matched to the batch sold?) and needs a decision before code.
 
 - **Self-service password reset still does not exist (F-43), but the lockout risk is
   closed.** Recovery is now done by a person rather than by email — see F-47 below. What is

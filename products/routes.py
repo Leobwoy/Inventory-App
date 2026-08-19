@@ -13,10 +13,10 @@ import pandas as pd
 from flask import send_file
 import io
 from flask_login import login_required, current_user
-from auth.decorators import permission_required
+from auth.decorators import permission_required, requires_feature
 from datetime import date, timedelta
 from purchases.models import PurchaseOrder, StockBatch
-from services import audit, limits, listing
+from services import audit, limits, listing, uom
 
 PRODUCT_SORTS = {
     'name':     [Product.name.asc()],
@@ -87,11 +87,19 @@ def list_products():
         'products/list.html', products=pagination.items, pagination=pagination,
         search_query=term, q=term, sort=sort, sort_options=PRODUCT_SORT_LABELS,
         stock=stock_filter, status=status,
+        # How many the plan is holding back, and what a bigger one would cover.
+        # Counted rather than inferred from is_active, because a product the
+        # owner retired is not an upgrade prompt.
+        locked_count=Product.query.filter_by(
+            business_id=business_id, locked_by_plan=True).count(),
+        plan=limits.effective_plan(business_id),
+        products_used=limits.active_product_count(business_id),
         is_filtered=listing.is_filtered('q', 'stock', 'status'))
 
 @products_bp.route('/alerts')
 @login_required
 @permission_required('products.view')
+@requires_feature('notifications')
 def alerts():
     """Everything needing attention, worst first.
 
@@ -132,6 +140,7 @@ def low_stock():
 @products_bp.route('/alerts/count')
 @login_required
 @permission_required('products.view')
+@requires_feature('notifications')
 def alert_count():
     """How many things need attention, for the badge.
 
@@ -180,14 +189,16 @@ def generate_sku(brand, item_group, variant_label=None, business_id=None):
 
 
 def _strip_cost_price(form):
-    """Remove cost_price from a form when the user may not see it.
+    """Remove the cost fields from a form when the user may not see them.
 
-    Deleting the bound field, rather than just hiding it in the template, means
-    validation does not demand a value the user was never shown, and a value
-    posted by hand is ignored rather than saved.
+    Deleting the bound fields, rather than just hiding them in the template,
+    means validation does not demand a value the user was never shown, and a
+    value posted by hand is ignored rather than saved. Both boxes go: the pack
+    cost is the same secret as the single cost, just multiplied by 24.
     """
     if not current_user.can('products.cost_price.view'):
         del form.cost_price
+        del form.pack_cost
         return False
     return True
 
@@ -242,12 +253,62 @@ def _sell_unit_for(form):
     offers a carton the server then refuses, which reads as the app being
     broken rather than the product being set up wrong.
     """
-    per = form.units_per_purchase_uom.data or 1
-    pack = (form.purchase_uom.data or '').strip().lower()
-    base = (form.base_uom.data or 'pcs').strip().lower()
-    if per <= 1 or not pack or pack == base:
+    if not form.has_pack():
         return 'base'
     return form.sell_unit.data or 'base'
+
+
+def _apply_prices(form, product, may_see_cost):
+    """Write the stored per-single prices from whatever was typed.
+
+    The carton is the unit now. A wholesaler buys, sells and quotes by the
+    carton, so that is the only price the form asks for, and `unit_price` and
+    `cost_price` - which stay stored, stay NOT NULL and are still what every
+    query, sort and export reads - are derived here.
+
+    Deriving rather than dropping the per-single columns is deliberate. Making
+    them nullable would push a NULL into price sorting (`PRODUCT_SORTS` above,
+    where it sorts unpredictably on Postgres), into the offline catalogue
+    payload, and into every report that multiplies by them.
+    """
+    if not form.has_pack():
+        product.unit_price = form.unit_price.data
+        if may_see_cost:
+            product.cost_price = form.cost_price.data
+        return
+
+    # per_base_price and cost_to_base both read the product, so the pack fields
+    # must already be on it. Both are set above every call site here.
+    product.unit_price = uom.per_base_price(product)
+    if may_see_cost:
+        # Six decimals, and the column was widened to hold them. At two the
+        # round trip drifts: a carton at 1,000 for 24 stores 41.67 a bottle,
+        # which reads back as a carton costing 1,000.08, and every edit of the
+        # product would nudge it again.
+        product.cost_price = uom.cost_to_base(product, form.pack_cost.data, uom.PURCHASE)
+
+
+def _min_stock_base(form):
+    """The low-stock threshold in base units, from a figure typed in packs."""
+    typed = form.min_stock_alert.data or 0
+    if not form.has_pack():
+        return typed
+    return typed * (form.units_per_purchase_uom.data or 1)
+
+
+def _min_stock_packs(product):
+    """The stored threshold as a figure to type back into the form.
+
+    Rounded up, not down. This is the level that triggers a warning, so the
+    error that costs something is warning too late. Rounding up is also stable:
+    100 base units at 24 a carton shows 5, saves 120, and shows 5 again -
+    rounding down would show 4, save 96, and walk the threshold downwards every
+    time the product was opened.
+    """
+    if not uom.has_conversion(product):
+        return product.min_stock_alert or 0
+    per = uom.factor(product)
+    return -(-(product.min_stock_alert or 0) // per)
 
 
 @products_bp.route('/add', methods=['GET', 'POST'])
@@ -285,10 +346,10 @@ def add_product():
             # Staff without cost visibility create the product at zero cost; an
             # Owner or Manager fills it in later. Never inferred from sale price,
             # which would fabricate a margin.
-            cost_price=form.cost_price.data if may_see_cost else 0,
-            unit_price=form.unit_price.data,
+            cost_price=0,
+            unit_price=0,
             quantity_in_stock=0, # Initialized to 0, managed via StockBatch
-            min_stock_alert=form.min_stock_alert.data or 0,
+            min_stock_alert=_min_stock_base(form),
             category=category,
             brand_id=brand.id,
             item_group_id=item_group.id,
@@ -298,13 +359,20 @@ def add_product():
             base_uom=base_uom,
             purchase_uom=(form.purchase_uom.data or '').strip() or base_uom,
             units_per_purchase_uom=form.units_per_purchase_uom.data or 1,
-            pack_price=form.pack_price.data,
+            # No pack, no pack price. Leaving one behind is inert today, because
+            # uom.price_for gates on has_conversion, but it is still a wrong
+            # number in the row waiting for the pack to be re-added.
+            pack_price=form.pack_price.data if form.has_pack() else None,
             # A unit nobody can be sold in is not a choice. If this product has
             # no real pack, "packs only" and "both" mean the same thing as
             # singles, and storing either would be a promise the sale form has
             # to break.
             sell_unit=_sell_unit_for(form),
         )
+        # After construction, not inside it: deriving the per-single figures needs
+        # the pack fields already on the product. Both columns are NOT NULL, so the
+        # zeros above are placeholders that never reach a flush.
+        _apply_prices(form, product, may_see_cost)
         db.session.add(product)
         db.session.commit()
         flash(f'Product added as {product.sku}. Stock is added by receiving a Purchase Order.', 'success')
@@ -327,6 +395,11 @@ def edit_product(product_id):
     
     if request.method == 'GET':
         form.quantity_in_stock.data = product.quantity_in_stock
+        form.min_stock_alert.data = _min_stock_packs(product)
+        # The stored cost is per single; the box asks for a pack. Multiplying back
+        # returns exactly what was typed, which is the point of the widened column.
+        if may_see_cost and uom.has_conversion(product):
+            form.pack_cost.data = uom.cost_per_purchase_unit(product, product.cost_price)
 
     if form.validate_on_submit():
         brand, item_group, category = _scoped_catalogue(form)
@@ -337,6 +410,7 @@ def edit_product(product_id):
         existing_sku, existing_qty = product.sku, product.quantity_in_stock
         existing_cost = product.cost_price
         existing_unit_price = product.unit_price
+        existing_pack_price = product.pack_price
         form.populate_obj(product)
 
         # populate_obj skips the deleted field, but be explicit: a user who cannot
@@ -357,15 +431,27 @@ def edit_product(product_id):
         product.base_uom = (form.base_uom.data or '').strip() or 'pcs'
         product.purchase_uom = (form.purchase_uom.data or '').strip() or product.base_uom
         product.units_per_purchase_uom = form.units_per_purchase_uom.data or 1
-        product.pack_price = form.pack_price.data
+        product.pack_price = form.pack_price.data if form.has_pack() else None
         product.sell_unit = _sell_unit_for(form)
-        product.min_stock_alert = form.min_stock_alert.data or 0
+        product.min_stock_alert = _min_stock_base(form)
+
+        # populate_obj has just written whatever the hidden per-single boxes held,
+        # which for a packed product is None against two NOT NULL columns. Derive
+        # after it, never before.
+        _apply_prices(form, product, may_see_cost)
 
         # Stock is owned by StockBatch/goods receipt, never by this form
         product.quantity_in_stock = existing_qty
 
         # "Who changed this price" is the question this log exists to answer, so
         # record the before and after rather than just that an edit happened.
+        # The pack price goes first because it is the one somebody typed. Logging
+        # only unit_price would have recorded a derived figure and missed the
+        # decision behind it - and on a packed product the two always move together.
+        if product.pack_price != existing_pack_price:
+            audit.log('product.price_change', entity_type='product', entity_id=product.id,
+                      sku=product.sku, field='pack_price',
+                      old=str(existing_pack_price), new=str(product.pack_price))
         if product.unit_price != existing_unit_price:
             audit.log('product.price_change', entity_type='product', entity_id=product.id,
                       sku=product.sku, field='unit_price',
@@ -426,6 +512,9 @@ def toggle_product_active(product_id):
             return redirect(url_for('products.list_products'))
 
     product.is_active = not bool(product.is_active)
+    # Whatever switched it off, the owner has now made a decision about it -
+    # so it stops being the plan's doing and stops carrying the plan's message.
+    product.locked_by_plan = False
     audit.log('product.reactivate' if product.is_active else 'product.deactivate',
               entity_type='product', entity_id=product.id, sku=product.sku)
     db.session.commit()
@@ -565,6 +654,18 @@ def bulk_action():
         flash('You do not have permission to do that.', 'danger')
         return redirect(url_for('products.list_products'))
 
+    # And the plan on top of the permission, for the two that take data out of
+    # the building. CSV is on Shop, Excel on Depot. Unlike the report pages
+    # there is nothing to fall back to rendering here - the whole request is the
+    # export - so this returns to the list rather than flashing and continuing.
+    export_feature = {'export_csv': 'exports.csv',
+                      'export_excel': 'exports.all'}.get(action)
+    if export_feature and not limits.has_feature(export_feature):
+        from billing.plans import FEATURES
+        flash(f'{FEATURES[export_feature][0]} is not included in your current plan.',
+              'warning')
+        return redirect(url_for('products.list_products'))
+
     products = Product.query.filter(Product.id.in_(ids), Product.business_id == current_user.business_id).all()
     if action == 'delete':
         # Same rule as the single delete: anything that has traded is kept.
@@ -587,23 +688,40 @@ def bulk_action():
         # The export is the easiest way to walk out with margins, so it obeys the
         # same gate as the screen - the column is omitted entirely, not blanked.
         show_cost = current_user.can('products.cost_price.view')
-        headers = ['Name', 'SKU', 'Brand', 'Item Group', 'Variant']
+        # Every money and quantity column here is per *pack* where there is one,
+        # because that is what the business types and quotes. The unit is named
+        # once in its own column so the numbers stay numeric and summable, and
+        # the singles total is kept for checking against a physical count.
+        headers = ['Name', 'SKU', 'Brand', 'Item Group', 'Variant', 'Sold by']
         if show_cost:
-            headers.append('Cost Price')
-        headers += ['Unit Price', 'Quantity in Stock']
+            headers.append('Cost each')
+        headers += ['Price each', 'In stock', 'Loose singles', 'Singles in total']
 
         data = []
         for p in products:
+            unit = uom.PURCHASE if uom.has_conversion(p) else uom.BASE
+            whole, loose = uom.split(p, p.quantity_in_stock)
             row = [
                 p.name,
                 p.sku,
                 p.brand.name if p.brand else '',
                 p.item_group.name if p.item_group else '',
                 p.variant_label,
+                uom.packing(p),
             ]
             if show_cost:
-                row.append(float(p.cost_price or 0))
-            row += [float(p.unit_price or 0), p.quantity_in_stock]
+                # cost_price is stored to six decimals because it is derived
+                # from a pack cost; nobody wants to read 41.666667 in a
+                # spreadsheet. Rounded here rather than stored short, so the
+                # round trip stays exact.
+                row.append(round(float(uom.cost_per_purchase_unit(p, p.cost_price)
+                                       if unit == uom.PURCHASE else (p.cost_price or 0)), 2))
+            row += [
+                float(uom.price_for(p, unit)),
+                whole if unit == uom.PURCHASE else p.quantity_in_stock,
+                loose if unit == uom.PURCHASE else 0,
+                p.quantity_in_stock,
+            ]
             data.append(row)
         df = pd.DataFrame(data, columns=headers)
 

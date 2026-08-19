@@ -45,6 +45,17 @@ def reconcile_on_use():
     try:
         if subscriptions.reconcile_business(current_user.business_id):
             db.session.commit()
+
+        # Then bring the business inside whatever plan it is now on. Separate
+        # from the reconcile above and after its commit, so the plan is settled
+        # before it is read - and unconditional, because a business can end up
+        # over a cap without any transition falling due at all. That is exactly
+        # what happened when the caps were tightened: no status changed, and
+        # every business over the new numbers was still selling on all of them.
+        from services import limits
+
+        if limits.enforce_plan_limits(current_user.business_id):
+            db.session.commit()
         # Marked only once the work is done. Marking before it would write the
         # day off on a connection that blinked, and this business would then be
         # skipped until tomorrow. The cost of the other order is that a business

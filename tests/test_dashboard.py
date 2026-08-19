@@ -103,7 +103,7 @@ def test_money_owed_is_hidden_without_the_permission(register, make_staff):
     *does* include `credit.view`, because they are the people who take the
     payments. Someone who may ring up a sale but not read the debt book is the
     case this guards, and naming the permissions says so."""
-    client, business_id = register()
+    _owner, business_id = register()
     staff_client = make_staff(business_id, 'Sales Staff', 'clerk@ab.example.com',
                               permissions={'products.view', 'sales.view',
                                            'sales.create'})
@@ -198,8 +198,8 @@ def test_the_chart_is_redrawn_when_the_theme_changes(shop):
     while '/*' in raw and '*/' in raw[raw.index('/*'):]:
         a = raw.index('/*')
         raw = raw[:a] + raw[raw.index('*/', a) + 2:]
-    script = ' '.join(l for l in raw.splitlines()
-                      if not l.strip().startswith('//'))
+    script = ' '.join(line for line in raw.splitlines()
+                      if not line.strip().startswith('//'))
     assert 'tracktrack:theme' in script, 'the device-change event is not listened for'
     assert 'MutationObserver' in script, (
         'nothing notices the sidebar toggle, which rewrites the attribute '

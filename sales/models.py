@@ -90,6 +90,37 @@ class SaleItem(db.Model):
         return self.quantity, uom.unit_label(self.product, uom.BASE)
 
     @property
+    def sold_as_text(self):
+        """What to print on an invoice: "2 cartons", "1 carton", "48 pcs".
+
+        A customer who bought two cartons should read two cartons. The line
+        stores 48 because that is what left the shelf, and printing 48 to
+        somebody who handed over money for 2 is how an invoice starts an
+        argument.
+        """
+        from services import uom
+        sold, _label = self.sold_as
+        unit = uom.PURCHASE if (self.sell_unit == uom.PURCHASE and self.sold_quantity)             else uom.BASE
+        return uom.quantity_label(self.product, sold, unit)
+
+    @property
+    def list_price_per_sold_unit(self):
+        """The undiscounted price of one of what they bought.
+
+        Scaled the same way as `price_per_sold_unit`, or the invoice would show
+        a carton at 1,050 struck through against a list price of 48.
+        """
+        from decimal import Decimal, ROUND_HALF_UP
+        if self.list_price is None:
+            return None
+        sold, _label = self.sold_as
+        if not sold:
+            return Decimal('0.00')
+        total = Decimal(str(self.list_price)) * Decimal(self.quantity)
+        return (total / Decimal(sold)).quantize(Decimal('0.01'),
+                                                rounding=ROUND_HALF_UP)
+
+    @property
     def price_per_sold_unit(self):
         """What one of what they bought cost, for the invoice."""
         from decimal import Decimal, ROUND_HALF_UP

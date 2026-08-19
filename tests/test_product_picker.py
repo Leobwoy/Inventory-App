@@ -87,12 +87,9 @@ def test_a_multi_line_order_is_recorded_in_full(shop):
 
     response = client.post('/purchases/add', data={
         'supplier_id': '0', 'order_date': TODAY.isoformat(),
-        'items-0-product_id': str(products[0].id), 'items-0-quantity_ordered': '10',
-        'items-0-order_unit': 'base', 'items-0-unit_cost': '2.00',
-        'items-1-product_id': str(products[1].id), 'items-1-quantity_ordered': '20',
-        'items-1-order_unit': 'base', 'items-1-unit_cost': '3.00',
-        'items-2-product_id': str(products[2].id), 'items-2-quantity_ordered': '30',
-        'items-2-order_unit': 'base', 'items-2-unit_cost': '4.00',
+        'items-0-product_id': str(products[0].id), 'items-0-quantity_ordered': '10', 'items-0-unit_cost': '2.00',
+        'items-1-product_id': str(products[1].id), 'items-1-quantity_ordered': '20', 'items-1-unit_cost': '3.00',
+        'items-2-product_id': str(products[2].id), 'items-2-quantity_ordered': '30', 'items-2-unit_cost': '4.00',
     }, follow_redirects=True)
 
     assert response.status_code == 200
@@ -115,10 +112,8 @@ def test_a_middle_line_removed_leaves_the_rest_bound_correctly(shop):
 
     response = client.post('/purchases/add', data={
         'supplier_id': '0', 'order_date': TODAY.isoformat(),
-        'items-0-product_id': str(products[0].id), 'items-0-quantity_ordered': '10',
-        'items-0-order_unit': 'base', 'items-0-unit_cost': '2.00',
-        'items-1-product_id': str(products[2].id), 'items-1-quantity_ordered': '30',
-        'items-1-order_unit': 'base', 'items-1-unit_cost': '4.00',
+        'items-0-product_id': str(products[0].id), 'items-0-quantity_ordered': '10', 'items-0-unit_cost': '2.00',
+        'items-1-product_id': str(products[2].id), 'items-1-quantity_ordered': '30', 'items-1-unit_cost': '4.00',
     }, follow_redirects=True)
 
     assert response.status_code == 200
@@ -147,11 +142,9 @@ def test_two_lines_sharing_an_index_lose_one_of_themselves(shop):
     client.post('/purchases/add', data=MultiDict([
         ('supplier_id', '0'), ('order_date', TODAY.isoformat()),
         ('items-0-product_id', str(products[0].id)),
-        ('items-0-quantity_ordered', '10'),
-        ('items-0-order_unit', 'base'), ('items-0-unit_cost', '2.00'),
+        ('items-0-quantity_ordered', '10'), ('items-0-unit_cost', '2.00'),
         ('items-0-product_id', str(products[2].id)),
-        ('items-0-quantity_ordered', '30'),
-        ('items-0-order_unit', 'base'), ('items-0-unit_cost', '4.00'),
+        ('items-0-quantity_ordered', '30'), ('items-0-unit_cost', '4.00'),
     ]), follow_redirects=True)
 
     po = PurchaseOrder.query.filter_by(business_id=business_id).order_by(
@@ -170,10 +163,8 @@ def test_a_gap_in_the_indexes_is_harmless(shop):
 
     client.post('/purchases/add', data={
         'supplier_id': '0', 'order_date': TODAY.isoformat(),
-        'items-0-product_id': str(products[0].id), 'items-0-quantity_ordered': '10',
-        'items-0-order_unit': 'base', 'items-0-unit_cost': '2.00',
-        'items-2-product_id': str(products[2].id), 'items-2-quantity_ordered': '30',
-        'items-2-order_unit': 'base', 'items-2-unit_cost': '4.00',
+        'items-0-product_id': str(products[0].id), 'items-0-quantity_ordered': '10', 'items-0-unit_cost': '2.00',
+        'items-2-product_id': str(products[2].id), 'items-2-quantity_ordered': '30', 'items-2-unit_cost': '4.00',
     }, follow_redirects=True)
 
     po = PurchaseOrder.query.filter_by(business_id=business_id).order_by(
@@ -190,8 +181,7 @@ def test_a_rejected_order_line_says_so(shop):
 
     page = client.post('/purchases/add', data={
         'supplier_id': '0', 'order_date': TODAY.isoformat(),
-        'items-0-product_id': str(products[0].id), 'items-0-quantity_ordered': '',
-        'items-0-order_unit': 'base', 'items-0-unit_cost': '2.00',
+        'items-0-product_id': str(products[0].id), 'items-0-quantity_ordered': '', 'items-0-unit_cost': '2.00',
     }).get_data(as_text=True)
 
     # Asserted on the field that actually failed, not on the page. Five other
@@ -261,6 +251,25 @@ def test_the_receipt_keeps_the_field_names_the_route_reads(shop, make_po):
     assert f'name="qty_{line.id}"' in page
     assert f'name="batch_{line.id}"' in page
     assert f'name="expiry_{line.id}"' in page
+
+    # The fourth name is only rendered where the plan allows conversion, so it
+    # needs its own case rather than an unconditional assertion against the
+    # fixture's plan. It is also the one most able to break silently: the route
+    # reads it to decide whether a receipt is counted in cartons or in bottles.
+    from billing.models import Plan, Subscription
+    from extensions import db
+
+    subscription = Subscription.query.filter_by(business_id=business_id).one()
+    subscription.plan_id = Plan.query.filter_by(code='standard').one().id
+    subscription.status = 'active'
+    subscription.paid_through = datetime.date.today() + datetime.timedelta(days=30)
+    products[0].base_uom = 'bottle'
+    products[0].purchase_uom = 'carton'
+    products[0].units_per_purchase_uom = 24
+    db.session.commit()
+
+    page = body(client, f'/purchases/receive/{po.id}')
+    assert f'name="unit_{line.id}"' in page
     # The button that fills every line, and the data the script reads off them.
     assert 'id="receive-all"' in page
     assert 'data-outstanding=' in page and 'data-per=' in page
@@ -309,3 +318,57 @@ def test_the_picker_button_has_a_border_that_can_be_seen(shop):
 
     assert 'var(--input-border-strong)' in rule,         'back to a border nobody can see against the card'
     assert 'dashed' not in rule
+
+
+# --- what the search box searches --------------------------------------------
+
+def picker_source():
+    """picker.js as text, anchored to this file rather than the working
+    directory - pytest run from anywhere else was an error, not a failure."""
+    import pathlib
+
+    return (pathlib.Path(__file__).resolve().parent.parent
+            / 'static' / 'js' / 'picker.js').read_text(encoding='utf-8')
+
+
+def test_a_picker_row_genuinely_carries_more_than_the_name():
+    """Establishes what the next test guards. Each row renders a meta line -
+    the price and the stock count - beside the name, which is why filtering on
+    the whole row was wrong. If the meta line ever goes away, the guarantee
+    below stops being about anything."""
+    source = picker_source()
+
+    assert "option.dataset.meta" in source, 'rows no longer carry a meta line'
+    assert "picker-option-meta" in source
+
+
+def test_the_search_box_matches_the_product_name_only():
+    """It filtered on `el.textContent`, which is the name *and* the meta line,
+    so typing "44" matched every product that cost 44 something.
+
+    Stage W5 made it materially worse without anyone noticing: stock started
+    reading "13 cartons + 6 bottles", so the word "carton" matched every packed
+    product in the catalogue - the exact opposite of what a search is for.
+
+    Asserted against the source because the behaviour is in the browser. The
+    test above exists so this one cannot quietly become vacuous.
+    """
+    source = picker_source()
+    # Anchored to the definition, not the name: a comment elsewhere in the file
+    # references `Picker.prototype.filter`, and splitting on the bare name
+    # extracted the row-building code instead - which contains `textContent`
+    # legitimately, so the assertion below failed against correct source.
+    filter_body = (source.split('Picker.prototype.filter = function')[1]
+                         .split('Picker.prototype.setActive')[0])
+    # Comments stripped, or the comment explaining this very fix satisfies the
+    # assertion against it - the same trap `test_dashboard.py` documents. The
+    # question is what the code reads, not what the prose beside it mentions.
+    filter_body = ' '.join(line for line in filter_body.splitlines()
+                           if not line.strip().startswith('//'))
+
+    assert 'dataset.name' in filter_body, 'filtering does not use the name attribute'
+    assert 'textContent' not in filter_body, (
+        'filtering reads the rendered row again, so the price and stock line '
+        'are searchable and "carton" matches every packed product')
+    assert "el.dataset.name = name.textContent.toLowerCase();" in source, (
+        'nothing writes the name attribute the filter reads')

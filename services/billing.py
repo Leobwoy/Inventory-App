@@ -83,7 +83,7 @@ def confirm(transaction, confirmed_by, note=None):
         return False
 
     # Lock the subscription before reading paid_through, because what follows is
-    # read-then-write on a shared row (invariant 8). Two confirmations landing
+    # read-then-write on a shared row (invariant 9). Two confirmations landing
     # together would otherwise both extend from the same starting point, and one
     # customer's paid month would vanish.
     subscription = (Subscription.query

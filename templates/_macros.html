@@ -31,3 +31,27 @@
     </ul>
 </nav>
 {% endmacro %}
+
+{# One labelled field, the way every form in the app draws one.
+
+   Written for Phase C4: the product form carried two layout systems at once -
+   Bootstrap's `row`/`col-md-4` for the first nine fields and the design
+   system's `field-grid` for the rest - and nine copies of the same six lines.
+   The label, the invalid state and the error list are the parts that were
+   quietly inconsistent, and each of those has been a bug here before: exactly
+   one of seventeen fields rendered a reason for being refused until U4, and two
+   more were still missing in review round 3. #}
+{% macro field(f, cls='', placeholder=None, inputmode=None, wide=False) %}
+<div class="field{{ ' field-wide' if wide else '' }}">
+    <label class="form-label" for="{{ f.id }}">{{ f.label.text }}</label>
+    {%- set base = 'form-select' if f.type == 'SelectField' else 'form-control' -%}
+    {%- set classes = base ~ (' ' ~ cls if cls else '') ~ (' is-invalid' if f.errors else '') -%}
+    {% if placeholder and inputmode %}{{ f(class_=classes, placeholder=placeholder, inputmode=inputmode) }}
+    {% elif placeholder %}{{ f(class_=classes, placeholder=placeholder) }}
+    {% elif inputmode %}{{ f(class_=classes, inputmode=inputmode) }}
+    {% else %}{{ f(class_=classes) }}{% endif %}
+    {% for error in f.errors %}
+    <div class="invalid-feedback d-block">{{ error }}</div>
+    {% endfor %}
+</div>
+{% endmacro %}

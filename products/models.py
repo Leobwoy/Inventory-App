@@ -77,7 +77,11 @@ class Product(db.Model):
     size_value = db.Column(db.Numeric(10, 2))
     size_unit = db.Column(db.String(20))
     barcode = db.Column(db.String(100))
-    cost_price = db.Column(db.Numeric(10, 2), nullable=False)
+    # Six decimals because it is derived, not typed: the form asks what a carton
+    # costs and this is that divided by the pack size. At two decimals the edit
+    # form's round trip drifts - 1,000 for 24 stores 41.67 and reads back 1,000.08
+    # (F-41, and d7e93b04c815 on the selling side).
+    cost_price = db.Column(db.Numeric(14, 6), nullable=False)
     base_uom = db.Column(db.String(20), nullable=False)
     purchase_uom = db.Column(db.String(20), nullable=False)
     units_per_purchase_uom = db.Column(db.Integer, nullable=False, default=1)
@@ -95,6 +99,13 @@ class Product(db.Model):
     # would find. Deactivating retires a product from new sales and orders while
     # leaving all of its history intact.
     is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.text('true'))
+    # Why it is switched off, not just that it is. A product the owner retired
+    # and one the plan switched off look identical in `is_active`, and telling a
+    # wholesaler that a line they deliberately stopped stocking is "locked by
+    # your plan - upgrade to unlock" would be a lie in the one place this app
+    # is asking them for money.
+    locked_by_plan = db.Column(db.Boolean, nullable=False, default=False,
+                               server_default=db.text('false'))
 
     def __repr__(self):
         return f'<Product {self.name}>' 

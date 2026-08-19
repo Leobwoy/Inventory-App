@@ -206,9 +206,17 @@ def make_staff(app):
 
 @pytest.fixture
 def make_product(app):
-    """Create a product, optionally with opening stock as a batch."""
+    """Create a product, optionally with opening stock as a batch.
+
+    Defaults to a product with no pack - base and purchase unit both 'pcs',
+    one to a pack - so `uom.has_conversion` is False and most of the suite is
+    exempt from carton arithmetic by construction. Tests that are *about* the
+    carton pass the pack in explicitly.
+    """
     def _make(business_id, sku='BA-750', name='BelAqua 750ml', unit_price='3.00',
-              cost_price='2.00', stock=0, expiry=None):
+              cost_price='2.00', stock=0, expiry=None,
+              base_uom='pcs', purchase_uom='pcs', units_per_purchase_uom=1,
+              pack_price=None, sell_unit='base'):
         import datetime
         from extensions import db
         from products.models import Brand, ItemGroup, Product
@@ -220,7 +228,10 @@ def make_product(app):
             quantity_in_stock=0, min_stock_alert=0,
             brand_id=Brand.query.filter_by(business_id=business_id).first().id,
             item_group_id=ItemGroup.query.filter_by(business_id=business_id).first().id,
-            base_uom='pcs', purchase_uom='pcs', units_per_purchase_uom=1,
+            base_uom=base_uom, purchase_uom=purchase_uom,
+            units_per_purchase_uom=units_per_purchase_uom,
+            pack_price=Decimal(pack_price) if pack_price is not None else None,
+            sell_unit=sell_unit,
         )
         db.session.add(product)
         db.session.flush()

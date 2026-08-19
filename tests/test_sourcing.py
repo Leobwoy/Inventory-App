@@ -15,7 +15,7 @@ from billing.models import Plan, Subscription
 from extensions import db
 from products.models import Supplier
 from purchases.models import PurchaseOrder, PurchaseOrderItem
-from services import sourcing
+from services import limits, sourcing
 
 TODAY = datetime.date.today()
 
@@ -256,7 +256,18 @@ def test_comparison_is_a_paid_feature(shop):
     subscription = Subscription.query.filter_by(business_id=business_id).one()
     subscription.plan_id = Plan.query.filter_by(code='standard').one().id   # Depot
     subscription.status = 'active'
+    # `paid_through` as well as the status, or `effective_plan` reads this as
+    # lapsed and falls back to Free - which blocks the same thing for a quite
+    # different reason, so this passed without ever exercising the plan it
+    # names.
+    subscription.paid_through = datetime.datetime.utcnow() + datetime.timedelta(days=30)
     db.session.commit()
+    # Stated rather than assumed. Setting the plan and finding the feature
+    # blocked is not evidence the *plan* blocked it, and the two are
+    # indistinguishable from the response alone - which is how this went
+    # unnoticed. Assert the premise, and a silent fallback fails here with a
+    # reason instead of passing quietly further down.
+    assert limits.effective_plan(business_id).code == 'standard'
 
     response = client.get('/purchases/compare', follow_redirects=True)
     assert 'not included in your current plan' in response.get_data(as_text=True)

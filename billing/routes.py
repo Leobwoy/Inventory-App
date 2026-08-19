@@ -11,10 +11,12 @@ from flask import current_app, flash, redirect, render_template, url_for
 from flask_login import current_user, login_required
 
 from auth.decorators import permission_required
+from auth.models import User
 from billing import billing_bp, providers
 from billing.forms import MomoPaymentForm
 from billing.models import PaymentTransaction, Plan, Subscription
 from extensions import db
+from products.models import Product
 from services import billing as billing_service
 from services import limits
 
@@ -37,6 +39,13 @@ def overview():
         plans=Plan.query.filter_by(is_public=True).order_by(Plan.sort_order).all(),
         users_used=limits.active_user_count(business_id),
         products_used=limits.active_product_count(business_id),
+        # What this plan is currently holding back. The counts above say what is
+        # in use; these say what upgrading would give back, which is the number
+        # somebody deciding whether to pay actually wants.
+        locked_products=Product.query.filter_by(
+            business_id=business_id, locked_by_plan=True).count(),
+        suspended_users=User.query.filter_by(
+            business_id=business_id, is_active=False).count(),
         payments=billing_service.history(business_id),
         provider=providers.active(),
     )
