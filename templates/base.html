@@ -303,11 +303,20 @@
     </nav>
 </div>
 {% else %}
+{# Two shapes, because the login page is now a split screen that must reach both
+   edges while register and password pages stay centred cards. `auth_full` opts a
+   page out of the container rather than every page opting in. #}
+{% if self.auth_full() | trim %}
+<main class="auth-shell w-100" style="background-color: var(--bg-page);">
+    {% block auth_full %}{% endblock %}
+</main>
+{% else %}
 <main class="auth-shell d-flex align-items-center justify-content-center flex-grow-1 w-100" style="min-height: 100vh; background-color: var(--bg-page);">
     <div class="container w-100">
         {% block auth_content %}{% endblock %}
     </div>
 </main>
+{% endif %}
 {% endif %}
 
 <script src="{{ url_for('static', filename='vendor/bootstrap/bootstrap.bundle.min.js') }}"></script>

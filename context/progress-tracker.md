@@ -1530,6 +1530,37 @@ group on products, by kind on alerts — and neither filter exists in the app. T
 `Decided` line from the Stage 3 plan: Phase C restyles what the app already does. The
 existing stock and status selects are untouched.
 
+### The way in — login as a landing page (2026-08-19)
+
+Built against `10-login.html`, plus what the user asked for on top of it: *"would be very
+nice if it was transformed as a kind of landing website page, which also briefly describes
+the entire application"*.
+
+The mockup's split screen carries it — accent panel on the left saying what this is, sign-in
+card on the right — and the four points under the headline are the addition. Each names
+something the app does **today**; nothing advertises a deferred feature, because the first
+thing a new customer looks for is the thing that made them sign up.
+
+**The order flips on a phone, and the source order does not.** Below 992px the form is
+painted first and the description follows it. A landing page you have to scroll past to
+sign in annoys the people who use it every day, and they are the overwhelming majority of
+the traffic this page will ever see. `order: -1` on the panel does that visually while the
+markup still reads description-then-form for a screen reader and a crawler.
+
+**`auth_full`**, a second block in `base.html`, so a page can opt out of the centred
+container. Register and the password pages stay centred cards; only this one reaches both
+edges. Opting one page out beats making every page opt in.
+
+**Measured**: 720/720 at 1440 with no overflow; at 375 the form starts at 92px with the
+Sign in button above the fold and 50px inputs. Contrast in both themes - headline 7.23/6.70,
+lead 6.00/5.56, points 7.23/6.70, form label 6.96/5.32.
+
+**One miss the sweep caught**: the footer line at `opacity: 0.75` measured **4.48:1** on the
+light accent - under AA by two hundredths, which is exactly the kind of miss nothing but a
+measurement finds. At 0.82 it is 5.35/5.04.
+
+`CACHE_VERSION` is `tracktrack-v21`.
+
 ## Open Questions
 
 - **The offline catalogue still prices in bottles (`api/routes.py:138-140`).** Deliberately
