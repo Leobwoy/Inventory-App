@@ -51,7 +51,12 @@ def test_a_product_at_zero_appears_and_is_marked(shop, make_product):
     body = client.get('/products/low-stock').get_data(as_text=True)
 
     assert 'Club Beer' in body
-    assert 'Out of stock' in body
+    # C4 moved the mark into a Status column of its own, with the same two words
+    # and the same badges the catalogue uses, so the two pages describe a product
+    # identically. It read "Out of stock" inline beside the name before.
+    import re
+    status = re.findall(r'<td[^>]*data-label="Status"[^>]*>(.*?)</td>', body, re.S)
+    assert any('Out' in re.sub(r'<[^>]+>', '', cell) for cell in status)
 
 
 def test_a_healthy_product_does_not_appear(shop, make_product):

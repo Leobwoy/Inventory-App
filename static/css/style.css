@@ -671,6 +671,19 @@ thead.table-light>tr>th {
   flex-wrap: wrap;
 }
 
+/* The count beside a page title - "Products  16 tracked". Sized and coloured
+   like the mockup's `.crumb`: it is a caption, not a second heading, so it must
+   not compete with the title it follows. */
+.page-count {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  margin-left: 0.5rem;
+  vertical-align: middle;
+}
+
 .page-header h2 {
   margin: 0;
   flex-shrink: 0;
@@ -2368,6 +2381,46 @@ a.text-decoration-none:hover {
 
 .alert-tag.sev-info {
   background: var(--accent-primary);
+}
+
+/* The icon tile from the approved mockup (02-alerts). The dashboard panel keeps
+   its 4px severity bar - it is a four-line summary and a row of tiles would
+   crowd it - while the full page has room to say what *kind* of problem each
+   one is before you read a word of it. Same severities, two densities. */
+.alert-icon {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+}
+
+/* The badge *foreground* tokens, not the raw accents. The accents are the pure
+   brand colours and they are too dark on their own tinted backgrounds: measured
+   at 3.41:1 for danger on dark, which clears the 3:1 an icon needs and misses
+   the 4.5 everything else in this app holds. These are the same pair the
+   badges already use, lifted for exactly this reason. */
+.alert-icon.sev-critical { background: var(--badge-danger-bg); color: var(--badge-danger-fg); }
+.alert-icon.sev-warning  { background: var(--badge-warning-bg); color: var(--badge-warning-fg); }
+.alert-icon.sev-info     { background: var(--badge-success-bg); color: var(--accent-primary); }
+
+/* Centred against the row rather than the title, so it does not drift down a
+   row whose detail line wraps to two. */
+.alert-action {
+  flex: none;
+  align-self: center;
+  margin-left: auto;
+}
+
+/* One card holding a list, not a card per alert. Six alerts used to be six
+   separate cards, each with a coloured left border written as a literal hex -
+   the last two literals of their kind in the app. */
+.alert-page .alert-row {
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1rem 0;
 }
 
 .alert-body {

@@ -93,6 +93,7 @@ def list_products():
         locked_count=Product.query.filter_by(
             business_id=business_id, locked_by_plan=True).count(),
         plan=limits.effective_plan(business_id),
+        products_used=limits.active_product_count(business_id),
         is_filtered=listing.is_filtered('q', 'stock', 'status'))
 
 @products_bp.route('/alerts')

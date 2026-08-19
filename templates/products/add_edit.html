@@ -1,4 +1,5 @@
 {% extends 'base.html' %}
+{% from '_macros.html' import field %}
 {% block title %}{{ action }} Product | TrackTrack{% endblock %}
 
 {% block content %}
@@ -13,76 +14,20 @@
     <form method="post">
         {{ form.hidden_tag() }}
         
-        <div class="row g-4 mb-3">
-            <div class="col-md-4">
-                <label class="form-label" for="{{ form.name.id }}">{{ form.name.label.text }}</label>
-                {{ form.name(class_='form-control' + (' is-invalid' if form.name.errors else ''), placeholder='Product Name') }}
-                {% for error in form.name.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
-            <div class="col-md-4">
-                <label class="form-label" for="{{ form.sku.id }}">{{ form.sku.label.text }}</label>
-                {{ form.sku(class_='form-control font-monospace' + (' is-invalid' if form.sku.errors else ''), placeholder='e.g., ITEM-001') }}
-                {% for error in form.sku.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
-            <div class="col-md-4">
-                <label class="form-label" for="{{ form.barcode.id }}">{{ form.barcode.label.text }}</label>
-                {{ form.barcode(class_='form-control font-monospace' + (' is-invalid' if form.barcode.errors else ''), placeholder='Barcode') }}
-                {% for error in form.barcode.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <div class="row g-4 mb-3">
-            <div class="col-md-4">
-                <label class="form-label" for="{{ form.brand_id.id }}">{{ form.brand_id.label.text }}</label>
-                {{ form.brand_id(class_='form-select' + (' is-invalid' if form.brand_id.errors else '')) }}
-                {% for error in form.brand_id.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
-            <div class="col-md-4">
-                <label class="form-label" for="{{ form.item_group_id.id }}">{{ form.item_group_id.label.text }}</label>
-                {{ form.item_group_id(class_='form-select' + (' is-invalid' if form.item_group_id.errors else '')) }}
-                {% for error in form.item_group_id.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
-            <div class="col-md-4">
-                <label class="form-label" for="{{ form.category_id.id }}">{{ form.category_id.label.text }}</label>
-                {{ form.category_id(class_='form-select' + (' is-invalid' if form.category_id.errors else '')) }}
-                {% for error in form.category_id.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <div class="row g-4 mb-3">
-            <div class="col-md-4">
-                <label class="form-label" for="{{ form.variant_label.id }}">{{ form.variant_label.label.text }}</label>
-                {{ form.variant_label(class_='form-control' + (' is-invalid' if form.variant_label.errors else ''), placeholder='e.g. 750ml, Large') }}
-                {% for error in form.variant_label.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
-            <div class="col-md-4">
-                <label class="form-label" for="{{ form.size_value.id }}">{{ form.size_value.label.text }}</label>
-                {{ form.size_value(class_='form-control' + (' is-invalid' if form.size_value.errors else '')) }}
-                {% for error in form.size_value.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
-            <div class="col-md-4">
-                <label class="form-label" for="{{ form.size_unit.id }}">{{ form.size_unit.label.text }}</label>
-                {{ form.size_unit(class_='form-control' + (' is-invalid' if form.size_unit.errors else ''), placeholder='e.g. ml, kg') }}
-                {% for error in form.size_unit.errors %}
-                <div class="invalid-feedback d-block">{{ error }}</div>
-                {% endfor %}
-            </div>
+        {# One grid, one field pattern. This was three Bootstrap rows of
+           `col-md-4` holding nine near-identical copies of label + input +
+           error list, sitting above a form that already used the design
+           system's own grid. #}
+        <div class="field-grid">
+            {{ field(form.name, placeholder='Product Name') }}
+            {{ field(form.sku, cls='font-monospace', placeholder='e.g., ITEM-001') }}
+            {{ field(form.barcode, cls='font-monospace', placeholder='Barcode') }}
+            {{ field(form.brand_id) }}
+            {{ field(form.item_group_id) }}
+            {{ field(form.category_id) }}
+            {{ field(form.variant_label, placeholder='e.g. 750ml, Large') }}
+            {{ field(form.size_value) }}
+            {{ field(form.size_unit, placeholder='e.g. ml, kg') }}
         </div>
 
         <h5 class="sale-pane-head">How it is packed and priced</h5>

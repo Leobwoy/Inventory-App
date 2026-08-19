@@ -71,14 +71,27 @@ def test_a_product_with_no_pack_is_untouched(shop):
 
 # --- the screens -------------------------------------------------------------
 
+def cell(page, label):
+    """The text of every <td> carrying this data-label."""
+    import re
+
+    found = re.findall(r'<td[^>]*data-label="%s"[^>]*>(.*?)</td>' % label, page, re.S)
+    return [' '.join(re.sub(r'<[^>]+>', ' ', c).split()) for c in found]
+
+
 def test_the_product_list_counts_in_cartons(shop):
+    """Phase C4 split this in two, per the approved mockup. The badge used to
+    carry the count as well as the state - "13 cartons + 6 bottles in stock" -
+    and was the widest thing in the row. The number lives in Stock now and the
+    word in Status, which is also why there are three states rather than two."""
     client, _business_id, _carton, _loose = shop
 
     page = client.get('/products/').get_data(as_text=True)
 
-    assert '13 cartons + 6 bottles in stock' in page
-    assert '318 in stock' not in page
-    assert '7 pcs in stock' in page, 'loose goods lost their count'
+    assert '13 cartons + 6 bottles' in cell(page, 'Stock')
+    assert '7 pcs' in cell(page, 'Stock'), 'loose goods lost their count'
+    assert 'In stock' in cell(page, 'Status')
+    assert '318' not in cell(page, 'Stock'), 'the raw base count came back'
 
 
 def test_the_low_stock_page_compares_like_with_like(shop):

@@ -3,32 +3,32 @@
 
 {% block content %}
 <div class="page-header">
-  <h2>Needs attention</h2>
+  <h2>Needs attention{% if alerts %} <span class="page-count">{{ alerts|length }} item{{ '' if alerts|length == 1 else 's' }}</span>{% endif %}</h2>
 </div>
 
 {% if alerts %}
-{% for alert in alerts %}
-<div class="glass-card mb-3" style="border-left: 3px solid
-     {% if alert.severity == 'critical' %}#dc2626{% else %}#fbbf24{% endif %};">
-  <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
-    <div>
-      <div class="d-flex align-items-center gap-2 mb-1">
-        {% if alert.severity == 'critical' %}
-        <i class="bi bi-exclamation-octagon-fill text-danger"></i>
-        {% else %}
-        <i class="bi bi-exclamation-triangle-fill text-warning"></i>
-        {% endif %}
-        <h5 class="mb-0">{{ alert.title }}</h5>
+{# One card holding the list, per the approved mockup (02-alerts). This was a
+   card per alert, each with a coloured left border written as a literal hex -
+   the last two colour literals in the app after B1 tokenised the other 33. #}
+<div class="glass-card alert-page">
+  <ul class="alert-list">
+    {% for alert in alerts %}
+    <li class="alert-row">
+      <span class="alert-icon sev-{{ alert.severity }}">
+        <i class="bi bi-{{ 'exclamation-octagon-fill' if alert.severity == 'critical' else 'exclamation-triangle-fill' }}"></i>
+      </span>
+      <div class="alert-body">
+        <span class="alert-title">{{ alert.title }}</span>
+        <span class="alert-detail">{{ alert.detail }}</span>
       </div>
-      <div class="text-muted">{{ alert.detail }}</div>
-    </div>
-    {# The service hands over a route name and its arguments; turning that into
-       a link is the template's job, and keeps the service usable off-request. #}
-    <a href="{{ url_for(alert.endpoint, **alert.params) }}"
-       class="btn btn-sm btn-outline-primary">Open</a>
-  </div>
+      {# The service hands over a route name and its arguments; turning that into
+         a link is the template's job, and keeps the service usable off-request. #}
+      <a href="{{ url_for(alert.endpoint, **alert.params) }}"
+         class="btn btn-sm btn-outline-primary alert-action">Open</a>
+    </li>
+    {% endfor %}
+  </ul>
 </div>
-{% endfor %}
 {% else %}
 <div class="glass-card text-center py-5 text-muted">
   <i class="bi bi-check2-circle fs-1 d-block mb-3 text-success"></i>

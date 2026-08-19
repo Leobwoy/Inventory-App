@@ -1477,6 +1477,59 @@ went unnoticed. A silent fallback now fails on that line with a reason.
 three. The other patterns are caught by the falsification habit; sweeping 765 tests would
 cost hours to find problems that only matter when the code they guard next changes.
 
+### Stage 3 C4 — Products pages (2026-08-19)
+
+**The mockups were reachable after all.** I said they were not — `design/pages/` holds only
+`dashboard.html`, and the tracker said the ten were built "in a companion project". They are
+in the Claude Design project and readable through the design MCP: `01-dashboard` through
+`10-login`, plus `shell.css` and the generated `tokens.css`. C4 is built against
+`03-products.html` and `02-alerts.html` rather than inferred from C2/C3.
+
+**What `shell.css` is, so nobody imports it.** It is mockup chrome — a fake desktop rail
+(`.desk`/`.rail`/`.bar`) and a fake phone frame (`.phone`/`.ptop`/`.tabs`) so a mockup stands
+alone in a browser. The app has the real shell from C1. What C4 took is the page *content*
+vocabulary: table columns, the status badge, the icon tile, the count beside a title.
+
+**The catalogue table now says which unit everything is in.** Columns per the mockup:
+Product, Unit, Cost, Price, Stock, Status. Brand, group and SKU moved under the name rather
+than taking three more columns — this table already lost the width fight once, at 130px for
+the product cell on a 1440px laptop, which is what moved product choosing into a dialog.
+Measured after: 300px at 1440, 292px at 1024, no page overflow at either, and it scrolls
+inside its own wrapper below that.
+
+**Status became its own column, and gained a third state.** The badge used to carry the
+count as well — *"13 cartons + 6 bottles in stock"* — and was the widest thing in the row.
+Out of stock is not the same problem as running low, and `services/notifications.py` has
+always treated them separately; the catalogue now agrees with it.
+
+**Two layout systems in one form, resolved.** The product form ran Bootstrap's
+`row`/`col-md-4` for its first nine fields and the design system's `field-grid` for the
+rest, with nine copies of the same six lines. There is a `field()` macro in `_macros.html`
+now. The label, the invalid state and the error list are exactly the parts that were
+quietly inconsistent, and each has been a bug here before: one of seventeen fields rendered
+a reason until U4, and two were still missing in review round 3.
+
+**The alerts page was a card per alert with the last two colour literals in the app**
+(`#dc2626`, `#fbbf24`) after B1 tokenised the other 33. It is one card holding a list now,
+with the mockup's icon tile.
+
+**The icon tiles needed the badge foregrounds, not the accents.** `--accent-danger` on its
+own tint measured **3.41:1** on dark — clears the 3:1 an icon needs, misses the 4.5 this app
+holds everywhere. `--badge-danger-fg` exists because badges hit the same wall, and reusing
+it puts them at 4.63/6.80.
+
+**An hour's trap avoided by one suspicious number.** The icon tiles measured *exactly* the
+title's ratio, which is what inheriting the body colour looks like. The stylesheet was the
+service worker's precached copy: `CACHE_VERSION` had not been bumped. Every reading taken
+before that was against the old sheet, including a `page-count` of 17.06 that is really
+6.96. **The signature is a measurement that matches something it has no reason to match.**
+`CACHE_VERSION` is `tracktrack-v20`.
+
+**Chip filters stay deferred.** The mockups put chips across the top of both pages — by item
+group on products, by kind on alerts — and neither filter exists in the app. That is the
+`Decided` line from the Stage 3 plan: Phase C restyles what the app already does. The
+existing stock and status selects are untouched.
+
 ## Open Questions
 
 - **The offline catalogue still prices in bottles (`api/routes.py:138-140`).** Deliberately
