@@ -87,6 +87,12 @@ def list_products():
         'products/list.html', products=pagination.items, pagination=pagination,
         search_query=term, q=term, sort=sort, sort_options=PRODUCT_SORT_LABELS,
         stock=stock_filter, status=status,
+        # How many the plan is holding back, and what a bigger one would cover.
+        # Counted rather than inferred from is_active, because a product the
+        # owner retired is not an upgrade prompt.
+        locked_count=Product.query.filter_by(
+            business_id=business_id, locked_by_plan=True).count(),
+        plan=limits.effective_plan(business_id),
         is_filtered=listing.is_filtered('q', 'stock', 'status'))
 
 @products_bp.route('/alerts')
@@ -505,6 +511,9 @@ def toggle_product_active(product_id):
             return redirect(url_for('products.list_products'))
 
     product.is_active = not bool(product.is_active)
+    # Whatever switched it off, the owner has now made a decision about it -
+    # so it stops being the plan's doing and stops carrying the plan's message.
+    product.locked_by_plan = False
     audit.log('product.reactivate' if product.is_active else 'product.deactivate',
               entity_type='product', entity_id=product.id, sku=product.sku)
     db.session.commit()

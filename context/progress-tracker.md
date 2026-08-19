@@ -1373,6 +1373,71 @@ the light/dark/system support that shipped in C1 rather than the dark-only glass
 the goods-receipt layout item is closed, and `CACHE_VERSION` is `tracktrack-v19` — bumped in
 this commit because `picker.js` is precached.
 
+### Plan limits, and a downgrade that actually means something (2026-08-19)
+
+**New caps, at the user's direction**: Kiosk 20, Shop 70, Depot 200, Distributor 500,
+Enterprise unlimited. Every one is a reduction and Distributor gains a ceiling it never had.
+The trial moved with Distributor to 500 — not on the list, and it grants the advanced tier,
+so leaving it unlimited would let somebody build 600 products in a fortnight and lose a
+hundred the day it ended.
+
+**`billing/plans.py` is not read at runtime.** It seeded the `plan` table once, in
+migration `c2a67f81d940`, and every limit is read from the row. Changing the file alone
+changes nothing; there is a test now asserting the two agree, because the drift would be
+invisible until somebody trusted the file.
+
+**Invariant 10 was fiction.** It had said since it was written that a downgrade "removes
+access, not records: products deactivate, staff suspend, nothing is destroyed". Nothing
+did that. The caps were consulted in exactly four places, all of them *adding* something —
+so a Distributor with 400 products who dropped to Kiosk kept all 400 active and sellable,
+and all fifteen staff kept logging in. The ceiling only stopped them creating number 401.
+`services/limits.enforce_plan_limits` makes the invariant true.
+
+**Two decisions the user made rather than me.** The Owner keeps their seat — Kiosk has one,
+and a literal "suspend everyone over the cap" locks the last person out of a business that
+still owes money, which `auth/routes.py` refuses to do anyway. And what is switched off
+stays *visible*: the catalogue keeps every product, marked, with what a bigger plan gives
+back, because hiding stock a wholesaler physically holds reads as the app losing their data.
+
+**`Product.locked_by_plan`**, because `is_active = false` could not tell the plan's decision
+from the owner's. Printing "locked by your plan — upgrade to unlock" over a line somebody
+deliberately stopped stocking would be a lie in the one place the app asks them for money.
+Reactivating clears it. It went into the backup spec in the same commit — the W1 bug was
+exactly this, a new column the archive silently dropped.
+
+**Enforcement only ever removes access, never restores it.** Upgrading does not resurrect
+anything: only the owner knows which of the 400 they want back, and a product retired on
+purpose must not reappear because they bought a bigger plan. That is also what makes it
+safe to run on any plan change in either direction, and on the daily check.
+
+**Where it runs.** The daily `reconcile_on_use` check is the safety net that catches
+everything — including a business put over a cap by the caps themselves changing, where no
+transition falls due at all. Both payment paths (console route and CLI) and the console's
+manual plan change call it directly, so a deliberate change is immediate rather than
+next-login.
+
+**A lapsed paying customer used to be told nothing.** The trial banner is keyed to the trial
+date and times out after a fortnight, and the alerts inbox that carries subscription
+warnings is itself a paid feature — so falling to Kiosk removed the thing that would have
+explained falling to Kiosk. That gap was introduced by the feature-gating commit the day
+before. `onboarding.trial_state` has a third phase now, `lapsed`, with no time limit,
+because it describes a present state rather than a past event and ends when they pay.
+
+**Reinstating staff is seat-checked**, which it never was — reactivating a *product* always
+has been. Without it a business could undo the enforcement one click at a time.
+
+**A test that proved nothing, found by falsification.** "The Owner is never suspended"
+passed with the sort broken, the guard broken, and *both* broken together: the Owner
+registers before any staff, so they hold the lowest id and any ordering leaves them first.
+It was passing on an accident of row order. The test now moves ownership to the newest
+account first — the only arrangement where keeping the Owner has to be deliberate. With
+that, breaking the sort goes red; the `if not u.is_owner` filter is a redundant second
+guard, and only the sort is load-bearing today. Recorded so it is not deleted as dead.
+
+**Deferred, deliberately**: which products survive a cut is "newest kept, oldest retired",
+which is arbitrary but stable — it does not reshuffle on each run. A kinder rule would keep
+whatever has sold most recently. Not guessed at here.
+
 ## Open Questions
 
 - **The offline catalogue still prices in bottles (`api/routes.py:138-140`).** Deliberately

@@ -49,13 +49,17 @@ def features_for_tier(tier):
 # customer can place themselves on it without reading the feature list. `code` is
 # what the application keys off everywhere; the name is presentation only, and
 # changing it again later touches no logic.
+# **This list is not read at runtime.** It seeded the `plan` table once, in
+# migration c2a67f81d940, and every limit the application enforces is read from
+# that table by `services/limits.effective_plan`. Changing a number here without
+# a migration to match changes nothing at all - keep the two in step.
 PLANS = [
     # code, name, monthly, annual, max_users, max_products, tier, public, order
-    ('trial',    'Full Access Trial', 0,   0,    15,   None, 'advanced', False, 0),
-    ('free',     'Kiosk',             0,   0,    1,    50,   'free',     True,  1),
-    ('basic',    'Shop',              99,  990,  2,    200,  'basic',    True,  2),
-    ('standard', 'Depot',             199, 1990, 5,    1000, 'standard', True,  3),
-    ('advanced', 'Distributor',       349, 3490, 15,   None, 'advanced', True,  4),
+    ('trial',    'Full Access Trial', 0,   0,    15,   500,  'advanced', False, 0),
+    ('free',     'Kiosk',             0,   0,    1,    20,   'free',     True,  1),
+    ('basic',    'Shop',              99,  990,  2,    70,   'basic',    True,  2),
+    ('standard', 'Depot',             199, 1990, 5,    200,  'standard', True,  3),
+    ('advanced', 'Distributor',       349, 3490, 15,   500,  'advanced', True,  4),
     ('custom',   'Enterprise',        None, None, None, None, 'custom',  True,  5),
 ]
 

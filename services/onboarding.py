@@ -169,6 +169,23 @@ def trial_state(business_id):
         return None
 
     since = now - subscription.trial_ends_at
-    if since > datetime.timedelta(days=ENDED_NOTICE_DAYS):
-        return None
-    return {'phase': 'ended', 'plan': plan}
+    if since <= datetime.timedelta(days=ENDED_NOTICE_DAYS):
+        return {'phase': 'ended', 'plan': plan}
+
+    # Past the trial notice window and still on Free. Somebody who has paid
+    # before did not trial their way here - their plan lapsed - and until this
+    # existed they were told nothing at all: the trial banner had timed out
+    # months ago, and the alerts inbox that carries subscription warnings is
+    # itself a paid feature, so falling to Kiosk took away the thing that would
+    # have explained falling to Kiosk.
+    #
+    # No time limit on this one, deliberately. The trial notice expires because
+    # it is explaining a past event; this is describing a present state, and it
+    # goes away the moment they pay.
+    from billing.models import PaymentTransaction
+
+    has_paid = PaymentTransaction.query.filter_by(
+        business_id=business_id, status='paid').first() is not None
+    if has_paid:
+        return {'phase': 'lapsed', 'plan': plan}
+    return None

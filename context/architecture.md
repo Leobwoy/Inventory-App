@@ -169,6 +169,14 @@ Rules the codebase must never violate. Each was learned from a real defect.
 
 10. **Customer data is never deleted to enforce a plan limit.** Downgrading removes
    *access*, not records: products deactivate, staff suspend, nothing is destroyed.
+   `services/limits.enforce_plan_limits` is what makes this true — it was a statement of
+   intent with no code behind it until 2026-08-19, when the caps were tightened. Three
+   rules hold it: it only ever takes access away, so it is safe on an upgrade and only the
+   owner decides what comes back; the Owner account is never suspended, because Kiosk's
+   single seat would otherwise lock a business out of paying; and a product switched off by
+   the plan is marked `locked_by_plan`, so the catalogue can say *why* without libelling a
+   line the owner retired on purpose. It runs on the daily check in `billing/__init__.py`
+   and on every deliberate plan change.
 
 11. **Every POST form carries a CSRF token.** `CSRFProtect` is global and a missing token
     is a silent 400 (F-28). There is exactly **one** exemption,

@@ -11,6 +11,26 @@
     </div>
 </div>
 
+{# The plan holding stock back is the one moment this app has a fair claim on
+   somebody's attention about money, so it says so plainly and once: what is
+   switched off, what the plan covers, and a way out. Nothing is hidden and
+   nothing is deleted - the products are all still in the list below. #}
+{% if locked_count %}
+<div class="glass-card mb-4" style="border-left: 3px solid var(--bs-warning);">
+  <div class="d-flex justify-content-between align-items-center flex-wrap gap-3">
+    <div>
+      <strong>{{ locked_count }} product{{ '' if locked_count == 1 else 's' }}
+        switched off by your plan.</strong>
+      <span class="text-muted">
+        {{ plan.name }} covers {{ plan.max_products }} active products. The rest are
+        still here with all their history - upgrade and you can switch them back on.
+      </span>
+    </div>
+    <a href="{{ url_for('billing.overview') }}" class="btn btn-sm btn-primary">See plans</a>
+  </div>
+</div>
+{% endif %}
+
 <div class="glass-card">
     {% set search_placeholder = 'Name, SKU, barcode or variant' %}
     {% set filters = [
@@ -61,7 +81,17 @@
                         </td>
                         <td data-label="Product">
                             <div>
-                                <div class="fw-bold">{{ product.name }}</div>
+                                <div class="fw-bold">{{ product.name }}
+                                    {# Only where the plan is the reason. A line the
+                                       owner retired says nothing, because it is not
+                                       an upgrade prompt. #}
+                                    {% if product.locked_by_plan %}
+                                    <span class="badge bg-warning text-dark ms-1"
+                                          title="Switched off because {{ plan.name }} covers {{ plan.max_products }} active products">
+                                        <i class="bi bi-lock-fill me-1"></i>Plan
+                                    </span>
+                                    {% endif %}
+                                </div>
                                 <small class="text-muted text-truncate" style="max-width: 200px; display: inline-block;">{{ product.description }}</small>
                             </div>
                         </td>

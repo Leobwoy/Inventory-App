@@ -99,6 +99,13 @@ class Product(db.Model):
     # would find. Deactivating retires a product from new sales and orders while
     # leaving all of its history intact.
     is_active = db.Column(db.Boolean, nullable=False, default=True, server_default=db.text('true'))
+    # Why it is switched off, not just that it is. A product the owner retired
+    # and one the plan switched off look identical in `is_active`, and telling a
+    # wholesaler that a line they deliberately stopped stocking is "locked by
+    # your plan - upgrade to unlock" would be a lie in the one place this app
+    # is asking them for money.
+    locked_by_plan = db.Column(db.Boolean, nullable=False, default=False,
+                               server_default=db.text('false'))
 
     def __repr__(self):
         return f'<Product {self.name}>' 

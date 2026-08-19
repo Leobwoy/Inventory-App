@@ -126,7 +126,7 @@ def test_free_plan_caps_products(business, make_product):
 
     allowed, message = limits.can_add_product(business)
     assert not allowed
-    assert '50 active products' in message
+    assert '20 active products' in message
     assert 'Upgrade' in message
 
 
@@ -136,20 +136,20 @@ def test_only_active_products_count_towards_the_limit(business, make_product):
     """Pay for one month of a big plan, bulk-load a catalogue, drop to free and
     keep trading on all of it - that is the obvious play, and counting every row
     rather than the active ones would allow it."""
-    put_on(business, 'free')                    # 50 active products
-    for i in range(60):
+    put_on(business, 'free')                    # 20 active products
+    for i in range(30):
         make_product(business, sku=f'SKU-{i}', name=f'Product {i}')
 
-    assert limits.active_product_count(business) == 60
+    assert limits.active_product_count(business) == 30
     assert limits.can_add_product(business)[0] is False
 
-    # Retiring ten brings them back under the cap without deleting anything.
+    # Retiring eleven brings them back under the cap without deleting anything.
     for product in Product.query.filter_by(business_id=business).limit(11):
         product.is_active = False
     db.session.commit()
 
-    assert Product.query.filter_by(business_id=business).count() == 60   # nothing lost
-    assert limits.active_product_count(business) == 49
+    assert Product.query.filter_by(business_id=business).count() == 30   # nothing lost
+    assert limits.active_product_count(business) == 19
     assert limits.can_add_product(business)[0] is True
 
 
@@ -157,8 +157,8 @@ def test_reactivating_above_the_cap_is_blocked(business, make_product, app):
     """Otherwise a business over its cap could rotate an unlimited catalogue
     fifty products at a time."""
     put_on(business, 'free')
-    products = [make_product(business, sku=f'SKU-{i}', name=f'Product {i}') for i in range(51)]
-    products[0].is_active = False               # 50 active, exactly at the cap
+    products = [make_product(business, sku=f'SKU-{i}', name=f'Product {i}') for i in range(21)]
+    products[0].is_active = False               # 20 active, exactly at the cap
     db.session.commit()
     retired_id = products[0].id
 
@@ -190,7 +190,7 @@ def test_bulk_upload_obeys_the_product_cap(business, app):
     import io
     import openpyxl
 
-    put_on(business, 'free')                    # 50
+    put_on(business, 'free')                    # 20
     workbook = openpyxl.Workbook()
     sheet = workbook.active
     sheet.append(['Name', 'SKU', 'Description', 'Unit Price', 'Qty'])
@@ -206,7 +206,7 @@ def test_bulk_upload_obeys_the_product_cap(business, app):
     response = owner.post('/products/upload', data={'file': (buffer, 'products.xlsx')},
                           content_type='multipart/form-data', follow_redirects=True)
 
-    assert limits.active_product_count(business) == 50
+    assert limits.active_product_count(business) == 20
     body = response.get_data(as_text=True)
     assert 'were not added because the Kiosk plan covers' in body
 
@@ -224,14 +224,17 @@ def test_suspended_staff_do_not_consume_a_seat(business, make_staff):
 
 
 def test_unlimited_plans_have_no_product_cap(business):
-    put_on(business, 'advanced')
-    assert Plan.query.filter_by(code='advanced').one().max_products is None
+    """Enterprise, not Distributor. Distributor had no ceiling until the caps
+    were set deliberately (Kiosk 20, Shop 70, Depot 200, Distributor 500); the
+    only plan that is still uncapped is the one sold by conversation."""
+    put_on(business, 'custom')
+    assert Plan.query.filter_by(code='custom').one().max_products is None
     assert limits.can_add_product(business) == (True, None)
 
 
 def test_bulk_check_counts_the_whole_batch(business, make_product):
-    put_on(business, 'basic')      # 200 products
-    for i in range(198):
+    put_on(business, 'basic')      # 70 products
+    for i in range(68):
         make_product(business, sku=f'SKU-{i}', name=f'Product {i}')
 
     assert limits.can_add_product(business, adding=2)[0] is True
@@ -300,16 +303,26 @@ def test_feature_gate_allows_the_route_once_the_plan_includes_it(business, app):
     assert owner.get('/purchases/').status_code == 200
 
 
-def test_permission_and_feature_are_independent_gates(business, make_staff):
+def test_permission_and_feature_are_independent_gates(business, make_staff, app):
     """An Owner on Free cannot open purchasing (not paid for). Sales Staff on
-    Advanced cannot either (no permission). Neither check implies the other."""
+    Advanced cannot either (no permission). Neither check implies the other.
+
+    The second half uses the Owner, which is what the sentence above always
+    claimed. It used to create an Inventory Staff account on Free and check the
+    message with that - and Kiosk has one seat, so once a downgrade started
+    suspending people over the cap, the account was suspended by the time the
+    page rendered. The setup was one the app itself would never allow; only a
+    fixture writing straight to the table could build it.
+    """
     put_on(business, 'advanced')
     staff = make_staff(business, 'Sales Staff', 'sales@x.example.com')
     assert staff.get('/purchases/').status_code == 403        # permission denied
 
     put_on(business, 'free')
-    inventory = make_staff(business, 'Inventory Staff', 'inv@x.example.com')
-    response = inventory.get('/purchases/', follow_redirects=True)
+    owner = app.test_client()
+    owner.post('/auth/login', data={'email': 'owner@ab.example.com',
+                                    'password': 'Str0ngPass!23'}, follow_redirects=True)
+    response = owner.get('/purchases/', follow_redirects=True)
     assert 'not included in your current plan' in response.get_data(as_text=True)
 
 

@@ -165,6 +165,7 @@ def act_on_payment(transaction_id, action):
                                               note=form.note.data or None)
             message = ('Payment confirmed and the plan is active.' if changed
                        else 'That payment was already settled.')
+
         elif action == 'reject':
             reason = (form.note.data or '').strip()
             if not reason:
@@ -178,6 +179,15 @@ def act_on_payment(transaction_id, action):
             flash('Unknown action.', 'danger')
             return redirect(url_for('platform.payments'))
         db.session.commit()
+
+        # A confirmed payment can move a business *down* a tier as well as up -
+        # somebody paying for Shop after a spell on Distributor is still a
+        # customer, and their catalogue has to match what they are now paying
+        # for. Harmless on an upgrade: enforcement only ever removes access, so
+        # there is nothing left for it to do.
+        if action == 'confirm' and changed:
+            if limits.enforce_plan_limits(transaction.business_id):
+                db.session.commit()
     except ValueError as error:
         # A domain refusal carries text written for a reader. Anything else is a
         # fault, and its message belongs in the log rather than on the screen.
@@ -288,6 +298,16 @@ def business_detail(business_id):
                       before=before, after=(plan.code, subscription.status),
                       reason=form.reason.data, changed_by=current_admin().email)
             db.session.commit()
+            # After the commit, so the new plan is what gets read. A plan set by
+            # hand can go down as well as up, and this is the path a support
+            # conversation uses - "put them back on Kiosk until they pay" has to
+            # mean the same thing as lapsing there does.
+            switched_off = limits.enforce_plan_limits(business_id)
+            if switched_off:
+                db.session.commit()
+                flash('Brought the business inside the new plan: '
+                      f'{len(switched_off.get("products", []))} products deactivated, '
+                      f'{len(switched_off.get("users", []))} staff suspended.', 'info')
         except Exception:
             db.session.rollback()
             current_app.logger.exception('a console plan change failed')

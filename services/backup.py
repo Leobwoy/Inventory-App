@@ -41,7 +41,7 @@ EXPORT_SPEC = [
                                                   'category_id', 'item_group_id', 'brand_id',
                                                   'variant_label', 'size_value', 'size_unit', 'barcode',
                                                   'base_uom', 'purchase_uom', 'units_per_purchase_uom',
-                                                  'is_active']),
+                                                  'is_active', 'locked_by_plan']),
     ('purchase_orders',       PurchaseOrder,     ['id', 'supplier_id', 'status', 'order_date',
                                                   'expected_date']),
     ('purchase_order_items',  PurchaseOrderItem, ['id', 'po_id', 'product_id', 'quantity_ordered',

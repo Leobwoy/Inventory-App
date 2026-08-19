@@ -361,6 +361,13 @@ def toggle_user_active(user_id):
         flash('The Owner account cannot be suspended.', 'warning')
     elif user.id == current_user.id:
         flash('You cannot suspend your own account.', 'warning')
+    elif not user.is_active and not limits.can_add_user()[0]:
+        # Reinstating consumes a seat exactly as inviting somebody does. The
+        # product side has always checked this on reactivation - without it a
+        # business over its cap could rotate staff back in one at a time, and
+        # after a downgrade suspends people automatically it would simply undo
+        # the enforcement one click at a time.
+        flash(limits.can_add_user()[1], 'warning')
     else:
         user.is_active = not user.is_active
         audit.log('user.reinstate' if user.is_active else 'user.suspend',
