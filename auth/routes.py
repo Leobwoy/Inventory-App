@@ -606,6 +606,34 @@ def business_logo():
                     headers={'Cache-Control': 'private, max-age=300'})
 
 
+def _safe_next(target):
+    """A posted return path, or the dashboard. Never somebody else's site.
+
+    `target.startswith('/')` was not enough and CodeQL was right to say so:
+    `//evil.com` starts with a slash and every browser reads a
+    protocol-relative URL as absolute, so that check waved an open redirect
+    straight through. The backslash form is the same trick, and browsers
+    disagree about normalising it.
+
+    Parsing settles it rather than pattern-matching: a path is safe only when
+    it carries no scheme and no host of its own. Rebuilt from the parts, so
+    nothing of the original string survives into the response header.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+
+    if not target:
+        return url_for('index')
+    parts = urlsplit(target)
+    if parts.scheme or parts.netloc or not parts.path.startswith('/'):
+        return url_for('index')
+    # A second slash straight after the first is the protocol-relative form.
+    # chr(92) rather than an escaped backslash: a literal one cannot end a
+    # Python string, and this file has already been broken twice writing it.
+    if parts.path.startswith('//') or parts.path.startswith('/' + chr(92)):
+        return url_for('index')
+    return urlunsplit(('', '', parts.path, parts.query, ''))
+
+
 @auth_bp.route('/notice/dismiss', methods=['POST'])
 @login_required
 def dismiss_notice():
@@ -623,7 +651,4 @@ def dismiss_notice():
     db.session.commit()
 
     # Back where they were, so closing a message does not also move them.
-    target = request.form.get('next') or url_for('index')
-    if not target.startswith('/'):
-        target = url_for('index')
-    return redirect(target)
+    return redirect(_safe_next(request.form.get('next')))

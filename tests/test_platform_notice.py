@@ -134,3 +134,49 @@ def test_only_one_shows_at_a_time(shop):
     page = client.get('/').get_data(as_text=True)
 
     assert page.count('id="platform-notice"') == 1
+
+
+# --- where "Got it" is allowed to send you ----------------------------------
+
+@pytest.mark.parametrize('hostile', [
+    '//evil.example.com',              # protocol-relative: absolute to a browser
+    'https://evil.example.com',
+    'http://evil.example.com/x',
+    'javascript:alert(1)',
+    'evil.example.com',
+])
+def test_the_dismiss_button_cannot_be_pointed_off_site(shop, hostile):
+    """Reported by CodeQL against this exact route.
+
+    The `next` field is posted, so it is attacker-controllable, and the first
+    guard here was `target.startswith('/')` - which `//evil.com` satisfies while
+    every browser reads it as absolute. A dismiss button that can be aimed
+    anywhere is a phishing link with our domain on the front of it.
+    """
+    from auth.routes import _safe_next
+
+    client, business_id = shop
+    notices.raise_for_payment(a_payment(business_id), 'confirm', 'a@x.example.com')
+    db.session.commit()
+    notice = notices.unseen_for(business_id)
+
+    with client.application.test_request_context():
+        assert _safe_next(hostile) == '/'
+
+    response = client.post('/auth/notice/dismiss',
+                           data={'notice_id': notice.id, 'next': hostile})
+    assert response.status_code == 302
+    assert 'evil.example.com' not in response.headers['Location']
+    assert 'javascript' not in response.headers['Location'].lower()
+
+
+def test_a_real_page_is_still_where_you_land(shop):
+    """The guard has to leave the ordinary case alone, or closing a message
+    also moves you off the page you were reading."""
+    from auth.routes import _safe_next
+
+    client, _business_id = shop
+
+    with client.application.test_request_context():
+        assert _safe_next('/products/?page=2') == '/products/?page=2'
+        assert _safe_next('/sales/add') == '/sales/add'
