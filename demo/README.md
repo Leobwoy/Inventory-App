@@ -3,11 +3,18 @@
 Records a walkthrough of the **real** application as a phone-shaped video.
 
 ```bash
-python demo/record.py                       # against a local dev server
+python demo/stage_data.py                   # make the screens worth filming
+python demo/record.py                       # the full cut, about 3m20
+python demo/record.py --cut short           # four beats, for forwarding
 python demo/record.py --url https://your-app.onrender.com --email you@example.com
 ```
 
 Out comes `demo/out/tracktrack-demo.mp4`, 9:16, H.264, captions already burned in.
+
+Two cuts, because they do different jobs. The **full** one is for a sit-down
+pitch and covers the day end to end, pricing included. The **short** one is four
+beats and out, for the phone it gets forwarded on. `--speed` stretches or
+tightens every pause at once; the default is deliberately unhurried.
 
 ## Why a script rather than a screen recording
 

@@ -39,6 +39,11 @@ VIDEO = dict(VIEWPORT)
 SCALE = 2
 UPSCALE = 'scale=1000:2160:flags=lanczos'
 
+#: The line the sale scene rings up. Change it to something your audience
+#: recognises - the whole point of that scene is a product they know, sold in
+#: the unit they sell it in. It must be active, in stock, and have a real pack.
+SELL = {'search': 'Vitamalt', 'name': 'Vitamalt 330ml', 'cartons': '2'}
+
 
 # --- the furniture the page does not come with -------------------------------
 
@@ -86,8 +91,9 @@ CHROME = """
 class Take:
     """One recording pass. Wraps a page with a cursor, captions and pacing."""
 
-    def __init__(self, page, speed=1.0):
+    def __init__(self, page, speed=1.0, context=None):
         self.page = page
+        self.context = context
         self.speed = speed
 
     def beat(self, seconds=1.0):
@@ -156,15 +162,57 @@ class Take:
             return False
         self.page.evaluate('() => window.__demo && window.__demo.tap()')
         target.click()
+        # Typed character by character, because a field being filled is the part
+        # that reads as somebody using the app rather than a page changing.
         target.fill('')
         target.type(str(text), delay=110 * self.speed)
-        # Typed values do not always survive a field that re-renders on input,
-        # and an empty quantity box is the one thing this demo cannot show.
+        self.beat(settle)
+
+        # Then check, *after* settling rather than before. The quantity box
+        # normalises itself a moment after the last keystroke - an empty field
+        # becomes 1 - so a check run immediately saw the right value and the
+        # recording showed the wrong one. This is the difference between a demo
+        # that says two cartons and one that quietly says one.
         if (target.input_value() or '').strip() != str(text):
             target.fill(str(text))
             target.dispatch_event('input')
             target.dispatch_event('change')
+            self.beat(0.6)
+        return True
+
+    def set_quantity(self, value, settle=1.4):
+        """Reach the quantity with the page's own + button.
+
+        Typing into the box was tried three ways and lost the value every time:
+        the form read back what had been typed, the running summary agreed, and
+        the invoice still recorded one carton. The stepper beside the field
+        keeps its own count, so writing the input behind its back leaves the two
+        disagreeing and the stepper wins at submit.
+
+        Pressing + is also simply what a person does, so the demo shows the
+        control a wholesaler will actually use rather than a scripted paste.
+        """
+        target = self.point_at('[name$="quantity"]')
+        if target is None:
+            print('  ! no quantity box')
+            return False
+
+        wanted = int(value)
+        for _ in range(wanted * 3):          # a ceiling, so a stuck page ends
+            current = (target.input_value() or '').strip()
+            if current == str(wanted):
+                break
+            if not self.tap('.qty-step[data-step="1"]', settle=0.55):
+                break
+
+        told = self.page.locator('#summary-count')
+        summary = told.inner_text().strip() if told.count() else ''
+        got = (target.input_value() or '').strip()
         self.beat(settle)
+        if got != str(wanted):
+            print('  ! quantity stuck at %r, wanted %s' % (got, wanted))
+            return False
+        print('    quantity %s -> %s' % (got, summary))
         return True
 
     def scroll(self, pixels=340, steps=7):
@@ -188,62 +236,150 @@ class Take:
 
 def scene_attention(take):
     take.go('/')
-    take.say('Every morning, TrackTrack opens on what needs you.', hold=2.6)
+    take.say('Every morning, TrackTrack opens on what needs you.', hold=3.4)
     take.scroll(400)
-    take.say('Not a menu. A list that empties itself.', hold=2.8)
+    take.say('Not a menu. A list that empties itself.', hold=3.4)
 
 
 def scene_sell(take):
+    """The shot that wins the room, so it runs longest and finishes the job.
+
+    The first version stopped at a half-filled form. A wholesaler watching
+    needs to see the sale *land* - the quantity in cartons, the total, and an
+    invoice that says two cartons rather than forty-eight bottles. Anything
+    short of that is a screenshot with a cursor on it.
+    """
     take.go('/sales/add')
-    take.say('You sell by the carton, so it counts by the carton.', hold=2.4)
+    take.say('Say you are selling two cartons of %s.' % SELL['name'], hold=3.2)
+
     take.tap('.picker-button', settle=1.4)
-    take.say('Pick the product.', hold=1.4)
-    if not take.tap('.picker-option', settle=1.2):
+    # Searched by name rather than picked off the list, because a wholesaler
+    # with four hundred lines will search, and because it puts the product we
+    # are talking about on screen instead of whatever sorts first.
+    take.type_into('.picker-search', SELL['search'], settle=1.2)
+    take.say('Find it by name.', hold=2.2)
+    if not take.tap('.picker-option:not([hidden])', settle=1.4):
         take.page.keyboard.press('Escape')
         take.dress()
-    take.type_into('[name$="quantity"]', '2', settle=1.0)
-    take.say('Two cartons.', hold=2.0)
-    take.scroll(260, steps=5)
-    take.say('The shelf drops by forty-eight bottles on its own.', hold=3.0)
+
+    take.set_quantity(SELL['cartons'], settle=1.6)
+    take.say('Two. Not forty-eight.', hold=3.0)
+    take.scroll(220, steps=5)
+    take.say('It is already counting in cartons, because that is how you sell.',
+             hold=3.6)
+
+    take.tap('.sale-next', settle=1.6)
+    take.say('Who bought it, and how they paid.', hold=3.0)
+    take.tap('.chip-set label.chip', index=2, settle=1.4)
+    take.say('This one goes on credit.', hold=2.8)
+
+    take.tap('.sale-submit', settle=2.2)
+    take.say('And the invoice says two cartons.', hold=3.8)
+    take.scroll(300, steps=6)
+    take.say('Forty-eight bottles left the shelf on their own.', hold=3.6)
 
 
 def scene_owed(take):
     take.go('/credit/')
-    take.say('And the money still out there.', hold=2.4)
+    take.say('The money still out there, oldest debt first.', hold=3.4)
     take.scroll(420)
-    take.say('By name, by how old it is, and what they paid last.', hold=3.0)
+    take.say('By name, by how old it is, and what they paid last.', hold=3.6)
 
 
 def scene_restock(take):
     take.go('/purchases/add')
-    take.say('When you restock, it remembers what you paid before.', hold=2.6)
-    take.scroll(300, steps=6)
-    take.say('And who you paid it to.', hold=2.4)
+    take.say('When you restock, it remembers what you paid before.', hold=3.4)
+    take.tap('.picker-button', settle=1.4)
+    if not take.tap('.picker-option:not([hidden])', settle=1.4):
+        take.page.keyboard.press('Escape')
+        take.dress()
+    take.scroll(240, steps=5)
+    take.say('And who you paid it to, so you can see who is cheapest.', hold=3.8)
+
+
+def scene_receive(take):
+    take.go('/purchases/')
+    take.say('Goods arrive. You receive them line by line.', hold=3.4)
+    take.scroll(320)
+    take.say('Part of an order today, the rest next week. Stock only moves here.',
+             hold=3.8)
 
 
 def scene_stock(take):
     take.go('/products/')
-    take.say('Stock counted the way you buy it. Cartons, and the loose bottles.',
-             hold=3.2)
+    take.say('Stock counted the way you buy it.', hold=3.0)
     take.scroll(380)
+    take.say('Cartons, and the loose bottles that are really on the floor.',
+             hold=3.6)
+
+
+def scene_offline(take):
+    """Recorded with the network genuinely cut, not mimed.
+
+    Chromium can be told to go offline at the browser level, which is the real
+    thing rather than a screenshot of a banner - the page fails the same way it
+    fails in a doorway with no signal.
+    """
+    take.go('/sales/add')
+    # Wait for the service worker to actually be in charge. A fresh browser
+    # has no cache, so cutting the network a moment too early gets the
+    # browser's own error page - which films as the app failing rather than
+    # surviving, which is the opposite of the point.
+    if not take.page.evaluate('() => navigator.serviceWorker ? navigator.serviceWorker.ready.then(() => true).catch(() => false) : false'):
+        print('  ! no service worker - skipping the offline scene')
+        return
+    take.beat(1.5)
+
+    take.say('And when the network goes.', hold=2.6)
+    take.context.set_offline(True)
     take.beat(1.2)
+    take.page.reload(wait_until='domcontentloaded')
+    take.dress()
+    take.beat(1.4)
+    take.say('You keep selling. It queues, and syncs when the signal comes back.',
+             hold=4.0)
+    take.context.set_offline(False)
+    take.beat(1.2)
+
+
+def scene_reports(take):
+    take.go('/reports/sales')
+    take.say('What sold, what it cost you, what is on the shelf.', hold=3.4)
+    take.scroll(360)
+    take.say('Every report says which unit its numbers are in.', hold=3.4)
+
+
+def scene_plans(take):
+    take.go('/billing/')
+    take.say('It starts free. Twenty products, one person.', hold=3.4)
+    take.scroll(420)
+    take.say('Grow, and the plan grows with you. Nothing renews on its own.',
+             hold=4.0)
 
 
 def scene_close(take):
     take.go('/')
-    take.say('TrackTrack. Know your stock, know who owes you.', hold=4.0)
+    take.say('TrackTrack. Know your stock, know who owes you.', hold=4.5)
     take.hush()
-    take.beat(1.0)
+    take.beat(1.2)
 
 
+#: The long cut, for a sit-down pitch. Order matters - it is a day.
 SCENES = [
     ('what needs you', scene_attention),
     ('the sale',       scene_sell),
     ('who owes you',   scene_owed),
     ('restocking',     scene_restock),
+    ('goods in',       scene_receive),
     ('the shelf',      scene_stock),
+    ('no network',     scene_offline),
+    ('reports',        scene_reports),
+    ('what it costs',  scene_plans),
     ('the card',       scene_close),
 ]
+
+#: The short cut, for forwarding. Four beats and out.
+SHORT = ['the sale', 'who owes you', 'no network', 'the card']
 
 
 # --- running it --------------------------------------------------------------
@@ -318,8 +454,10 @@ def main():
                         help='the site to record')
     parser.add_argument('--email', default='owner@accrabev.com')
     parser.add_argument('--password', default='TrackTrack!23')
-    parser.add_argument('--speed', type=float, default=1.0,
-                        help='multiplies every pause; 0.7 is brisker, 1.3 slower')
+    parser.add_argument('--speed', type=float, default=1.25,
+                        help='multiplies every pause; 1.0 is brisk, 1.5 slower')
+    parser.add_argument('--cut', choices=['full', 'short'], default='full',
+                        help='full for a sit-down pitch, short for forwarding')
     parser.add_argument('--only', help='record one scene by name')
     args = parser.parse_args()
 
@@ -328,6 +466,8 @@ def main():
         stale.unlink()
 
     scenes = SCENES
+    if args.cut == 'short':
+        scenes = [s for s in SCENES if s[0] in SHORT]
     if args.only:
         scenes = [s for s in SCENES if s[0] == args.only]
         if not scenes:
@@ -348,7 +488,7 @@ def main():
             color_scheme='light')
         page = context.new_page()
 
-        take = Take(page, speed=args.speed)
+        take = Take(page, speed=args.speed, context=context)
         take.base = args.url.rstrip('/')
 
         print('Recording %s' % take.base)
@@ -362,7 +502,8 @@ def main():
         browser.close()
         raw = pathlib.Path(video.path())
 
-    final = to_mp4(raw, OUT / 'tracktrack-demo.mp4')
+    name = 'tracktrack-demo%s.mp4' % ('-short' if args.cut == 'short' else '')
+    final = to_mp4(raw, OUT / name)
     size = final.stat().st_size / 1_000_000
     print('\nDone: %s (%.1f MB)' % (final, size))
     return 0
