@@ -1,0 +1,26 @@
+{# One strip across the five pages that were already Settings but never looked
+   related, plus Account. Links, not in-page tabs: each of these is its own
+   route with its own permission, and pretending otherwise would mean loading
+   the audit log to change a phone number.
+
+   Each tab carries its own gate, so a Manager who cannot see the audit log does
+   not get a tab that redirects them. #}
+<nav class="settings-tabs" aria-label="Settings sections">
+  {% set tabs = [
+    ('auth.business_settings', 'Business',     'bi-buildings',            'settings.manage'),
+    ('auth.users_list',        'Users',        'bi-people',               'users.manage'),
+    ('auth.audit_log',         'Activity log', 'bi-clock-history',        'audit.view'),
+    ('billing.overview',       'Subscription', 'bi-credit-card',          'settings.manage'),
+    ('backup_restore',         'Backup',       'bi-hdd-network',          'settings.manage'),
+    ('auth.account',           'Account',      'bi-person-badge',         'settings.manage'),
+  ] %}
+  {% for endpoint, label, icon, permission in tabs %}
+  {% if current_user.can(permission) %}
+  <a class="settings-tab{{ ' is-current' if request.endpoint == endpoint else '' }}"
+     href="{{ url_for(endpoint) }}"
+     {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>
+    <i class="bi {{ icon }}" aria-hidden="true"></i> {{ label }}
+  </a>
+  {% endif %}
+  {% endfor %}
+</nav>

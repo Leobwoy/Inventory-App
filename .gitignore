@@ -27,3 +27,7 @@ restore_upload.sql
 design/tokens.css
 static/_shot/
 static/_sweep.html
+
+# Recorded demo footage. The script that makes it is tracked; the output is not
+# - it is large, binary, regenerated on demand, and different every run.
+demo/out/

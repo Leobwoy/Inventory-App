@@ -56,7 +56,7 @@
           <td>{{ businesses[payment.business_id].name if payment.business_id in businesses
                  else 'Business #' ~ payment.business_id }}</td>
           <td class="font-monospace small">{{ payment.provider_ref }}</td>
-          <td class="text-end text-success">&#8373;{{ '%.2f'|format(payment.amount_ghs) }}</td>
+          <td class="text-end text-success">&#8373;{{ payment.amount_ghs|money }}</td>
           <td class="muted small">{{ payment.created_at.strftime('%d %b, %H:%M') }}</td>
           <td class="text-end">
             <a href="{{ url_for('platform.payments') }}" class="btn btn-sm btn-success">Review</a>

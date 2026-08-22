@@ -817,6 +817,17 @@ thead.table-light>tr>th {
    Card-based table layout
    ============================================= */
 @media (max-width: 767px) {
+  /* A table drawn as cards has no columns left to scroll past, so its wrapper
+     must stop offering to - reported from a phone, where both the catalogue and
+     the sale form slid sideways under the thumb for no reason. Wide content
+     inside a card wraps instead.
+
+     A class rather than `:has(.table-cards)`, which this stylesheet avoids on
+     purpose for the older Android WebViews this market runs. */
+  .table-responsive-cards {
+    overflow-x: visible;
+  }
+
   /* --- Hide table headers on mobile --- */
   .table-cards thead {
     display: none;
@@ -852,6 +863,25 @@ thead.table-light>tr>th {
   .table-cards tbody td:last-child {
     border-bottom: none !important;
     padding-bottom: 0 !important;
+  }
+
+  /* The cell is a flex row - label left, value right - and a flex child will
+     not shrink below its content unless told to. So a long product name, a
+     truncated sub-line or a monospace SKU pushed the value out and the text
+     slid sideways *inside* the card. Reported from a phone.
+
+     The label keeps its width; everything else may shrink and wrap. */
+  .table-cards tbody td > * {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  /* `text-truncate` sets nowrap, which is right on a wide table and wrong in a
+     card: there is a whole line free underneath, so wrap rather than clip. */
+  .table-cards tbody td .text-truncate {
+    white-space: normal;
+    overflow: visible;
+    max-width: 100% !important;
   }
 
   /* --- Label from data-label attribute --- */
@@ -2978,4 +3008,66 @@ a.text-decoration-none:hover {
 
 .usage-bar.is-full > span {
   background: var(--accent-warning);
+}
+
+/* --- settings tabs (08-settings) -------------------------------------------
+   The mockup draws these as chips. They are links between six routes rather
+   than panes in one page, because each has its own permission - loading the
+   audit log to change a phone number would be a strange way to save a click. */
+.settings-tabs {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+}
+
+.settings-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.45rem 0.85rem;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
+  text-decoration: none;
+  white-space: nowrap;
+  min-height: 38px;
+}
+
+.settings-tab:hover {
+  color: var(--text-primary);
+  border-color: var(--accent-primary);
+}
+
+.settings-tab.is-current {
+  background: var(--accent-primary);
+  color: var(--on-accent);
+  border-color: transparent;
+}
+
+/* Nothing on this page should look like the delete button by accident. */
+.danger-zone {
+  border-color: var(--accent-danger);
+}
+
+.danger-zone h5 {
+  color: var(--accent-danger);
+}
+
+.delete-counts {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
+
+.delete-counts b {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
 }

@@ -30,7 +30,7 @@
         </div>
       </div>
       <div class="text-end">
-        <div class="fs-3 fw-bold text-success">&#8373;{{ '%.2f'|format(payment.amount_ghs) }}</div>
+        <div class="fs-3 fw-bold text-success">&#8373;{{ payment.amount_ghs|money }}</div>
       </div>
     </div>
 

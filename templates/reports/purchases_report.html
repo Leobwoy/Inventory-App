@@ -74,10 +74,10 @@
                         <span class="badge bg-warning text-dark">{{ uom.in_packs(item.product, item.quantity_received or 0) }}</span>
                         {% endif %}
                     </td>
-                    <td data-label="Cost each" class="text-muted">₵{{ '%.2f'|format(uom.cost_per_purchase_unit(item.product, item.unit_cost or 0) if uom.has_conversion(item.product) else (item.unit_cost or 0)) }}</td>
+                    <td data-label="Cost each" class="text-muted">₵{{ (uom.cost_per_purchase_unit(item.product, item.unit_cost or 0) if uom.has_conversion(item.product) else (item.unit_cost or 0))|money }}</td>
                     <td data-label="Supplier" class="text-muted">{{ po.supplier.name if po.supplier else 'N/A' }}</td>
                     <td data-label="Status" class="text-muted text-capitalize">{{ po.status|replace('_', ' ') }}</td>
-                    <td data-label="Total" class="text-end fw-medium text-warning">₵{{ '%.2f'|format((item.unit_cost or 0) * item.quantity_ordered) }}</td>
+                    <td data-label="Total" class="text-end fw-medium text-warning">₵{{ ((item.unit_cost or 0) * item.quantity_ordered)|money }}</td>
                 </tr>
                 {% else %}
                 <tr>
@@ -89,7 +89,7 @@
                 <tr class="table-total">
                     <td colspan="8" class="text-end text-muted fw-bold border-0">GRAND TOTAL:</td>
                     <td class="text-end fw-bold text-warning border-0 fs-5">
-                        ₵{{ '%.2f'|format(total) }}
+                        ₵{{ total|money }}
                     </td>
                 </tr>
             </tfoot>

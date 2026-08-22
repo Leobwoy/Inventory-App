@@ -127,3 +127,33 @@ class PaymentTransaction(db.Model):
 
     def __repr__(self):
         return f'<PaymentTransaction {self.provider_ref} {self.status}>'
+
+
+class BusinessNotice(db.Model):
+    """A message from the platform to one business, shown once as a popup.
+
+    Deliberately not an alert. `services/notifications.py` is derived - it works
+    out what is true right now and empties itself - and its inbox is a paid
+    feature, so a business on Kiosk cannot read it. This is the opposite on both
+    counts: it is a *stored* message about a decision somebody made, and it
+    reaches every business on every plan, because "your payment was rejected" is
+    not a feature anybody should have to buy.
+
+    It still lands in the activity log as well. The log answers "what happened
+    to this account" months later; this answers "what happened while I was away"
+    once, and then gets out of the way.
+    """
+    __tablename__ = 'business_notice'
+
+    id = db.Column(db.Integer, primary_key=True)
+    business_id = db.Column(db.Integer, db.ForeignKey('business.id'), nullable=False, index=True)
+    level = db.Column(db.String(20), nullable=False, default='info')
+    title = db.Column(db.String(120), nullable=False)
+    body = db.Column(db.Text, nullable=False, default='')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    #: Null until the owner closes it. Kept rather than deleted, so the platform
+    #: can tell a message that was read from one that was never delivered.
+    seen_at = db.Column(db.DateTime)
+
+    def __repr__(self):
+        return f'<BusinessNotice {self.business_id} {self.title[:24]}>'

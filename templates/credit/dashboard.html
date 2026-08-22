@@ -16,7 +16,7 @@
     <div class="glass-card h-100">
       <div class="stat-icon stat-warning"><i class="bi bi-cash-stack"></i></div>
       <h5 class="text-muted mb-1">Total outstanding</h5>
-      <h3 class="mb-0">₵{{ '%.2f'|format(total) }}</h3>
+      <h3 class="mb-0">₵{{ total|money }}</h3>
     </div>
   </div>
   <div class="col-md-4">
@@ -30,7 +30,7 @@
     <div class="glass-card h-100">
       <div class="stat-icon stat-danger"><i class="bi bi-exclamation-triangle"></i></div>
       <h5 class="text-muted mb-1">Over 90 days</h5>
-      <h3 class="mb-0">₵{{ '%.2f'|format(bucket_totals['Over 90 days']) }}</h3>
+      <h3 class="mb-0">₵{{ bucket_totals['Over 90 days']|money }}</h3>
     </div>
   </div>
 </div>
@@ -73,10 +73,10 @@
           </td>
           {% for bucket in buckets %}
           <td data-label="{{ bucket }}" class="text-end {{ 'text-danger' if bucket == 'Over 90 days' and row.buckets[bucket] > 0 }}">
-            {% if row.buckets[bucket] > 0 %}₵{{ '%.2f'|format(row.buckets[bucket]) }}{% else %}—{% endif %}
+            {% if row.buckets[bucket] > 0 %}₵{{ row.buckets[bucket]|money }}{% else %}—{% endif %}
           </td>
           {% endfor %}
-          <td data-label="Total" class="text-end fw-bold text-warning">₵{{ '%.2f'|format(row.total) }}</td>
+          <td data-label="Total" class="text-end fw-bold text-warning">₵{{ row.total|money }}</td>
           <td data-label="Oldest" class="text-end text-muted">{{ row.oldest_days }} days</td>
         </tr>
         {% endfor %}
@@ -85,9 +85,9 @@
         <tr class="table-total">
           <td class="fw-bold border-0">TOTAL</td>
           {% for bucket in buckets %}
-          <td class="text-end fw-bold border-0">₵{{ '%.2f'|format(bucket_totals[bucket]) }}</td>
+          <td class="text-end fw-bold border-0">₵{{ bucket_totals[bucket]|money }}</td>
           {% endfor %}
-          <td class="text-end fw-bold text-warning border-0 fs-5">₵{{ '%.2f'|format(total) }}</td>
+          <td class="text-end fw-bold text-warning border-0 fs-5">₵{{ total|money }}</td>
           <td class="border-0"></td>
         </tr>
       </tfoot>

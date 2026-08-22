@@ -1,0 +1,43 @@
+{# A message from us to this business, shown once. Not an alert: alerts are
+   derived, empty themselves, and live behind a paid inbox. This is a stored
+   record of a decision somebody made, and it reaches every plan.
+
+   Rendered as a plain <dialog>-less Bootstrap modal opened on load, with the
+   dismiss as a real form POST - so closing it works with no script at all, and
+   a notice is never marked read by a browser that could not show it. #}
+{% if notice %}
+<div class="modal fade" id="platform-notice" tabindex="-1"
+     aria-labelledby="platform-notice-title" aria-hidden="true"
+     data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content notice-{{ notice.level }}">
+      <div class="modal-header">
+        <h5 class="modal-title" id="platform-notice-title">
+          <i class="bi bi-{{ 'check-circle-fill' if notice.level == 'success' else 'exclamation-octagon-fill' }} me-2"></i>
+          {{ notice.title }}
+        </h5>
+      </div>
+      <div class="modal-body">
+        <p class="mb-0">{{ notice.body }}</p>
+      </div>
+      <div class="modal-footer">
+        <form method="post" action="{{ url_for('auth.dismiss_notice') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="notice_id" value="{{ notice.id }}">
+          <input type="hidden" name="next" value="{{ request.full_path }}">
+          <button type="submit" class="btn btn-primary">Got it</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+  // Opened on load. Without Bootstrap the markup above is a hidden div and the
+  // notice simply waits for the next page - which is why nothing marks it read
+  // until the form is actually posted.
+  document.addEventListener('DOMContentLoaded', function () {
+    var el = document.getElementById('platform-notice');
+    if (el && window.bootstrap) { new window.bootstrap.Modal(el).show(); }
+  });
+</script>
+{% endif %}

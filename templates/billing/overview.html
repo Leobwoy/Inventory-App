@@ -4,6 +4,8 @@
 {% block content %}
 <div class="page-header"><h2>Subscription</h2></div>
 
+{% include '_partials/settings_tabs.html' %}
+
 <div class="glass-card mb-4">
   <div class="card-toolbar">
     <h5 class="mb-0">Your plan</h5>
@@ -152,7 +154,7 @@
         <tr>
           <td data-label="Date" class="text-muted">{{ payment.created_at.strftime('%d %b %Y') }}</td>
           <td data-label="Reference" class="font-monospace" style="font-size:0.8rem;">{{ payment.provider_ref }}</td>
-          <td data-label="Amount" class="text-end">&#8373;{{ '%.2f'|format(payment.amount_ghs) }}</td>
+          <td data-label="Amount" class="text-end">&#8373;{{ payment.amount_ghs|money }}</td>
           <td data-label="Status">
             {% if payment.status == 'paid' %}<span class="badge bg-success">Confirmed</span>
             {% elif payment.status == 'pending' %}<span class="badge bg-warning text-dark">Awaiting confirmation</span>

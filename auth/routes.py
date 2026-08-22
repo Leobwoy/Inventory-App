@@ -475,6 +475,61 @@ def reset_user_password(user_id):
 MAX_LOGO_BYTES = 512 * 1024
 
 
+@auth_bp.route('/account', methods=['GET', 'POST'])
+@login_required
+@permission_required('settings.manage')
+def account():
+    """The account, and the one way to end it.
+
+    Owner-only on top of the permission. `settings.manage` can be granted to a
+    Manager - it is how a business lets somebody keep the address and the
+    discount ceiling up to date - and closing the account is not that. The
+    Owner is also the only person who cannot be locked out of the consequences.
+    """
+    from services import account as account_service
+    from services import limits
+
+    business = Business.query.get_or_404(current_user.business_id)
+
+    if request.method == 'POST':
+        if not current_user.is_owner:
+            flash('Only the Owner can close the account.', 'danger')
+            return redirect(url_for('auth.account'))
+
+        typed = (request.form.get('confirm_name') or '').strip()
+        password = request.form.get('password') or ''
+
+        # Both, and the name first: the name proves they read *which* account,
+        # the password proves it is them. Either alone has been enough for
+        # somebody to delete the wrong thing.
+        if typed != business.name:
+            flash('The name did not match, so nothing was deleted.', 'warning')
+            return redirect(url_for('auth.account'))
+        if not check_password_hash(current_user.password_hash, password):
+            flash('That password is not right, so nothing was deleted.', 'danger')
+            return redirect(url_for('auth.account'))
+
+        name, email = business.name, current_user.email
+        try:
+            account_service.delete_business(business.id, email)
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception('closing a business account failed')
+            flash('Something went wrong and nothing was deleted.', 'danger')
+            return redirect(url_for('auth.account'))
+
+        # After the commit: the session points at a user row that no longer
+        # exists, and every request from here on would be resolving a ghost.
+        logout_user()
+        flash(f'{name} has been deleted. Thank you for using TrackTrack.', 'success')
+        return redirect(url_for('auth.login'))
+
+    return render_template('auth/account.html', business=business,
+                           plan=limits.effective_plan(business.id),
+                           counts=account_service.summarise(business.id))
+
+
 @auth_bp.route('/settings', methods=['GET', 'POST'])
 @login_required
 @permission_required('settings.manage')
@@ -549,3 +604,51 @@ def business_logo():
     return Response(business.logo_data,
                     mimetype=business.logo_mimetype or 'image/png',
                     headers={'Cache-Control': 'private, max-age=300'})
+
+
+def _safe_next(target):
+    """A posted return path, or the dashboard. Never somebody else's site.
+
+    `target.startswith('/')` was not enough and CodeQL was right to say so:
+    `//evil.com` starts with a slash and every browser reads a
+    protocol-relative URL as absolute, so that check waved an open redirect
+    straight through. The backslash form is the same trick, and browsers
+    disagree about normalising it.
+
+    Parsing settles it rather than pattern-matching: a path is safe only when
+    it carries no scheme and no host of its own. Rebuilt from the parts, so
+    nothing of the original string survives into the response header.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+
+    if not target:
+        return url_for('index')
+    parts = urlsplit(target)
+    if parts.scheme or parts.netloc or not parts.path.startswith('/'):
+        return url_for('index')
+    # A second slash straight after the first is the protocol-relative form.
+    # chr(92) rather than an escaped backslash: a literal one cannot end a
+    # Python string, and this file has already been broken twice writing it.
+    if parts.path.startswith('//') or parts.path.startswith('/' + chr(92)):
+        return url_for('index')
+    return urlunsplit(('', '', parts.path, parts.query, ''))
+
+
+@auth_bp.route('/notice/dismiss', methods=['POST'])
+@login_required
+def dismiss_notice():
+    """Close one platform message.
+
+    No permission gate beyond being signed in: the notice is addressed to the
+    business, and any member of it reading and closing it is the point. Scoped
+    by `business_id` inside `notices.mark_seen`, because the id arrives in a
+    form and a form is not evidence.
+    """
+    from services import notices
+
+    notices.mark_seen(current_user.business_id,
+                      request.form.get('notice_id', type=int))
+    db.session.commit()
+
+    # Back where they were, so closing a message does not also move them.
+    return redirect(_safe_next(request.form.get('next')))

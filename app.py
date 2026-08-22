@@ -150,6 +150,44 @@ def create_app():
     from auth.decorators import permission_required
 
     @app.context_processor
+    def _platform_notice():
+        """The oldest unread message from us to this business, or None.
+
+        A context processor rather than a variable per route: this has to reach
+        whichever page they happen to open, and threading it through fifty
+        routes is how one of them ends up forgetting.
+        """
+        if not getattr(current_user, 'is_authenticated', False):
+            return {}
+        from services import notices
+
+        return {'notice': notices.unseen_for(current_user.business_id)}
+
+    @app.template_filter('money')
+    def _money(value):
+        """A cedi amount, grouped in thousands: 1050 -> "1,050.00".
+
+        Every money figure in the app was `'%.2f'|format(x)`, which reads fine
+        up to three digits and stops being readable exactly where it starts to
+        matter - a carton price, a day's takings, what a customer owes. Reported
+        from the running app.
+
+        Still two decimals always: pesewas are real money and a price that
+        sometimes shows them and sometimes does not is a price people stop
+        trusting. Decimal in, so nothing here re-rounds a figure the money
+        boundary already settled.
+        """
+        from decimal import Decimal, InvalidOperation
+
+        if value is None or value == '':
+            return '0.00'
+        try:
+            amount = Decimal(str(value))
+        except (InvalidOperation, ValueError):
+            return str(value)
+        return '{:,.2f}'.format(amount)
+
+    @app.context_processor
     def billing_helpers():
         """Let templates ask what the business's plan includes.
 

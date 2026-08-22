@@ -154,7 +154,14 @@ def pending_sales():
 def add_sale():
     form = SaleForm()
     # One query, not two. The same list feeds the choices and the price map.
-    catalogue = Product.query.filter_by(business_id=current_user.business_id).all()
+    # Active only. This listed every product the business had ever created, so
+    # the sale form offered lines the owner had deliberately retired - and, once
+    # a downgrade started switching products off to fit a plan, every one of
+    # those too. A cap that the sell page ignores is not a cap.
+    catalogue = (Product.query
+                 .filter(Product.business_id == current_user.business_id,
+                         Product.is_active.isnot(False))
+                 .all())
     product_choices = [(str(p.id), p.name) for p in catalogue]
 
     # Everything the sale form needs to know about a product, in one variable.
@@ -199,7 +206,14 @@ def add_sale():
             deviations = []
             # Save all sale items
             for item_form in form.items:
-                product = Product.query.filter_by(id=int(item_form.product_id.data), business_id=current_user.business_id).first()
+                # Re-checked here rather than trusting the choice list: the id
+                # is posted, and a posted id is not evidence. Same rule the
+                # unit and the price already follow on this route.
+                product = (Product.query
+                           .filter(Product.id == int(item_form.product_id.data),
+                                   Product.business_id == current_user.business_id,
+                                   Product.is_active.isnot(False))
+                           .first())
                 if not product:
                     db.session.rollback()
                     flash('One of the selected products is not available.', 'danger')
