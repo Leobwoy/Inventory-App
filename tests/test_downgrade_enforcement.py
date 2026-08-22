@@ -26,6 +26,7 @@ from auth.models import User
 from billing.models import Plan, PaymentTransaction, Subscription
 from extensions import db
 from products.models import Product
+from sales.models import Sale
 from services import limits
 
 NOW = datetime.datetime.utcnow()
@@ -416,3 +417,67 @@ def test_the_backup_remembers_why_a_product_is_off(big_shop):
 
     spec = {name: columns for name, _model, columns in backup.EXPORT_SPEC}
     assert 'locked_by_plan' in spec['products']
+
+
+# --- the cap has to hold on the page that spends the stock -------------------
+
+def test_a_retired_product_cannot_be_sold(big_shop):
+    """Found while recording the demo video: a product deactivated moments
+    earlier was still listed in the sale form's picker.
+
+    The form loaded every product the business had ever created. That is wrong
+    on its own - an owner who retires a line does not expect to be offered it -
+    and it quietly undid the plan enforcement above, because a business dropped
+    to Kiosk could keep selling all four hundred products from this page. A cap
+    the sell page ignores is not a cap.
+    """
+    client, business_id = big_shop
+    on_plan(business_id, 'free')
+    limits.enforce_plan_limits(business_id)
+    db.session.commit()
+    locked = Product.query.filter_by(business_id=business_id,
+                                     locked_by_plan=True).first()
+
+    page = client.get('/sales/add').get_data(as_text=True)
+
+    assert 'value="%d"' % locked.id not in page, 'a switched-off product is on offer'
+
+
+def test_a_posted_id_cannot_reach_a_retired_product(big_shop):
+    """The choice list is a control, and a control is not a guarantee - the id
+    arrives in a form. Same rule the unit and the price already follow here.
+
+    **This needs two mutations to fail, recorded so neither guard is deleted as
+    dead.** Filtering the choices makes WTForms refuse an id that is not on the
+    list, and filtering the query refuses it again after that. Break either one
+    alone and the other still holds; break both and a hand-posted id sells a
+    product the plan switched off."""
+
+    client, business_id = big_shop
+    on_plan(business_id, 'free')
+    limits.enforce_plan_limits(business_id)
+    db.session.commit()
+    locked = Product.query.filter_by(business_id=business_id,
+                                     locked_by_plan=True).first()
+    # Give it stock first. Enforcement retires the products with none, so
+    # without this the sale is refused for being out of stock and the test
+    # passes without ever exercising the active check - which is exactly what
+    # it did on the first writing, green through every mutation of both guards.
+    from purchases.models import StockBatch
+
+    db.session.add(StockBatch(
+        business_id=business_id, product_id=locked.id, batch_number='DEMO-1',
+        quantity_received=50, quantity_remaining=50,
+        received_date=datetime.date.today()))
+    locked.quantity_in_stock = 50
+    db.session.commit()
+    before = Sale.query.filter_by(business_id=business_id).count()
+
+    client.post('/sales/add', data={
+        'sale_date': datetime.date.today().isoformat(), 'customer_id': '0',
+        'items-0-product_id': str(locked.id), 'items-0-quantity': '1',
+        'items-0-sell_unit': 'base', 'settlement': 'paid',
+    }, follow_redirects=True)
+
+    assert Sale.query.filter_by(business_id=business_id).count() == before, \
+        'a hand-posted id sold a product the plan had switched off'
